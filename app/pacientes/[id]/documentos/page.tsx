@@ -14,6 +14,7 @@ import DOMPurify from 'isomorphic-dompurify'
 export default function DocumentosClinicosPage() {
   const { id: paciente_id } = useParams()
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const [sessionUserRole, setSessionUserRole] = useState<string | null>(null)
   const [documentos, setDocumentos] = useState<any[]>([])
   const [categorias, setCategorias] = useState<any[]>([])
   const [pacienteData, setPacienteData] = useState<any>(null)
@@ -33,7 +34,15 @@ export default function DocumentosClinicosPage() {
   const [especialistaSeleccionadoId, setEspecialistaSeleccionadoId] = useState<string>('')
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setSessionUserId(data.user?.id || null));
+    supabase.auth.getUser().then(async ({ data: { user } }) => {
+      if (user) {
+        setSessionUserId(user.id);
+        const { data: profile } = await supabase.from('perfiles').select('rol').eq('id', user.id).single();
+        if (profile) {
+          setSessionUserRole(profile.rol);
+        }
+      }
+    });
     if (paciente_id) {
       fetchDocumentos(); fetchCategorias(); fetchDatosEspecialistas(); fetchPaciente();
     }
@@ -45,20 +54,46 @@ export default function DocumentosClinicosPage() {
   }
 
   async function fetchDatosEspecialistas() {
-    try {
-      const { data: profs } = await supabase.from('profesionales').select(`user_id, nombre, apellido, firma_base64, especialidades ( nombre )`).eq('activo', true);
-      const { data: perfiles } = await supabase.from('perfiles').select('id, rut');
-      const mapeados = profs?.map((p: any) => ({
-        user_id: p.user_id,
-        nombre_completo: `Dr/a. ${p.nombre} ${p.apellido}`,
-        iniciales: `${p.nombre[0]}${p.apellido[0]}`.toUpperCase(),
-        especialidad: p.especialidades?.nombre || 'Especialista',
-        rut: perfiles?.find(perf => perf.id === p.user_id)?.rut || '---',
-        firma_base64: p.firma_base64 || null
-      }));
-      if (mapeados) setProfesionalesFull(mapeados);
-    } catch (error) { console.error(error); }
+  try {
+    const { data: profs, error: errProfs } = await supabase
+      .from('profesionales')
+      .select(`
+        user_id,
+        nombre,
+        apellido,
+        firma_base64,
+        activo,
+        especialidades ( nombre )
+      `)
+      .eq('activo', true);
+
+    if (errProfs) throw errProfs;
+
+    const { data: perfiles, error: errPerf } = await supabase
+      .from('perfiles')
+      .select('id, rut');
+
+    if (errPerf) throw errPerf;
+
+    const mapeados = (profs || [])
+      .filter((prof: any) => prof.user_id) // por si algún profesional no tiene user_id asociado
+      .map((prof: any) => {
+        const perf = perfiles?.find((p: any) => p.id === prof.user_id);
+        return {
+          user_id: prof.user_id,
+          nombre_completo: `Dr/a. ${prof.nombre} ${prof.apellido}`,
+          iniciales: `${(prof.nombre || ' ')[0]}${(prof.apellido || ' ')[0]}`.toUpperCase(),
+          especialidad: prof.especialidades?.nombre || 'Especialista',
+          rut: perf?.rut || '---',
+          firma_base64: prof.firma_base64 || null
+        };
+      });
+
+    setProfesionalesFull(mapeados as any[]);
+  } catch (error) {
+    console.error("Error al cargar datos de especialistas:", error);
   }
+}
 
   async function fetchDocumentos() {
     const { data } = await supabase.from('documentos_clinicos').select('*').eq('paciente_id', paciente_id).order('fecha_creacion', { ascending: false })
@@ -70,6 +105,17 @@ export default function DocumentosClinicosPage() {
     const { data } = await supabase.from('documentos_plantillas').select('*, documentos_categorias(nombre)')
     if (data) {
       setCategorias(data.map((p: any) => ({ ...p, nombre_display: p.nombre && p.nombre !== 'NUEVO DOCUMENTO CLÍNICO' ? p.nombre : p.documentos_categorias?.nombre })))
+    }
+  }
+
+  const handleNuevoDocumento = () => {
+    if (sessionUserRole === 'DENTISTA' && sessionUserId) {
+      setEspecialistaSeleccionadoId(sessionUserId);
+      setMostrandoCategorias(true);
+      setDocSeleccionado(null);
+    } else {
+      setShowModalEspecialista(true);
+      setIsOpenLista(false);
     }
   }
 
@@ -246,7 +292,7 @@ export default function DocumentosClinicosPage() {
             </button>
           )}
           {!docSeleccionado && !mostrandoCategorias && (
-            <button onClick={() => {setShowModalEspecialista(true); setIsOpenLista(false);}} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 shadow-lg shadow-blue-50 active:scale-95 transition-all">
+            <button onClick={handleNuevoDocumento} className="bg-blue-600 text-white px-5 py-2.5 rounded-xl font-black text-[10px] uppercase flex items-center gap-2 shadow-lg shadow-blue-50 active:scale-95 transition-all">
               <Plus size={14}/> Nuevo
             </button>
           )}
