@@ -125,6 +125,7 @@ export default function AgendaPage() {
   const [horaFinBloqueo, setHoraFinBloqueo] = useState('14:00')
 
   const [modoNuevoPaciente, setModoNuevoPaciente] = useState(false)
+  const [esOtroDocumento, setEsOtroDocumento] = useState(false)
   const [nuevoPaciente, setNuevoPaciente] = useState<NuevoPaciente>({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' })
   const [busqueda, setBusqueda] = useState('')
   const [pacientesEncontrados, setPacientesEncontrados] = useState<any[]>([])
@@ -506,6 +507,36 @@ export default function AgendaPage() {
       toast.error("No se pudo anular la cita");
     }
   }
+
+  const handleEliminarCita = async (cita: any) => {
+    const nombrePaciente = `${cita.pacientes?.nombre || 'S/N'} ${cita.pacientes?.apellido || ''}`.trim();
+    
+    if (confirm(`⚠️ ¿Estás seguro de ELIMINAR PERMANENTEMENTE la cita de ${nombrePaciente}? Esta acción no se puede deshacer.`)) {
+      try {
+        // 1. Eliminación definitiva de la tabla citas
+        const { error } = await supabase
+          .from('citas')
+          .delete()
+          .eq('id', cita.id);
+
+        if (error) throw error;
+
+        // 2. Registro de auditoría clínica
+        await supabase.from('auditoria_clinica').insert([{
+          usuario_id: usuarioLogueado,
+          accion: 'DELETE / CITA',
+          tabla: 'citas',
+          detalles: `Eliminó permanentemente la cita de ${nombrePaciente} del día ${cita.inicio.split('T')[0]}.`
+        }]);
+
+        toast.success("Cita eliminada de la base de datos");
+        await fetchCitasAgenda(); // Refresca la agenda automáticamente
+      } catch (e) {
+        console.error(e);
+        toast.error("No se pudo eliminar la cita");
+      }
+    }
+  };
   
   async function actualizarEstadoCita(citaId: string, nuevoEstado: string) {
     const ahora = new Date(); const offset = ahora.getTimezoneOffset() * 60000; const horaLocalISO = new Date(ahora.getTime() - offset).toISOString();
@@ -519,23 +550,34 @@ export default function AgendaPage() {
     if (nuevoEstado === 'atendiendose') updateData.hora_inicio_atencion = horaLocalISO; 
     if (nuevoEstado === 'atendido') updateData.hora_fin_atencion = horaLocalISO; 
     
-    const { data: citaActual, error } = await supabase.from('citas').update(updateData).eq('id', citaId).select('*, pacientes(nombre, apellido)').single();
+    // 👇 CAMBIO 1: Aseguramos que traiga bien los datos relacionados con pacientes
+    const { data: citaActual, error } = await supabase
+        .from('citas')
+        .update(updateData)
+        .eq('id', citaId)
+        .select('*, pacientes(nombre, apellido)')
+        .single();
+        
     if (error) return toast.error("Error al actualizar");
     
     if (citaActual) {
+      // 👇 CAMBIO 2: Usamos '?' (encadenamiento opcional) para evitar que falle si pacientes es null
+      const nombrePac = citaActual.pacientes?.nombre || 'Sin nombre';
+      const apellidoPac = citaActual.pacientes?.apellido || '';
+
       await supabase.from('auditoria_clinica').insert([{
           usuario_id: usuarioLogueado,
           accion: `UPDATE / ESTADO CITA`,
           tabla: 'citas',
-          detalles: `Cambió estado de la cita de ${citaActual.pacientes.nombre} ${citaActual.pacientes.apellido} a "${nuevoEstado.toUpperCase()}".`
+          detalles: `Cambió estado de la cita de ${nombrePac} ${apellidoPac} a "${nuevoEstado.toUpperCase()}".`
       }]);
     }
 
-    if (nuevoEstado === 'en_espera' && citaActual) {
+    if (nuevoEstado === 'en_espera' && citaActual && citaActual.pacientes) {
       const canalNotif = supabase.channel(`notificaciones-${citaActual.profesional_id}`);
       canalNotif.subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          await canalNotif.send({ type: 'broadcast', event: 'PACIENTE_EN_ESPERA', payload: { nombre: `${citaActual.pacientes.nombre} ${citaActual.pacientes.apellido}` } });
+          await canalNotif.send({ type: 'broadcast', event: 'PACIENTE_EN_ESPERA', payload: { nombre: `${citaActual.pacientes?.nombre || ''} ${citaActual.pacientes?.apellido || ''}` } });
           supabase.removeChannel(canalNotif);
         }
       });
@@ -773,6 +815,11 @@ export default function AgendaPage() {
 
   const handleGuardar = async () => {
   if (cargandoAccion) return;
+  if (modoNuevoPaciente && (!nuevoPaciente.nombre || !nuevoPaciente.apellido)) {
+    return toast.error("Faltan datos del nuevo paciente", {
+      description: "Nombre y Apellido son obligatorios."
+    });
+  }
   setCargandoAccion(true);
   try {
     let pId = pacienteSeleccionado?.id;
@@ -780,20 +827,29 @@ export default function AgendaPage() {
     let pTelefono = pacienteSeleccionado?.telefono || null;
 
     if (modoNuevoPaciente && !citaEnReprogramacion) {
-      const rutLimpio = nuevoPaciente.rut.replace(/[^0-9kK]/g, '').toUpperCase().trim();
+      let rutFinal: string | null = nuevoPaciente.rut.toUpperCase().trim();
+      if (esOtroDocumento) {
+        if (!rutFinal) rutFinal = `OTRO-DOC-${Date.now()}`;
+      } else {
+          rutFinal = rutFinal.replace(/[^0-9kK-]/g, '');
+      }
+
       const { data: pNew, error: pErr } = await supabase
         .from('pacientes')
         .insert([{
           nombre: nuevoPaciente.nombre.toUpperCase().trim(),
           apellido: nuevoPaciente.apellido.toUpperCase().trim(),
-          rut: rutLimpio,
+          rut: rutFinal,
           telefono: nuevoPaciente.telefono,
-          fecha_nacimiento: nuevoPaciente.fecha_nacimiento,
-          sexo: nuevoPaciente.sexo,
+          fecha_nacimiento: nuevoPaciente.fecha_nacimiento || null,
+          sexo: nuevoPaciente.sexo || null,
           activo: true
         }])
         .select().single();
-      if (pErr) throw pErr;
+      if (pErr) {
+        console.error(pErr);
+        throw pErr;
+      }
       pId = pNew.id;
       pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`;
       pTelefono = nuevoPaciente.telefono;
@@ -1106,8 +1162,8 @@ export default function AgendaPage() {
                <Stethoscope size={14}/>
                {puedeVerAgendaCompleta ? (
                    <select className="text-[11px] font-bold uppercase bg-transparent outline-none cursor-pointer hover:text-blue-600 transition-colors max-w-[220px]" value={filtroEspecialista} onChange={(e) => setFiltroEspecialista(e.target.value)}>
-                     <option value="Todos">Todos los especialistas</option>
-                     {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                       <option value="Todos">Todos los especialistas</option>
+                       {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
                    </select>
                ) : (
                    <span className="text-[11px] font-bold uppercase text-slate-700">Mis Citas</span>
@@ -1133,7 +1189,7 @@ export default function AgendaPage() {
                   newDate.setDate(newDate.getDate() - amount);
                   setSelectedDate(newDate);
                 }} className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-50 rounded-xl transition-all"><ChevronLeft size={18}/></button>
-                
+               
                 <div className="relative flex items-center justify-center px-4 cursor-pointer group" onClick={() => { try { dateInputRef.current?.showPicker(); } catch (e) { dateInputRef.current?.focus(); } }}>
                    <CalendarIcon size={16} className="mr-2.5 text-slate-300 group-hover:text-blue-500 transition-colors" />
                    <span className="text-xs font-black capitalize min-w-[130px] text-center text-slate-700 group-hover:text-blue-600 transition-colors">{vistaAgenda === 'dia' ? selectedDate.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'short' }) : 'Semana Actual'}</span>
@@ -1151,7 +1207,6 @@ export default function AgendaPage() {
         </div>
         
         <div className="flex items-center gap-1.5 w-full xl:w-auto overflow-x-auto shrink-0">
-
           {puedeVerFinanzas && (
               <button onClick={() => {
                   setProfesionalBloqueo(filtroEspecialista === 'Todos' ? '' : filtroEspecialista);
@@ -1265,26 +1320,34 @@ export default function AgendaPage() {
                          </div>
                          
                          <div className="flex items-center bg-slate-50 p-1 rounded-xl border border-slate-100 gap-1 w-full xl:w-auto text-left overflow-x-auto">
-                            
-                            <button onClick={() => iniciarReprogramacion(c)} className="p-2 text-slate-400 hover:text-purple-600 hover:bg-white rounded-lg transition-all shrink-0" title="Reprogramar esta cita">
-                                <CalendarClock size={14}/>
-                            </button>
+    
+    <button onClick={() => iniciarReprogramacion(c)} className="p-2 text-slate-400 hover:text-purple-600 hover:bg-white rounded-lg transition-all shrink-0" title="Reprogramar esta cita">
+        <CalendarClock size={14}/>
+    </button>
 
-                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all shrink-0" title="WhatsApp Inteligente">
-                                <MessageCircle size={14}/>
-                            </button>
-                            <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all shrink-0" title="Enviar Presupuesto">
-                                <FileText size={14}/>
-                            </button>
-                            {puedeVerFinanzas && (
-                                <button onClick={() => abrirCaja(c)} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-white rounded-lg transition-all shrink-0" title="Caja / Pagar">
-                                    <Coins size={14}/>
-                                </button>
-                            )}
-                            <Link href={`/pacientes/${c.paciente_id}`} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all flex items-center gap-1.5 font-black text-[9px] uppercase pr-3 shrink-0" title="Ver Ficha">
-                                <ClipboardList size={14}/> Ficha
-                            </Link>
-                         </div>
+    <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-white rounded-lg transition-all shrink-0" title="WhatsApp Inteligente">
+        <MessageCircle size={14}/>
+    </button>
+    
+    <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all shrink-0" title="Enviar Presupuesto">
+        <FileText size={14}/>
+    </button>
+
+    {puedeVerFinanzas && (
+        <button onClick={() => abrirCaja(c)} className="p-2 text-slate-400 hover:text-amber-600 hover:bg-white rounded-lg transition-all shrink-0" title="Caja / Pagar">
+            <Coins size={14}/>
+        </button>
+    )}
+
+    {/* 👇 NUEVO BOTÓN PARA ELIMINAR / ANULAR CITA 👇 */}
+    <button onClick={() => handleEliminarCita(c)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shrink-0" title="Anular/Eliminar Cita">
+        <Trash2 size={14}/>
+    </button>
+
+    <Link href={`/pacientes/${c.paciente_id}`} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-white rounded-lg transition-all flex items-center gap-1.5 font-black text-[9px] uppercase pr-3 shrink-0" title="Ver Ficha">
+        <ClipboardList size={14}/> Ficha
+    </Link>
+</div>
                       </div>
                     </div>
                   </motion.div>
@@ -1796,7 +1859,10 @@ export default function AgendaPage() {
                 {paso === 1 ? (
                   <>
                     <aside className="hidden md:block md:w-[300px] border-r border-slate-200 p-8 bg-slate-50 space-y-6 overflow-y-auto text-left text-slate-900 custom-scrollbar">
-                      <div className={`p-6 rounded-2xl shadow-sm border text-left ${citaEnReprogramacion ? 'bg-white border-purple-200' : 'bg-white border-blue-200'}`}><p className="text-[10px] font-black uppercase mb-1 text-slate-400 tracking-widest text-left">Seleccionado</p><p className={`text-4xl font-black leading-none text-left ${citaEnReprogramacion ? 'text-purple-600' : 'text-blue-600'}`}>{horasSeleccionadas.length}</p></div>
+  <div className={`p-6 rounded-2xl shadow-sm border text-left ${citaEnReprogramacion ? 'bg-white border-purple-200' : 'bg-white border-blue-200'}`}>
+    <p className="text-[10px] font-black uppercase mb-1 text-slate-400 tracking-widest text-left">Seleccionado</p>
+    <p className={`text-4xl font-black leading-none text-left ${citaEnReprogramacion ? 'text-purple-600' : 'text-blue-600'}`}>{horasSeleccionadas.length}</p>
+  </div>
                       <div className="space-y-6 text-left">
                         <div className="space-y-2 text-left text-slate-900">
                           <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1 text-left">Especialista</label>
@@ -1937,48 +2003,117 @@ export default function AgendaPage() {
                   <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white text-slate-900 text-left">
                     <div className="w-full md:w-1/2 border-r border-slate-200 p-8 md:p-12 bg-slate-50 overflow-y-auto space-y-6 text-left text-slate-900 custom-scrollbar">
                         <h3 className="text-sm font-black uppercase text-slate-700 flex items-center gap-2 text-left"><Timer size={16}/> Ajustar Tiempos</h3>
-                        {horasSeleccionadas.map((s, idx) => ( 
-                          <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm text-left text-slate-900">
-                             <div className="text-left text-slate-900">
-                                <p className="text-[10px] font-black text-slate-400 uppercase text-left">{s.fecha}</p>
-                                <p className="text-lg font-black text-slate-700 text-left">{s.hora} hrs</p>
-                             </div>
-                             <select 
-                               className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none text-slate-900 focus:border-blue-500" 
-                               value={s.duracion} 
-                               onChange={(e) => { 
-                                 const newDur = Number(e.target.value);
-                                 const laboral = esHorarioLaboral(s.fecha, s.hora, newDur);
-                                 const ocupado = esCitaOcupada(s.fecha, s.hora, newDur);
-                                 
-                                 const chocaConOtraSeleccion = horasSeleccionadas.some((otra, idxOtra) => {
-                                     if (idx === idxOtra) return false;
-                                     const otraStart = new Date(`${otra.fecha}T${otra.hora}:00`).getTime();
-                                     const otraEnd = otraStart + otra.duracion * 60000;
-                                     const miStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
-                                     const miEnd = miStart + newDur * 60000;
-                                     return miStart < otraEnd && miEnd > otraStart;
-                                 });
-
-                                 if (!laboral || ocupado || chocaConOtraSeleccion) {
-                                     toast.error("La nueva duración excede el turno o choca con otra cita.");
-                                     return;
-                                 }
-                                 
-                                 const c = [...horasSeleccionadas]; 
-                                 c[idx].duracion = newDur; 
-                                 setHorasSeleccionadas(c); 
-                               }}
-                             >
-                               {duracionesDisponibles.map(d => <option key={d} value={d} className="text-slate-900">{d} min</option>)}
-                             </select>
-                          </div> 
+                        {horasSeleccionadas.map((s, idx) => (
+                          <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200 flex items-center justify-between shadow-sm text-left text-slate-900 group">
+                            <div>
+                              <p className="text-[10px] font-black text-slate-400 uppercase">{s.fecha}</p>
+                              <p className="text-lg font-black text-slate-700">{s.hora} hrs</p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <select
+                                className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold outline-none text-slate-900 focus:border-blue-500"
+                                value={s.duracion}
+                                onChange={(e) => {
+                                  const newDur = Number(e.target.value);
+                                  const laboral = esHorarioLaboral(s.fecha, s.hora, newDur);
+                                  const ocupado = esCitaOcupada(s.fecha, s.hora, newDur);
+                                  const chocaConOtraSeleccion = horasSeleccionadas.some((otra, idxOtra) => {
+                                    if (idx === idxOtra) return false;
+                                    const otraStart = new Date(`${otra.fecha}T${otra.hora}:00`).getTime();
+                                    const otraEnd = otraStart + otra.duracion * 60000;
+                                    const miStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
+                                    const miEnd = miStart + newDur * 60000;
+                                    return miStart < otraEnd && miEnd > otraStart;
+                                  });
+                                  if (!laboral || ocupado || chocaConOtraSeleccion) {
+                                    toast.error("La nueva duración excede el turno o choca con otra cita.");
+                                    return;
+                                  }
+                                  const c = [...horasSeleccionadas]; c[idx].duracion = newDur; setHorasSeleccionadas(c);
+                                }}
+                              >
+                                {duracionesDisponibles.map(d => <option key={d} value={d} className="text-slate-900">{d} min</option>)}
+                              </select>
+                              <button onClick={() => toggleHora(s.fecha, s.hora)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-all opacity-0 group-hover:opacity-100" title="Eliminar bloque">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          </div>
                         ))}
                     </div>
                     <div className="w-full md:w-1/2 p-8 md:p-12 overflow-y-auto space-y-8 text-left text-slate-900 custom-scrollbar">
                         <div className="space-y-4 text-left text-slate-900">
                             <h3 className="text-sm font-black uppercase text-slate-800 tracking-tight text-left">Paciente</h3>
-                            {citaEnReprogramacion ? ( <div className="p-6 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="text-base font-black uppercase text-purple-900 leading-none text-left">{citaEnReprogramacion.pacientes?.nombre} {citaEnReprogramacion.pacientes?.apellido}</p><p className="text-[10px] font-bold text-purple-500 mt-2 tracking-widest text-left">RUT: {citaEnReprogramacion.pacientes?.rut}</p></div><RefreshCcw className="text-purple-500" size={20} /></div> ) : ( <div className="space-y-4 text-left text-slate-900">{modoNuevoPaciente ? ( <div className="grid grid-cols-1 gap-3 bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm text-left"><input placeholder="Nombre" className="p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.nombre} onChange={e => setNuevoPaciente(prev => ({...prev, nombre: e.target.value}))}/><input placeholder="Apellido" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.apellido} onChange={e => setNuevoPaciente(prev => ({...prev, apellido: e.target.value}))}/><input placeholder="RUT" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.rut} onChange={e => setNuevoPaciente(prev => ({...prev, rut: e.target.value}))}/><input placeholder="Teléfono" className="p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.telefono} onChange={e => setNuevoPaciente(prev => ({...prev, telefono: e.target.value}))}/></div> ) : ( <div className="text-left space-y-4 text-slate-900"><div className="relative group text-left"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input placeholder="Buscar por Nombre o RUT..." className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-blue-500 shadow-sm text-slate-900" value={busqueda} onChange={e => {setBusqueda(e.target.value); buscarPacientes(e.target.value);}} /></div>{pacientesEncontrados.map(p => ( <button key={p.id} onClick={() => seleccionarPacienteExistente(p)} className="w-full p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 shadow-sm transition-all flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="font-black text-sm uppercase text-left">{p.nombre} {p.apellido}</p><p className="text-[10px] font-bold text-slate-400 text-left mt-1">{p.rut}</p></div><ChevronRightIcon size={16} className="text-slate-300"/></button> ))}{pacienteSeleccionado && pacientesEncontrados.length === 0 && ( <div className="p-5 rounded-2xl border border-blue-500 bg-blue-50 flex items-center justify-between text-left text-slate-900"><p className="font-black text-sm uppercase text-blue-900 text-left">{pacienteSeleccionado.nombre} {pacienteSeleccionado.apellido}</p><CheckCircle2 className="text-blue-500" /></div> )}</div> )}</div> )}
+                            {citaEnReprogramacion ? ( <div className="p-6 rounded-2xl bg-purple-50 border border-purple-200 flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="text-base font-black uppercase text-purple-900 leading-none text-left">{citaEnReprogramacion.pacientes?.nombre} {citaEnReprogramacion.pacientes?.apellido}</p><p className="text-[10px] font-bold text-purple-500 mt-2 tracking-widest text-left">RUT: {citaEnReprogramacion.pacientes?.rut}</p></div><RefreshCcw className="text-purple-500" size={20} /></div>  ) : (
+                        <div className="space-y-4 text-left text-slate-900">
+                          {modoNuevoPaciente ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-6 rounded-2xl border border-slate-200 shadow-sm text-left">
+                              <input placeholder="Nombre" className="md:col-span-1 p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.nombre} onChange={e => setNuevoPaciente(prev => ({...prev, nombre: e.target.value}))}/>
+                              <input placeholder="Apellido" className="md:col-span-1 p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.apellido} onChange={e => setNuevoPaciente(prev => ({...prev, apellido: e.target.value}))}/>
+                              
+                              <div className="md:col-span-2 flex items-center gap-2 mt-2">
+                                  <input 
+                                      type="checkbox" 
+                                      id="otro_documento_agenda" 
+                                      className="w-4 h-4 accent-blue-600"
+                                      checked={esOtroDocumento}
+                                      onChange={(e) => {
+                                          setEsOtroDocumento(e.target.checked);
+                                          setNuevoPaciente(prev => ({...prev, rut: ''}));
+                                      }}
+                                  />
+                                  <label htmlFor="otro_documento_agenda" className="text-xs font-bold text-slate-600 cursor-pointer">
+                                      Paciente extranjero / Usar otro documento
+                                  </label>
+                              </div>
+
+                              <div className="md:col-span-2">
+                                  <input 
+                                      placeholder={esOtroDocumento ? "N° de Pasaporte o Identificación" : "RUT (sin puntos, con guión)"} 
+                                      className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" 
+                                      value={nuevoPaciente.rut} 
+                                      onChange={e => setNuevoPaciente(prev => ({...prev, rut: e.target.value}))}
+                                  />
+                              </div>
+
+                              <input placeholder="Teléfono" className="md:col-span-1 p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" value={nuevoPaciente.telefono} onChange={e => setNuevoPaciente(prev => ({...prev, telefono: e.target.value}))}/>
+                              
+                              <div className="space-y-1 md:col-span-1">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Fecha de Nacimiento</label>
+                                  <input 
+                                      type="date" 
+                                      className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900" 
+                                      value={nuevoPaciente.fecha_nacimiento} 
+                                      onChange={e => setNuevoPaciente(prev => ({...prev, fecha_nacimiento: e.target.value}))}
+                                  />
+                              </div>
+
+                              <div className="space-y-1 md:col-span-2">
+                                  <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Sexo</label>
+                                  <select 
+                                      className="w-full p-4 bg-white border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-blue-500 text-slate-900"
+                                      value={nuevoPaciente.sexo}
+                                      onChange={e => setNuevoPaciente(prev => ({...prev, sexo: e.target.value}))}
+                                  >
+                                      <option value="">Seleccionar...</option>
+                                      <option value="Masculino">Masculino</option>
+                                      <option value="Femenino">Femenino</option>
+                                      <option value="Otro">Otro</option>
+                                  </select>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-left space-y-4 text-slate-900">
+                              <div className="relative group text-left">
+                                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+                                <input placeholder="Buscar por Nombre o RUT..." className="w-full p-4 pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-xs outline-none focus:border-blue-500 shadow-sm text-slate-900" value={busqueda} onChange={e => {setBusqueda(e.target.value); buscarPacientes(e.target.value);}} />
+                              </div>
+                              {pacientesEncontrados.map(p => ( <button key={p.id} onClick={() => seleccionarPacienteExistente(p)} className="w-full p-5 rounded-2xl bg-white border border-slate-200 hover:border-blue-500 shadow-sm transition-all flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="font-black text-sm uppercase text-left">{p.nombre} {p.apellido}</p><p className="text-[10px] font-bold text-slate-400 text-left mt-1">{p.rut}</p></div><ChevronRightIcon size={16} className="text-slate-300"/></button> ))}
+                              {pacienteSeleccionado && pacientesEncontrados.length === 0 && ( <div className="p-5 rounded-2xl border border-blue-500 bg-blue-50 flex items-center justify-between text-left text-slate-900"><p className="font-black text-sm uppercase text-blue-900 text-left">{pacienteSeleccionado.nombre} {pacienteSeleccionado.apellido}</p><CheckCircle2 className="text-blue-500" /></div> )}
+                            </div>
+                          )}
+                        </div>
+                      )}
                         </div>
                         {(pacienteSeleccionado || modoNuevoPaciente) && ( <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 bg-slate-900 rounded-2xl text-white shadow-xl text-left"><h4 className="text-[10px] font-black uppercase text-slate-400 mb-4 flex items-center gap-2 tracking-widest text-left"><Briefcase size={14}/> Tratamiento</h4>{!modoNuevoPaciente && tratamientosPaciente.length > 0 ? ( <div className="space-y-3 text-left"><label className="text-[9px] font-bold text-slate-400 uppercase pl-1 text-left">Plan activo</label><select className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white appearance-none cursor-pointer" value={tratamientoSeleccionadoId || ''} onChange={(e) => { const val = e.target.value; setTratamientoSeleccionadoId(val); if (val !== 'MANUAL') { const t = tratamientosPaciente.find(x => x.id === val); setNuevoTratamientoNombre(t?.nombre_tratamiento || ''); } else setNuevoTratamientoNombre(''); }}>{tratamientosPaciente.map(t => <option key={t.id} value={t.id} className="text-slate-900">{t.nombre_tratamiento.toUpperCase()}</option>)}<option value="MANUAL" className="text-slate-900 italic">+ OTRO MOTIVO</option></select>{(tratamientoSeleccionadoId === 'MANUAL' || !tratamientoSeleccionadoId) && ( <input placeholder="Especifique motivo..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white uppercase mt-2 shadow-inner" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</div> ) : ( <input placeholder="Ej: Evaluación General, Urgencia..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-xs outline-none border border-transparent focus:border-blue-500 text-white uppercase" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</motion.div> )}
                     </div>
@@ -1991,7 +2126,7 @@ export default function AgendaPage() {
                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-left">Turnos</p>
                  </div>
                  <div className="flex gap-3 items-center text-left text-slate-900 w-full sm:w-auto">
-                    <button onClick={() => { setModoNuevoPaciente(!modoNuevoPaciente); setPacienteSeleccionado(null); setBusqueda(''); }} className="text-[10px] font-black text-blue-600 uppercase underline mr-4 text-left whitespace-nowrap">{paso === 2 && !citaEnReprogramacion && (modoNuevoPaciente ? 'Buscar Existente' : '+ Registrar Nuevo')}</button>
+                    <button onClick={() => { setModoNuevoPaciente(!modoNuevoPaciente); setPacienteSeleccionado(null); setBusqueda(''); setEsOtroDocumento(false); }} className="text-[10px] font-black text-blue-600 uppercase underline mr-4 text-left whitespace-nowrap">{paso === 2 && !citaEnReprogramacion && (modoNuevoPaciente ? 'Buscar Existente' : '+ Registrar Nuevo')}</button>
                     {paso === 2 && <button onClick={() => setPaso(1)} className="px-6 py-3.5 bg-white border border-slate-200 rounded-xl font-black text-[10px] uppercase text-slate-600 hover:bg-slate-100 shadow-sm transition-all text-left">Atrás</button>}
                     <button disabled={cargandoAccion || horasSeleccionadas.length === 0 || (paso === 2 && !modoNuevoPaciente && !pacienteSeleccionado)} onClick={() => { if(paso === 1) { setPaso(2); } else { handleGuardar(); } }} className={`px-10 py-3.5 rounded-xl font-black text-white text-[10px] uppercase shadow-md transition-all active:scale-95 whitespace-nowrap w-full sm:w-auto ${citaEnReprogramacion ? 'bg-purple-600 hover:bg-purple-700' : 'bg-slate-900 hover:bg-slate-800'}`}>
                         {cargandoAccion ? <Loader2 className="animate-spin" size={16} /> : (paso === 1 ? 'Continuar' : citaEnReprogramacion ? 'Confirmar Cambio' : 'Agendar Cita')}
