@@ -30,20 +30,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [mostrarResultados, setMostrarResultados] = useState(false)
   const [showAdminMenu, setShowAdminMenu] = useState(false)
   const [showReportMenu, setShowReportMenu] = useState(false)
+  const [showMiMenu, setShowMiMenu] = useState(false)
   
   const searchRef = useRef<HTMLDivElement>(null)
   const adminMenuRef = useRef<HTMLDivElement>(null)
   const reportMenuRef = useRef<HTMLDivElement>(null)
+  const miMenuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     const isMobile = window.innerWidth < 768;
-    if (isMobile && (showAdminMenu || showReportMenu)) {
+    if (isMobile && (showAdminMenu || showReportMenu || showMiMenu)) {
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'auto';
     }
     return () => { document.body.style.overflow = 'auto'; };
-  }, [showAdminMenu, showReportMenu]);
+  }, [showAdminMenu, showReportMenu, showMiMenu]);
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -67,6 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     const handleClickOutside = (event: MouseEvent) => {
       if (adminMenuRef.current && !adminMenuRef.current.contains(event.target as Node)) setShowAdminMenu(false)
       if (reportMenuRef.current && !reportMenuRef.current.contains(event.target as Node)) setShowReportMenu(false)
+      if (miMenuRef.current && !miMenuRef.current.contains(event.target as Node)) setShowMiMenu(false)
       if (searchRef.current && !searchRef.current.contains(event.target as Node)) setMostrarResultados(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -169,6 +172,27 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   {modulos.filter(m => m.roles.includes(perfil?.rol)).map((m) => (
                     <ModuleLink key={m.href} href={m.href} label={m.label} icon={m.icon} active={pathname.startsWith(m.href)} />
                   ))}
+                  {['ADMIN', 'RECEPCIONISTA', 'DENTISTA'].includes(perfil?.rol) && (
+                    <div className="relative h-full" ref={miMenuRef}>
+                      <button onClick={() => setShowMiMenu(!showMiMenu)} className={`flex items-center gap-2.5 px-3 h-full border-b-2 transition-all ${showMiMenu ? 'bg-white border-white text-blue-600 font-black rounded-t-lg mb-[-2px]' : 'border-transparent text-slate-400'}`}>
+                        <Stethoscope size={18} /> <span className="text-[11px] font-black uppercase tracking-wider">Mi Menú</span>
+                      </button>
+                      <AnimatePresence>
+                        {showMiMenu && (
+                          <>
+                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-x-0 bottom-0 top-[136px] bg-black/50 z-[105] md:hidden" onClick={() => setShowMiMenu(false)} />
+                            <motion.div 
+                              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} 
+                              className="fixed md:absolute top-[140px] md:top-[100%] left-1/2 -translate-x-1/2 md:left-0 md:translate-x-0 bg-white shadow-2xl rounded-3xl md:rounded-b-[2rem] md:rounded-tl-none border border-slate-100 p-4 z-[110] w-full max-w-xs md:w-[260px] text-left"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MenuOption href="/mi-menu/plantillas" label="Plantillas" icon={<Package size={14}/>} onClick={() => setShowMiMenu(false)} />
+                            </motion.div>
+                          </>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
                   {perfil?.rol === 'ADMIN' && (
                     <>
                       {/* Menú Reportes */}
