@@ -221,7 +221,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </nav>
           </div>
         )}
-        <main className="flex-1 w-full bg-slate-50 relative z-0 print:bg-white print:overflow-visible">
+        <main className="flex-1 w-full bg-slate-50 relative print:bg-white print:overflow-visible">
           {children}
         </main>
         {!isAuthPage && session && <ChatGlobal session={session} />}
