@@ -1,18 +1,12 @@
 'use client'
 import { useParams } from 'next/navigation'
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
-import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, History, AlertCircle, Eye, X } from 'lucide-react'
+import { ChevronLeft, Printer, DollarSign, Loader2, CheckCircle2, History, AlertCircle, Eye, X, Wallet } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
-
-// Nota de ruteo:
-// Esta página vive en /liquidacion/[id] y el segmento [id] representa el MES
-// seleccionado (formato 'YYYY-MM'), no el id del profesional ni el id de una
-// liquidación puntual. El profesional se obtiene SIEMPRE desde la sesión activa,
-// nunca desde la URL, para que un dentista jamás pueda ver datos de otro
-// cambiando el link manualmente.
 
 export default function MiDetalleLiquidacionPage() {
   const params = useParams()
@@ -26,8 +20,12 @@ export default function MiDetalleLiquidacionPage() {
   const [errorSesion, setErrorSesion] = useState('')
   const [fechaEmision, setFechaEmision] = useState('')
   const [detalleItem, setDetalleItem] = useState<any>(null)
+  
+  // Estado para los Portals
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
+    setIsMounted(true)
     fetchData()
   }, [mesSeleccionado])
 
@@ -326,12 +324,19 @@ export default function MiDetalleLiquidacionPage() {
     return `${String(ultimoDiaNum).padStart(2, '0')}/${month}/${year}`;
   }
 
-  if (cargando) return <div className="p-40 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40} /></div>
+  if (cargando) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FBF8F2] gap-4 relative z-0">
+        <Loader2 className="animate-spin text-[#C9A24B]" size={40} />
+        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Calculando liquidación...</p>
+      </div>
+    )
+  }
 
   if (errorSesion) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-8">
-        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm text-center max-w-md">
+      <div className="min-h-screen bg-[#FBF8F2] flex items-center justify-center p-8 relative overflow-hidden z-0">
+        <div className="bg-white/90 backdrop-blur-md p-10 rounded-[2.5rem] border border-slate-100 shadow-xl text-center max-w-md relative z-10">
           <p className="text-xs font-black text-red-500 uppercase tracking-widest">{errorSesion}</p>
         </div>
       </div>
@@ -339,62 +344,67 @@ export default function MiDetalleLiquidacionPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans">
+    <div className="min-h-screen bg-[#FBF8F2] font-sans relative overflow-hidden z-0 text-left">
 
       {/* ========================================================================= */}
       {/* VISTA WEB (OCULTA AL IMPRIMIR) */}
       {/* ========================================================================= */}
-      <div className="max-w-7xl mx-auto space-y-8 p-8 pb-20 print:hidden text-left">
+      <div className="max-w-7xl mx-auto space-y-8 p-6 md:p-8 pb-20 print:hidden relative z-10 text-left">
 
-        <Link href="/mi-menu/liquidacion" className="flex items-center gap-2 text-slate-400 hover:text-blue-600 font-black text-[10px] uppercase tracking-widest transition-all w-fit">
-          <ChevronLeft size={16} /> Volver a mis liquidaciones
+        <Link href="/mi-menu/liquidacion" className="flex items-center gap-2 text-slate-500 hover:text-[#C9A24B] font-black text-[10px] uppercase tracking-widest transition-all w-fit bg-white/50 backdrop-blur-sm px-4 py-2 rounded-xl border border-slate-200 hover:border-[#C9A24B]/30 shadow-sm">
+          <ChevronLeft size={14} /> Volver a mis liquidaciones
         </Link>
 
         {/* TARJETAS DE RESUMEN SUPERIOR */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Generado (Mes)</p>
-            <p className="text-3xl font-black text-slate-800">${Math.round(resumenMes.totalMes).toLocaleString('es-CL')}</p>
+          <div className="bg-white/95 backdrop-blur-sm p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center text-left transition-all hover:shadow-md">
+            <p className="text-[10px] font-black text-[#C9A24B] uppercase tracking-[0.2em] mb-2">Total Generado (Mes)</p>
+            <p className="text-3xl md:text-4xl font-black text-[#0A111F]">${Math.round(resumenMes.totalMes).toLocaleString('es-CL')}</p>
           </div>
-          <div className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 flex flex-col justify-center">
-            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2">Ya Pagado</p>
-            <p className="text-3xl font-black text-emerald-700">${Math.round(resumenMes.totalPagado).toLocaleString('es-CL')}</p>
+          <div className="bg-white/95 backdrop-blur-sm p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center text-left transition-all hover:shadow-md">
+            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-2">Ya Pagado</p>
+            <p className="text-3xl md:text-4xl font-black text-emerald-700">${Math.round(resumenMes.totalPagado).toLocaleString('es-CL')}</p>
           </div>
-          <div className="bg-slate-900 p-8 rounded-[2.5rem] text-white shadow-2xl flex flex-col justify-center relative overflow-hidden">
+          <div className="bg-[#0A111F] p-8 rounded-[2.5rem] text-white shadow-2xl flex flex-col justify-center relative overflow-hidden transition-all hover:shadow-xl">
             <div className="absolute right-[-20px] bottom-[-20px] opacity-10 pointer-events-none">
-              <DollarSign size={120} />
+              <DollarSign size={140} className="text-[#C9A24B]" />
             </div>
-            <p className="text-[10px] font-black uppercase text-blue-400 tracking-widest relative z-10">Saldo Pendiente a Pagar</p>
-            <p className="text-[9px] text-slate-400 uppercase mt-1 relative z-10">Producción nueva no liquidada</p>
-            <p className={`text-4xl font-black mt-3 flex items-center gap-2 relative z-10 ${resumenMes.saldoPendiente > 0 ? "text-white" : "text-slate-500"}`}>
+            <p className="text-[10px] font-black uppercase text-[#C9A24B] tracking-[0.2em] relative z-10">Saldo Pendiente a Pagar</p>
+            <p className="text-[9px] text-slate-400 uppercase tracking-widest mt-1 relative z-10">Producción nueva no liquidada</p>
+            <p className={`text-4xl md:text-5xl font-black mt-4 flex items-center gap-2 relative z-10 ${resumenMes.saldoPendiente > 0 ? "text-white" : "text-slate-500"}`}>
               ${Math.round(resumenMes.saldoPendiente).toLocaleString('es-CL')}
             </p>
           </div>
         </div>
 
-        <div className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 text-left">
+        <div className="bg-white/95 backdrop-blur-sm p-8 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 text-left">
 
           {/* HEADER DEL REPORTE */}
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100 pb-8 mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-200 pb-8 mb-8 text-left">
             <div className="text-left">
-              <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2 text-left">Desglose de Periodo</p>
-              <h1 className="text-3xl font-black text-slate-800 uppercase italic leading-none text-left">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 bg-[#C9A24B]/10 rounded-xl flex items-center justify-center text-[#C9A24B] shrink-0">
+                  <Wallet size={18} />
+                </div>
+                <p className="text-[10px] font-black text-[#C9A24B] uppercase tracking-[0.2em]">Desglose de Periodo</p>
+              </div>
+              <h1 className="text-2xl md:text-3xl font-black text-[#0A111F] uppercase italic leading-none tracking-tight text-left">
                 Detalle de Producción
               </h1>
-              <div className="flex flex-wrap items-center gap-3 mt-4 text-left">
-                <div className="bg-slate-100 px-4 py-2 rounded-xl text-xs font-black text-slate-600 uppercase">
+              <div className="flex flex-wrap items-center gap-3 mt-5 text-left">
+                <div className="bg-[#0A111F] px-4 py-2.5 rounded-xl text-[10px] font-black text-[#C9A24B] uppercase tracking-widest shadow-sm">
                   Dr. {profesional?.nombre} {profesional?.apellido}
                 </div>
-                <div className="px-4 py-2 border border-blue-200 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest">
+                <div className="px-4 py-2.5 border border-[#C9A24B]/30 bg-[#C9A24B]/5 text-[#0A111F] rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm">
                   Contrato Vigente: {profesional?.porcentaje_comision || 40}%
                 </div>
-                <div className="px-4 py-2 border border-slate-200 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="px-4 py-2.5 border border-slate-200 bg-slate-50 rounded-xl text-[10px] font-black text-slate-500 uppercase tracking-widest shadow-sm">
                   Periodo: {mesSeleccionado}
                 </div>
               </div>
             </div>
-            <button onClick={handlePrint} className="bg-slate-100 text-slate-600 px-6 py-4 rounded-2xl hover:bg-slate-900 hover:text-white transition-all shadow-sm font-black text-xs uppercase tracking-widest flex items-center gap-2">
-              <Printer size={18} /> Imprimir Reporte
+            <button onClick={handlePrint} className="w-full md:w-auto bg-[#0A111F] text-[#C9A24B] px-6 py-4 rounded-2xl hover:bg-[#1a2538] hover:text-white transition-all shadow-lg font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 active:scale-95">
+              <Printer size={16} /> Imprimir Reporte
             </button>
           </div>
 
@@ -404,77 +414,77 @@ export default function MiDetalleLiquidacionPage() {
             {/* SECCIÓN 1: PRODUCCIÓN PENDIENTE */}
             {/* ========================================================= */}
             <div>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="p-3 bg-amber-100 text-amber-600 rounded-xl"><AlertCircle size={24} /></div>
+              <div className="flex items-center gap-4 mb-6">
+                <div className="w-12 h-12 flex items-center justify-center bg-[#C9A24B]/10 text-[#C9A24B] rounded-[1.2rem] shrink-0"><AlertCircle size={20} /></div>
                 <div>
-                  <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Pendiente de Pago</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Tratamientos realizados y abonados que aún no se te han liquidado</p>
+                  <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Pendiente de Pago</h2>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Tratamientos realizados y abonados aún no liquidados</p>
                 </div>
               </div>
 
               {itemsPendientes.length === 0 ? (
-                <div className="p-10 border-2 border-dashed border-slate-200 rounded-[2rem] text-center bg-slate-50/50">
-                  <CheckCircle2 size={40} className="mx-auto text-emerald-400 mb-3 opacity-50" />
-                  <p className="text-xs font-black text-slate-500 uppercase tracking-widest">No hay producción pendiente</p>
-                  <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Todo está liquidado y al día.</p>
+                <div className="p-12 border border-dashed border-slate-300 rounded-[2.5rem] text-center bg-slate-50/50 flex flex-col items-center">
+                  <CheckCircle2 size={40} className="text-emerald-500 mb-4 opacity-80" />
+                  <p className="text-xs font-black text-[#0A111F] uppercase tracking-widest">No hay producción pendiente</p>
+                  <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-wide">Todo está liquidado y al día.</p>
                 </div>
               ) : (
-                <div className="overflow-hidden rounded-[2rem] border border-amber-200 shadow-sm">
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[800px]">
-                      <thead className="bg-amber-50/50 border-b border-amber-100">
+                <div className="overflow-hidden rounded-[2rem] border border-slate-200 shadow-sm text-left">
+                  <div className="overflow-x-auto text-left">
+                    <table className="w-full text-left border-collapse min-w-[900px]">
+                      <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                          <th className="px-4 py-4 text-[9px] font-black text-amber-700 uppercase text-center">Estado</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase">Fecha</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase">Paciente</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase">Prestación</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase text-right">Total Prestación</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase text-right">Total Pagado</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase text-right bg-amber-100/50">A Pagar</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-700 uppercase text-center">Detalle</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase text-center tracking-widest w-32">Estado</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Fecha</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Paciente</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest max-w-[200px]">Prestación</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase text-right tracking-widest">Total Prest.</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase text-right tracking-widest">Total Pagado</th>
+                          <th className="px-5 py-4 text-[10px] font-black text-[#0A111F] uppercase text-right tracking-widest bg-[#C9A24B]/10 w-32">A Pagar</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase text-center tracking-widest w-20">Detalle</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {itemsPendientes.map((item: any, idx: number) => (
-                          <tr key={idx} className="text-xs font-bold text-slate-600 hover:bg-slate-50/50 transition-colors">
-                            <td className="px-4 py-4">
+                          <tr key={idx} className="text-[11px] font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+                            <td className="px-5 py-4">
                               {item.estaEvolucionado && (
                                 <div className="flex items-center justify-center gap-2">
-                                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
-                                    item.paymentStatus === 'paid' ? 'bg-emerald-500' :
-                                    item.paymentStatus === 'partially-paid' ? 'bg-amber-500' :
-                                    'bg-red-500'
+                                  <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                    item.paymentStatus === 'paid' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
+                                    item.paymentStatus === 'partially-paid' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' :
+                                    'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'
                                   }`}></div>
-                                  <span className={`text-[10px] font-black uppercase tracking-wider ${
+                                  <span className={`text-[9px] font-black uppercase tracking-widest ${
                                     item.paymentStatus === 'paid' ? 'text-emerald-600' :
                                     item.paymentStatus === 'partially-paid' ? 'text-amber-600' :
                                     'text-red-600'
                                   }`}>
-                                    { item.paymentStatus === 'paid' ? 'Pagado' : item.paymentStatus === 'partially-paid' ? 'No Pagado Completo' : 'No Pagado' }
+                                    { item.paymentStatus === 'paid' ? 'Pagado' : item.paymentStatus === 'partially-paid' ? 'Parcial' : 'Deuda' }
                                   </span>
                                 </div>
                               )}
                             </td>
-                            <td className="px-6 py-4 text-slate-400">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
-                            <td className="px-6 py-4 uppercase">{item.paciente}</td>
-                            <td className="px-6 py-4 uppercase text-slate-500 max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
-                            <td className="px-6 py-4 text-right text-slate-800">${(item.costoTotalPrestacion || 0).toLocaleString('es-CL')}</td>
-                            <td className="px-6 py-4 text-right text-slate-500">${(item.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</td>
-                            <td className="px-6 py-4 text-right font-black text-amber-600 bg-amber-50/30 text-sm">
+                            <td className="px-5 py-4 text-slate-400">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
+                            <td className="px-5 py-4 uppercase text-[#0A111F]">{item.paciente}</td>
+                            <td className="px-5 py-4 uppercase text-slate-500 max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
+                            <td className="px-5 py-4 text-right text-slate-800">${(item.costoTotalPrestacion || 0).toLocaleString('es-CL')}</td>
+                            <td className="px-5 py-4 text-right text-slate-500">${(item.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</td>
+                            <td className="px-5 py-4 text-right font-black text-[#0A111F] bg-[#C9A24B]/5 text-[13px]">
                               ${Math.round(item.honorario).toLocaleString('es-CL')}
                             </td>
-                            <td className="px-6 py-4 text-center">
-                              <button onClick={() => setDetalleItem(item)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-blue-500 hover:text-white transition-colors">
+                            <td className="px-5 py-4 text-center">
+                              <button onClick={() => setDetalleItem(item)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:bg-[#0A111F] hover:text-[#C9A24B] hover:border-[#0A111F] transition-all shadow-sm">
                                 <Eye size={14} />
                               </button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot className="bg-amber-50 border-t border-amber-200">
+                      <tfoot className="bg-[#0A111F] border-t-2 border-[#C9A24B]">
                         <tr>
-                          <td colSpan={6} className="px-6 py-4 text-right font-black text-amber-800 uppercase text-xs">Total Pendiente:</td>
-                          <td className="px-6 py-4 text-right font-black text-amber-600 text-base">
+                          <td colSpan={6} className="px-5 py-4 text-right font-black text-slate-300 uppercase text-[10px] tracking-widest">Total Pendiente:</td>
+                          <td className="px-5 py-4 text-right font-black text-[#C9A24B] text-base">
                             ${Math.round(resumenMes.saldoPendiente).toLocaleString('es-CL')}
                           </td>
                           <td></td>
@@ -490,71 +500,71 @@ export default function MiDetalleLiquidacionPage() {
             {/* SECCIÓN 2: HISTORIAL DE CIERRES (LO YA PAGADO) */}
             {/* ========================================================= */}
             {cierresCompletados.length > 0 && (
-              <div className="pt-8 border-t border-slate-100">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-3 bg-emerald-100 text-emerald-600 rounded-xl"><History size={24} /></div>
+              <div className="pt-10 border-t border-slate-200">
+                <div className="flex items-center gap-4 mb-6">
+                  <div className="w-12 h-12 flex items-center justify-center bg-emerald-50 text-emerald-600 rounded-[1.2rem] border border-emerald-100 shrink-0"><History size={20} /></div>
                   <div>
-                    <h2 className="text-xl font-black text-slate-800 uppercase tracking-tight">Historial de Liquidaciones</h2>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cierres completados y pagados en este mes</p>
+                    <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Historial de Liquidaciones</h2>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Cierres completados y pagados en este mes</p>
                   </div>
                 </div>
 
-                <div className="space-y-6">
+                <div className="space-y-8">
                   {cierresCompletados.map((cierre) => (
-                    <div key={cierre.id} className="overflow-hidden rounded-[2rem] border border-emerald-100 bg-white shadow-sm">
-                      <div className="p-6 flex flex-col sm:flex-row justify-between sm:items-center gap-4 bg-emerald-50/50">
-                        <div className="flex items-center gap-3">
-                          <div className="p-2 rounded-xl bg-emerald-100 text-emerald-600"><CheckCircle2 size={20} /></div>
+                    <div key={cierre.id} className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm text-left">
+                      <div className="p-6 md:p-8 flex flex-col sm:flex-row justify-between sm:items-center gap-5 bg-slate-50 border-b border-slate-200">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-xl bg-emerald-100 text-emerald-600 shadow-sm"><CheckCircle2 size={20} /></div>
                           <div>
-                            <h3 className="font-black uppercase tracking-widest text-sm text-emerald-800">{cierre.titulo}</h3>
-                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">Cierre bloqueado e inmodificable</p>
+                            <h3 className="font-black uppercase tracking-tight text-sm md:text-base text-[#0A111F]">{cierre.titulo}</h3>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cierre bloqueado e inmodificable</p>
                           </div>
                         </div>
-                        <div className="px-4 py-2 rounded-xl text-xs font-black tracking-widest uppercase flex items-center gap-2 bg-emerald-100 text-emerald-700">
+                        <div className="px-5 py-3.5 rounded-xl text-[11px] font-black tracking-widest uppercase flex items-center gap-2 bg-[#0A111F] text-emerald-400 shadow-md">
                           Pagado: ${(cierre.montoTotal || 0).toLocaleString('es-CL')}
                         </div>
                       </div>
 
-                      <div className="overflow-x-auto">
+                      <div className="overflow-x-auto text-left">
                         <table className="w-full text-left min-w-[800px]">
-                          <thead className="bg-slate-50/50 border-y border-slate-100">
+                          <thead className="bg-white border-b border-slate-100">
                             <tr>
-                              <th className="px-4 py-4 text-[9px] font-black text-slate-400 uppercase text-center">Estado</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase">Fecha</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase">Paciente</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase">Prestación</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase text-right">Total Prestación</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase text-right">Total Pagado</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase text-right">Honorario Pagado</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase text-center tracking-widest w-32">Estado</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Paciente</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Prestación</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase text-right tracking-widest">Total Prest.</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase text-right tracking-widest">Total Pagado</th>
+                              <th className="px-5 py-4 text-[10px] font-black text-[#0A111F] uppercase text-right tracking-widest bg-emerald-50">Honorario Pagado</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
                             {cierre.items.map((item: any, idx: number) => (
-                              <tr key={idx} className="text-xs font-bold text-slate-500 hover:bg-slate-50/50 transition-colors opacity-90">
-                                <td className="px-4 py-4">
+                              <tr key={idx} className="text-[11px] font-bold text-slate-500 hover:bg-slate-50 transition-colors opacity-90">
+                                <td className="px-5 py-4">
                                   {item.estaEvolucionado && (
                                     <div className="flex items-center justify-center gap-2">
-                                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+                                      <div className={`w-2 h-2 rounded-full shrink-0 ${
                                         item.paymentStatus === 'paid' ? 'bg-emerald-500' :
                                         item.paymentStatus === 'partially-paid' ? 'bg-amber-500' :
                                         'bg-red-500'
                                       }`}></div>
-                                      <span className={`text-[10px] font-black uppercase tracking-wider ${
+                                      <span className={`text-[9px] font-black uppercase tracking-widest ${
                                         item.paymentStatus === 'paid' ? 'text-emerald-600' :
                                         item.paymentStatus === 'partially-paid' ? 'text-amber-600' :
                                         'text-red-600'
                                       }`}>
-                                        { item.paymentStatus === 'paid' ? 'Pagado' : item.paymentStatus === 'partially-paid' ? 'No Pagado Completo' : 'No Pagado' }
+                                        { item.paymentStatus === 'paid' ? 'Pagado' : item.paymentStatus === 'partially-paid' ? 'Parcial' : 'Deuda' }
                                       </span>
                                     </div>
                                   )}
                                 </td>
-                                <td className="px-6 py-4">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
-                                <td className="px-6 py-4 uppercase">{item.paciente}</td>
-                                <td className="px-6 py-4 uppercase max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
-                                <td className="px-6 py-4 text-right text-slate-800">${(item.costoTotalPrestacion || 0).toLocaleString('es-CL')}</td>
-                                <td className="px-6 py-4 text-right text-slate-500">${(item.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</td>
-                                <td className="px-6 py-4 text-right font-black text-slate-400">
+                                <td className="px-5 py-4 text-slate-400">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
+                                <td className="px-5 py-4 uppercase text-slate-700">{item.paciente}</td>
+                                <td className="px-5 py-4 uppercase max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
+                                <td className="px-5 py-4 text-right">${(item.costoTotalPrestacion || 0).toLocaleString('es-CL')}</td>
+                                <td className="px-5 py-4 text-right">${(item.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</td>
+                                <td className="px-5 py-4 text-right font-black text-[#0A111F] bg-emerald-50/50">
                                   ${Math.round(item.honorario).toLocaleString('es-CL')}
                                 </td>
                               </tr>
@@ -575,7 +585,7 @@ export default function MiDetalleLiquidacionPage() {
       {/* ========================================================================= */}
       {/* VISTA IMPRESIÓN (OCULTA EN WEB, VISIBLE AL IMPRIMIR) */}
       {/* ========================================================================= */}
-      <div className="hidden print:block bg-white text-black p-4 font-sans text-[11px] leading-tight max-w-[800px] mx-auto">
+      <div className="hidden print:block bg-white text-black p-4 font-sans text-[11px] leading-tight max-w-[800px] mx-auto text-left">
 
         <div className="text-center mb-6">
           <h1 className="font-bold text-lg mb-1">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
@@ -662,57 +672,63 @@ export default function MiDetalleLiquidacionPage() {
 
       </div>
 
-      <AnimatePresence>
-        {detalleItem && (
-          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDetalleItem(null)}>
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="bg-white rounded-[2rem] p-8 w-full max-w-md shadow-2xl text-left"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex justify-between items-start mb-6">
-                <div>
-                  <h3 className="text-lg font-black text-slate-800 uppercase italic">Detalle del Movimiento</h3>
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">{detalleItem.paciente}</p>
+      {/* ========================================================================= */}
+      {/* MODAL DETALLE ITEM MEDIANTE CREATEPORTAL */}
+      {/* ========================================================================= */}
+      {isMounted && typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>
+          {detalleItem && (
+            <div className="fixed inset-0 bg-[#0A111F]/70 backdrop-blur-sm z-[999999] flex items-center justify-center p-4 text-left" onClick={() => setDetalleItem(null)}>
+              <motion.div
+                initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                className="bg-white rounded-[2rem] p-8 md:p-10 w-full max-w-md shadow-2xl text-left border border-slate-100"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-start mb-8 text-left">
+                  <div>
+                    <h3 className="text-xl font-black text-[#0A111F] uppercase italic tracking-tight">Detalle del Movimiento</h3>
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1.5">{detalleItem.paciente}</p>
+                  </div>
+                  <button onClick={() => setDetalleItem(null)} className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
+                    <X size={20} />
+                  </button>
                 </div>
-                <button onClick={() => setDetalleItem(null)} className="text-slate-400 hover:text-red-500 transition-colors">
-                  <X size={24} />
-                </button>
-              </div>
 
-              <div className="space-y-4">
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Prestación</p>
-                  <p className="text-sm font-bold text-slate-700">{detalleItem.prestacion}</p>
+                <div className="space-y-4 text-left">
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Prestación</p>
+                    <p className="text-[13px] font-bold text-[#0A111F]">{detalleItem.prestacion}</p>
+                  </div>
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Costo Prestación</p>
+                    <p className="text-[13px] font-bold text-[#0A111F]">${(detalleItem.costoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
+                  </div>
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pagado Prestación</p>
+                    <p className="text-[13px] font-bold text-[#0A111F]">${(detalleItem.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
+                  </div>
+                  <div className="bg-red-50 p-5 rounded-2xl border border-red-100">
+                    <p className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-1">Saldo por Pagar a la Clínica</p>
+                    <p className="text-[13px] font-bold text-red-700">${((detalleItem.costoTotalPrestacion || 0) - (detalleItem.pagadoTotalPrestacion || 0)).toLocaleString('es-CL')}</p>
+                  </div>
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ID de Tratamiento/Atención</p>
+                    <p className="text-[13px] font-bold text-slate-500">{detalleItem.tratamiento_id}</p>
+                  </div>
+                  {detalleItem.presupuesto_id && detalleItem.paciente_id && (
+                    <Link href={`/pacientes/${detalleItem.paciente_id}/tratamientos/${detalleItem.presupuesto_id}`} className="flex w-full justify-center items-center gap-2 bg-[#0A111F] text-[#C9A24B] py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all mt-8 active:scale-95">
+                      Ir al Plan de Tratamiento
+                    </Link>
+                  )}
                 </div>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Costo Prestación</p>
-                  <p className="text-sm font-bold text-slate-700">${(detalleItem.costoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total Pagado Prestación</p>
-                  <p className="text-sm font-bold text-slate-700">${(detalleItem.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
-                </div>
-                <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-                  <p className="text-[9px] font-black text-red-500 uppercase tracking-widest">Saldo por Pagar</p>
-                  <p className="text-sm font-bold text-red-700">${((detalleItem.costoTotalPrestacion || 0) - (detalleItem.pagadoTotalPrestacion || 0)).toLocaleString('es-CL')}</p>
-                </div>
-                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                  <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">ID de Tratamiento/Atención</p>
-                  <p className="text-sm font-bold text-slate-700">{detalleItem.tratamiento_id}</p>
-                </div>
-                {detalleItem.presupuesto_id && detalleItem.paciente_id && (
-                  <Link href={`/pacientes/${detalleItem.paciente_id}/tratamientos/${detalleItem.presupuesto_id}`} className="block w-full text-center bg-blue-600 text-white py-4 rounded-xl font-black text-xs uppercase shadow-lg hover:bg-blue-700 transition-all mt-6">
-                    Ir al Plan de Tratamiento
-                  </Link>
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      ) : null}
     </div>
   )
 }
