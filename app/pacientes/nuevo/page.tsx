@@ -131,14 +131,14 @@ export default function NuevoPaciente() {
     }
   }
 
-  // ── ANIMACIONES ──
+  // ── ANIMACIONES CORREGIDAS PARA EVITAR CONFLICTOS DE TIPOS ──
   const containerVariants = {
     hidden: { opacity: 0 },
-    show: { opacity: 1, transition: { staggerChildren: 0.15 } }
+    show: { opacity: 1, transition: { staggerChildren: 0.1 } }
   }
   const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 24 } }
+    hidden: { opacity: 0, y: 15 },
+    show: { opacity: 1, y: 0 }
   }
 
   // ── PANTALLA DE ÉXITO ──
@@ -195,24 +195,24 @@ export default function NuevoPaciente() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <div className="md:col-span-2 lg:col-span-4 text-left group">
-                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-1.5 group-focus-within:text-blue-600 transition-colors">Tipo de Paciente *</label>
-                   <div className="relative">
-                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors">
-                       <Users size={18} strokeWidth={2.5} />
-                     </div>
-                     <select required className="w-full pl-11 pr-10 py-4 bg-white/50 hover:bg-white focus:bg-white rounded-2xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 border border-slate-200/60 focus:border-blue-500/50 transition-all shadow-sm cursor-pointer appearance-none"
-                      value={form.tipo_paciente} onChange={(e) => setForm({...form, tipo_paciente: e.target.value})}>
-                       <option value="-">-</option>
-                       <option value="discapacidad">Discapacidad</option>
-                       <option value="embarazada">Embarazada</option>
-                       <option value="funcionario clinica">Funcionario Clínica</option>
-                       <option value="menor de edad">Menor de Edad</option>
-                       <option value="paciente adulto mayor">Paciente Adulto Mayor</option>
-                     </select>
-                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
-                       <ChevronDown size={18} />
-                     </div>
-                   </div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block mb-1.5 group-focus-within:text-blue-600 transition-colors">Tipo de Paciente *</label>
+                  <div className="relative">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors">
+                      <Users size={18} strokeWidth={2.5} />
+                    </div>
+                    <select required className="w-full pl-11 pr-10 py-4 bg-white/50 hover:bg-white focus:bg-white rounded-2xl font-bold text-slate-700 outline-none focus:ring-4 focus:ring-blue-500/10 border border-slate-200/60 focus:border-blue-500/50 transition-all shadow-sm cursor-pointer appearance-none"
+                    value={form.tipo_paciente} onChange={(e) => setForm({...form, tipo_paciente: e.target.value})}>
+                      <option value="-">-</option>
+                      <option value="discapacidad">Discapacidad</option>
+                      <option value="embarazada">Embarazada</option>
+                      <option value="funcionario clinica">Funcionario Clínica</option>
+                      <option value="menor de edad">Menor de Edad</option>
+                      <option value="paciente adulto mayor">Paciente Adulto Mayor</option>
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+                      <ChevronDown size={18} />
+                    </div>
+                  </div>
                 </div>
 
                 <InputWithIcon icon={User} label="Nombre *" value={form.nombre} onChange={(v:any) => setForm({...form, nombre: v})} required placeholder="Ej: Juan Pablo" />
@@ -220,19 +220,19 @@ export default function NuevoPaciente() {
                 
                 <div className="space-y-1.5 group">
                   <div className="flex items-center justify-between ml-1 mb-1.5">
-                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-focus-within:text-blue-600 transition-colors">
-                          Documento / RUT *
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest group-focus-within:text-blue-600 transition-colors">
+                      Documento / RUT *
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Otro Doc.</span>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" className="sr-only peer" checked={esOtroDocumento} onChange={(e) => {
+                          setEsOtroDocumento(e.target.checked);
+                          setForm((prev: any) => ({...prev, rut: ''}));
+                        }}/>
+                        <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
                       </label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Otro Doc.</span>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                          <input type="checkbox" className="sr-only peer" checked={esOtroDocumento} onChange={(e) => {
-                              setEsOtroDocumento(e.target.checked);
-                              setForm((prev: any) => ({...prev, rut: ''}));
-                          }}/>
-                          <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-blue-600"></div>
-                        </label>
-                      </div>
+                    </div>
                   </div>
                   <div className="relative">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-blue-600 transition-colors">
@@ -246,9 +246,9 @@ export default function NuevoPaciente() {
                       onChange={(e) => setForm({...form, rut: e.target.value})}
                     />
                   </div>
-               </div>
+                </div>
                 
-               <InputWithIcon icon={CalendarDays} type="date" label="Fecha Nacimiento *" value={form.fecha_nacimiento} onChange={(v:any) => setForm({...form, fecha_nacimiento: v})} required />
+                <InputWithIcon icon={CalendarDays} type="date" label="Fecha Nacimiento *" value={form.fecha_nacimiento} onChange={(v:any) => setForm({...form, fecha_nacimiento: v})} required />
               </div>
             </motion.div>
 
@@ -303,8 +303,8 @@ export default function NuevoPaciente() {
                       {listaConvenios.map(conv => <option key={conv} value={conv}>{conv}</option>)}
                     </select>
                     <div className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-focus-within:text-amber-500">
-                       <ChevronDown size={18} />
-                     </div>
+                      <ChevronDown size={18} />
+                    </div>
                   </div>
                 </div>
 
@@ -338,7 +338,6 @@ export default function NuevoPaciente() {
   )
 }
 
-// Componente reutilizable para los inputs con Icono
 function InputWithIcon({ label, value, onChange, type = "text", required = false, placeholder = "", icon: Icon }: any) {
   return (
     <div className="space-y-1.5 text-left group">
