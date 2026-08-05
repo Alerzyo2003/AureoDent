@@ -73,7 +73,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       if (busqueda.length > 2) ejecutarBusqueda(busqueda)
@@ -150,7 +149,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <>
             {/* --- SIDEBAR OSCURO --- */}
             <aside 
-              /* AQUÍ ESTÁ EL CAMBIO: z-50 en móviles, md:z-0 en escritorio */
               className={`fixed md:relative inset-y-0 left-0 z-50 md:z-0 w-[280px] min-w-[280px] bg-[#0A111F] flex flex-col justify-between shrink-0 h-full transition-transform duration-300 ease-in-out shadow-2xl md:shadow-none border-r border-white/5 ${
                 mobileMenuOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
               }`}
@@ -199,7 +197,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                           </div>
                           <span className={`text-[14px] tracking-wide ${isActive ? 'font-bold' : 'font-semibold'}`}>{m.label}</span>
                           
-                          {/* Indicador lateral derecho */}
                           {isActive && <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-[#C9A24B] shadow-[0_0_8px_#C9A24B]" />}
                         </Link>
                       )
@@ -307,7 +304,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </aside>
             
-            {/* Backdrop Móvil (Actualizado a z-40 para igualar el nivel) */}
+            {/* Backdrop Móvil */}
             <AnimatePresence>
               {mobileMenuOpen && (
                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-[#0A111F]/80 backdrop-blur-sm z-40 md:hidden" onClick={() => setMobileMenuOpen(false)} />
@@ -317,15 +314,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* --- CONTENEDOR PRINCIPAL --- */}
             <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-[#FBF8F2] relative z-10">
               
-              {/* TOPBAR */}
-              <motion.header initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5 }} className="h-[88px] min-h-[88px] bg-white flex items-center justify-between px-6 md:px-10 shrink-0 border-b border-slate-200 relative z-20 shadow-sm">
+              {/* TOPBAR CON Z-INDEX ELEVADO PARA EL BUSCADOR */}
+              <motion.header initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.5 }} className="h-[88px] min-h-[88px] bg-white flex items-center justify-between px-6 md:px-10 shrink-0 border-b border-slate-200 relative z-50 shadow-sm">
                 <div className="flex items-center gap-4 w-full">
                   <button className="md:hidden text-slate-500 hover:text-slate-900 transition-colors bg-slate-100 p-2 rounded-xl" onClick={() => setMobileMenuOpen(true)}>
                     <Menu size={20}/>
                   </button>
                   
-                  {/* Buscador Superior */}
-                  <div ref={searchRef} className="relative w-full max-w-[450px] hidden md:block">
+                  {/* Buscador Superior con Contenedor Z-50 y Posicionamiento Seguro */}
+                  <div ref={searchRef} className="relative w-full max-w-[450px] hidden md:block z-50">
                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                         {buscando ? <Loader2 size={16} className="animate-spin text-[#C9A24B]" /> : <Search size={16} className="transition-colors group-focus-within:text-[#C9A24B]" />}
                     </div>
@@ -339,7 +336,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     />
                     <AnimatePresence>
                         {mostrarResultados && (
-                            <motion.div initial={{ opacity: 0, y: -10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }} className="absolute top-full mt-3 w-full bg-white rounded-3xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 overflow-hidden text-slate-900 z-50">
+                            <motion.div initial={{ opacity: 0, y: -10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} transition={{ duration: 0.2 }} className="absolute top-full mt-3 w-full bg-white rounded-3xl shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] border border-slate-100 overflow-hidden text-slate-900 z-[9999]">
                                 {resultados.length > 0 ? (
                                     resultados.map(p => (
                                         <Link key={p.id} href={`/pacientes/${p.id}`} onClick={() => { setBusqueda(''); setMostrarResultados(false); }} className="flex items-center gap-4 p-4 hover:bg-[#FBF8F2] transition-colors border-b border-slate-50 last:border-b-0 group">
@@ -389,10 +386,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   )
 }
-
-// -------------------------------------------------------------
-// UI COMPONENTS PARA EL SIDEBAR
-// -------------------------------------------------------------
 
 function SidebarSubLink({ href, label, onClick }: { href: string, label: string, onClick: () => void }) {
   const pathname = usePathname();
