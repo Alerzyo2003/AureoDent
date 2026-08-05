@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { createPortal } from 'react-dom'
 import {
   FileSignature, FileCheck, Plus, Trash2, Loader2, X,
   ChevronRight, CheckCircle2, Clock
@@ -23,7 +24,7 @@ export default function ConsentimientosPacientePage() {
   const [cargando, setCargando] = useState(true)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [creando, setCreando] = useState(false)
-
+  const [mounted, setMounted] = useState(false)
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionUserRole, setSessionUserRole] = useState<string | null>(null)
 
@@ -36,6 +37,7 @@ export default function ConsentimientosPacientePage() {
 
 
   useEffect(() => {
+    setMounted(true);
     if (pacienteId) {
       supabase.auth.getUser().then(async ({ data: { user } }) => {
         if (user) {
@@ -240,61 +242,60 @@ export default function ConsentimientosPacientePage() {
 
 
       {/* Modal Integrado */}
-      <AnimatePresence>
-        {modalAbierto && (
-          <div className="fixed inset-0 z-[999] flex items-center justify-center p-6">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalAbierto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[3.5rem] shadow-2xl relative overflow-hidden z-[1000] p-10 space-y-8 text-left">
-                <div className="flex justify-between items-start text-left">
-                  <div className="text-left">
-                    <h3 className="text-xl font-black text-slate-800 uppercase italic">Nuevo Registro</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">AureoDent Legal System</p>
-                  </div>
-                  <button onClick={() => setModalAbierto(false)} className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:text-red-500 transition-all"><X size={20}/></button>
-                </div>
-
-
-                <div className="space-y-6 text-left">
-                  <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Plantilla de Consentimiento</label>
-                    <select value={form.tipo_id} onChange={(e) => setForm({...form, tipo_id: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:border-blue-500 outline-none font-bold text-xs text-slate-700">
-                      <option value="">Selecciona plantilla...</option>
-                      {tiposConsentimientos.map(t => <option key={t.id} value={t.id}>{t.nombre.toUpperCase()}</option>)}
-                    </select>
+      {mounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {modalAbierto && (
+            <div className="fixed inset-0 flex items-center justify-center p-6" style={{ zIndex: 999999 }}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalAbierto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[3.5rem] shadow-2xl relative overflow-hidden p-10 space-y-8 text-left">
+                  <div className="flex justify-between items-start text-left">
+                    <div className="text-left">
+                      <h3 className="text-xl font-black text-slate-800 uppercase italic">Nuevo Registro</h3>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">AureoDent Legal System</p>
+                    </div>
+                    <button onClick={() => setModalAbierto(false)} className="p-3 bg-slate-50 text-slate-400 rounded-2xl hover:text-red-500 transition-all"><X size={20}/></button>
                   </div>
 
+                  <div className="space-y-6 text-left">
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Plantilla de Consentimiento</label>
+                      <select value={form.tipo_id} onChange={(e) => setForm({...form, tipo_id: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:border-blue-500 outline-none font-bold text-xs text-slate-700">
+                        <option value="">Selecciona plantilla...</option>
+                        {tiposConsentimientos.map(t => <option key={t.id} value={t.id}>{t.nombre.toUpperCase()}</option>)}
+                      </select>
+                    </div>
 
-                  <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Especialista</label>
-                    <select value={form.especialista_id} onChange={(e) => setForm({...form, especialista_id: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:border-blue-500 outline-none font-bold text-xs text-slate-700">
-                      <option value="">Selecciona especialista...</option>
-                      {profesionales.map(p => <option key={p.id} value={p.id}>{p.nombre.toUpperCase()} {p.apellido.toUpperCase()}</option>)}
-                    </select>
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Especialista</label>
+                      <select value={form.especialista_id} onChange={(e) => setForm({...form, especialista_id: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:border-blue-500 outline-none font-bold text-xs text-slate-700">
+                        <option value="">Selecciona especialista...</option>
+                        {profesionales.map(p => <option key={p.id} value={p.id}>{p.nombre.toUpperCase()} {p.apellido.toUpperCase()}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2 text-left">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Presupuesto (Opcional)</label>
+                      <select value={form.presupuesto_id} onChange={(e) => setForm({...form, presupuesto_id: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:border-blue-500 outline-none font-bold text-xs text-slate-700">
+                        <option value="">Sin presupuesto asociado</option>
+                        {presupuestos.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre_tratamiento.toUpperCase()}</option>)}
+                      </select>
+                    </div>
                   </div>
 
-
-                  <div className="space-y-2 text-left">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4">Presupuesto (Opcional)</label>
-                    <select value={form.presupuesto_id} onChange={(e) => setForm({...form, presupuesto_id: e.target.value})} className="w-full p-5 bg-slate-50 border-2 border-transparent rounded-[1.5rem] focus:border-blue-500 outline-none font-bold text-xs text-slate-700">
-                      <option value="">Sin presupuesto asociado</option>
-                      {presupuestos.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre_tratamiento.toUpperCase()}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-
-                <button 
-                  onClick={handleCrearConsentimiento} 
-                  disabled={creando} 
-                  className="w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                >
-                  {creando ? <Loader2 className="animate-spin" size={18} /> : <FileCheck size={18} />}
-                  {creando ? 'Generando...' : 'Crear Documento Legal'}
-                </button>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+                  <button 
+                    onClick={handleCrearConsentimiento} 
+                    disabled={creando} 
+                    className="w-full bg-slate-900 text-white py-6 rounded-[2rem] font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+                  >
+                    {creando ? <Loader2 className="animate-spin" size={18} /> : <FileCheck size={18} />}
+                    {creando ? 'Generando...' : 'Crear Documento Legal'}
+                  </button>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </main>
   )
 }
