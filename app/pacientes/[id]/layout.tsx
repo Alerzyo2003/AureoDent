@@ -98,13 +98,53 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
 
   const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'DENTISTA';
 
+  // 🔥 ANIMACIÓN DE CARGA ELEGANTE Y ALINEADA A LA MARCA 🔥
   if (!paciente) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4 text-center">
-      <Loader2 className="animate-spin text-blue-600" size={48} strokeWidth={1} />
-      <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Cargando Ficha Maestra...</p>
+    <div 
+      className="h-screen w-full flex flex-col items-center justify-center relative overflow-hidden bg-slate-50"
+      style={{
+        backgroundImage: "url('/fondo-pacientes.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      {/* Capa borrosa sobre el mármol */}
+      <div className="absolute inset-0 bg-white/60 backdrop-blur-md z-0"></div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="bg-white p-10 md:p-12 rounded-[3rem] shadow-xl border border-slate-200/60 relative z-10 flex flex-col items-center max-w-sm w-full mx-4"
+      >
+        {/* Contenedor del ícono con los colores exactos del Header */}
+        <div className="relative flex items-center justify-center mb-6">
+           <div className="absolute inset-0 bg-blue-100 rounded-[1.5rem] animate-ping opacity-40"></div>
+           <div className="bg-gradient-to-br from-blue-600 to-indigo-700 w-20 h-20 rounded-[1.5rem] flex items-center justify-center text-white shadow-lg shadow-blue-200/50 relative z-10">
+             <User size={36} strokeWidth={2.5} />
+           </div>
+        </div>
+
+        <h3 className="text-[22px] font-black text-slate-900 uppercase tracking-tighter mb-2 leading-none">Abriendo Ficha</h3>
+        
+        <div className="flex items-center gap-2 mb-8">
+          <Loader2 size={12} className="animate-spin text-slate-400" />
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">Sincronizando datos...</p>
+        </div>
+
+        {/* Barra de progreso oscura y minimalista */}
+        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden relative">
+          <motion.div 
+            className="absolute top-0 bottom-0 left-0 bg-slate-900 rounded-full w-1/2"
+            animate={{ x: ['-100%', '200%'] }}
+            transition={{ repeat: Infinity, duration: 1.2, ease: "easeInOut" }}
+          />
+        </div>
+      </motion.div>
     </div>
   )
 
+  // MURO DE SEGURIDAD (PACIENTE BLOQUEADO)
   if (paciente && paciente.activo === false) return (
     <div className="h-screen flex items-center justify-center bg-[#FDFDFD] p-6 selection:bg-red-100">
       <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="bg-white max-w-lg w-full p-10 md:p-14 rounded-[3.5rem] shadow-2xl shadow-red-900/5 border border-red-50 text-center flex flex-col items-center">
@@ -256,7 +296,6 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
             </nav>
           )}
           
-          {/* SE ELIMINÓ EL FONDO REDUNDANTE AQUÍ PARA QUE HEREDE DEL PADRE DIRECTAMENTE */}
           <div className="flex-1 print:block min-h-[600px] text-left relative z-10 w-full">
                {children}
           </div>
