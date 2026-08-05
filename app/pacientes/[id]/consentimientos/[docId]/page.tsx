@@ -2,9 +2,10 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { ChevronLeft, Printer, Loader2, Download } from 'lucide-react'
+import { ChevronLeft, Printer, Loader2, Download, FileText, UserCheck, ShieldCheck } from 'lucide-react'
 import DOMPurify from 'dompurify'
 import { toast } from 'sonner'
+import { motion } from 'framer-motion'
 
 export default function DetalleConsentimientoPage() {
   const params = useParams()
@@ -70,7 +71,6 @@ export default function DetalleConsentimientoPage() {
         pagebreak: { mode: ['css', 'legacy'] as const }
       };
 
-      // ACÁ ESTÁ LA CORRECCIÓN: Quitamos el "as any).save();" y metemos el window.open dentro del .then()
       await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
         const totalPages = pdf.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
@@ -79,7 +79,6 @@ export default function DetalleConsentimientoPage() {
           pdf.setTextColor(120, 120, 120);
           pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 35, pdf.internal.pageSize.getHeight() - 8);
         }
-        
         window.open(pdf.output('bloburl'), '_blank');
       });
 
@@ -134,34 +133,59 @@ export default function DetalleConsentimientoPage() {
     }
   };
 
-  if (cargando) return <div className="h-screen flex items-center justify-center"><Loader2 className="animate-spin text-blue-600" size={40} /></div>
+  if (cargando) return (
+    <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-50">
+      <Loader2 className="animate-spin text-blue-600" size={45} />
+      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Cargando documento legal...</p>
+    </div>
+  )
 
   return (
-    <div className="min-h-screen bg-slate-100 font-sans text-left pb-20">
+    <div className="min-h-screen bg-slate-50 font-sans text-left pb-24" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
       
-      <nav className="sticky top-0 bg-white/90 backdrop-blur-md border-b border-slate-200 px-6 py-4 flex justify-between items-center z-[100]">
+      {/* Barra de navegación superior (Glassmorphism) */}
+      <nav className="sticky top-0 bg-white/90 backdrop-blur-xl border-b border-white/60 px-6 md:px-10 py-4 flex justify-between items-center z-[100] shadow-sm">
         <div className="flex items-center gap-4">
-          <button onClick={() => window.history.back()} className="p-2 hover:bg-slate-100 rounded-full transition-all"><ChevronLeft size={24} /></button>
+          <button 
+            onClick={() => window.history.back()} 
+            className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl transition-all shadow-sm active:scale-95"
+            title="Volver"
+          >
+            <ChevronLeft size={20} strokeWidth={2.5} />
+          </button>
           <div className="text-left">
-            <h2 className="text-[10px] font-black uppercase text-slate-400 tracking-widest leading-none mb-1">Clínica Dignidad</h2>
-            <p className="text-sm font-bold text-slate-800 uppercase italic leading-none">{documento?.nombre_consentimiento}</p>
+            <span className="text-[9px] font-black uppercase text-blue-600 tracking-widest leading-none block mb-1">AureoDent Compliance</span>
+            <p className="text-xs md:text-sm font-black text-slate-800 uppercase italic leading-none">{documento?.nombre_consentimiento}</p>
           </div>
         </div>
+        
         <div className="flex items-center gap-3">
-          <button onClick={handlePrint} disabled={generandoPdf} className="px-5 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-black text-[10px] uppercase shadow-sm hover:bg-slate-50 flex items-center gap-2 transition-all">
-            {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} />} 
-            {generandoPdf ? 'Preparando...' : 'Imprimir'}
+          <button 
+            onClick={handlePrint} 
+            disabled={generandoPdf} 
+            className="px-5 py-3 bg-white border border-slate-200/80 text-slate-700 rounded-2xl font-black text-[10px] uppercase tracking-wider shadow-sm hover:bg-slate-50 hover:text-blue-600 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50"
+          >
+            {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Printer size={14} strokeWidth={2.5} />} 
+            <span>{generandoPdf ? 'Preparando...' : 'Imprimir'}</span>
           </button>
-          <button onClick={handleDownloadPDF} disabled={generandoPdf} className="px-5 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-blue-700 flex items-center gap-2 transition-all">
-            {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
-            {generandoPdf ? 'Generando...' : 'Descargar PDF'}
+          <button 
+            onClick={handleDownloadPDF} 
+            disabled={generandoPdf} 
+            className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-2xl font-black text-[10px] uppercase tracking-wider shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:from-slate-900 hover:to-slate-900 flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 border border-blue-500"
+          >
+            {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} strokeWidth={2.5} />} 
+            <span>{generandoPdf ? 'Generando...' : 'Descargar PDF'}</span>
           </button>
         </div>
       </nav>
 
-      <main className="w-full flex flex-col items-center p-12 max-md:p-4">
-        
-        <div className="w-full max-w-[850px] shadow-2xl mx-auto bg-white rounded-3xl overflow-hidden border border-slate-200">
+      {/* Contenedor Principal del Documento */}
+      <main className="w-full flex flex-col items-center p-6 md:p-12">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="w-full max-w-[850px] shadow-2xl mx-auto bg-white rounded-[2.5rem] overflow-hidden border border-white/80"
+        >
           
           <div id="documento-pdf" style={{ backgroundColor: '#ffffff', color: '#000000', padding: '50px', fontFamily: 'Arial, sans-serif' }}>
             
@@ -169,54 +193,58 @@ export default function DetalleConsentimientoPage() {
               #documento-pdf p, #documento-pdf li { page-break-inside: avoid; }
             `}</style>
             
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #000000', paddingBottom: '20px', marginBottom: '30px' }}>
+            {/* Cabecera del Documento Impreso */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', borderBottom: '2px solid #0f172a', paddingBottom: '20px', marginBottom: '30px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                <img src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" alt="Logo" style={{ height: '90px', width: 'auto' }} crossOrigin="anonymous" />
+                <img src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" alt="Logo" style={{ height: '75px', width: 'auto', borderRadius: '8px' }} crossOrigin="anonymous" />
                 <div style={{ textAlign: 'left' }}>
-                  <h1 style={{ fontSize: '18px', fontWeight: 'bold', textTransform: 'uppercase', color: '#000000', margin: 0, lineHeight: '1.2' }}>Centro Médico y Dental<br/>Dignidad</h1>
+                  <h1 style={{ fontSize: '16px', fontWeight: 'bold', textTransform: 'uppercase', color: '#0f172a', margin: 0, lineHeight: '1.2' }}>Centro Médico y Dental<br/>Dignidad</h1>
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <h2 style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#000000', letterSpacing: '1px', margin: '0 0 4px 0' }}>Consentimiento Informado</h2>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', color: '#000000', fontStyle: 'italic', margin: 0 }}>{documento?.nombre_consentimiento}</p>
-                <p style={{ fontSize: '10px', color: '#555555', margin: '5px 0 0 0' }}>
+                <h2 style={{ fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase', color: '#2563eb', letterSpacing: '1px', margin: '0 0 4px 0' }}>Consentimiento Informado</h2>
+                <p style={{ fontSize: '14px', fontWeight: 'bold', textTransform: 'uppercase', color: '#0f172a', fontStyle: 'italic', margin: 0 }}>{documento?.nombre_consentimiento}</p>
+                <p style={{ fontSize: '10px', color: '#64748b', margin: '5px 0 0 0' }}>
                   Generado: {documento?.fecha_creacion ? new Date(documento.fecha_creacion).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                 </p>
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #000000', borderBottom: '1px solid #000000', padding: '15px 0', marginBottom: '40px', pageBreakInside: 'avoid' }}>
+            {/* Datos Resumen (Paciente, Tratamiento, Especialista) */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '18px 20px', marginBottom: '40px', pageBreakInside: 'avoid' }}>
               
               <div style={{ width: '33%', textAlign: 'left' }}>
-                <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#555555', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>Paciente</span>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{paciente?.nombre} {paciente?.apellido}</p>
-                <p style={{ fontSize: '12px', color: '#000000', margin: 0 }}>RUT: {paciente?.rut}</p>
+                <span style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>Paciente</span>
+                <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a', textTransform: 'uppercase', margin: '0 0 3px 0' }}>{paciente?.nombre} {paciente?.apellido}</p>
+                <p style={{ fontSize: '11px', color: '#334155', margin: 0 }}>RUT: {paciente?.rut}</p>
               </div>
               
-              <div style={{ width: '33%', textAlign: 'center' }}>
-                <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#555555', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>Tratamiento</span>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{documento?.nombre_consentimiento}</p>
-                <p style={{ fontSize: '12px', color: '#000000', margin: 0 }}>
+              <div style={{ width: '33%', textAlign: 'center', borderLeft: '1px solid #cbd5e1', borderRight: '1px solid #cbd5e1', padding: '0 10px' }}>
+                <span style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>Tratamiento</span>
+                <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a', textTransform: 'uppercase', margin: '0 0 3px 0' }}>{documento?.nombre_consentimiento}</p>
+                <p style={{ fontSize: '11px', color: '#334155', margin: 0 }}>
                   ID: {documento?.presupuesto_id ? String(documento.presupuesto_id).split('-')[0].toUpperCase() : 'NO ASOCIADO'}
                 </p>
               </div>
 
               <div style={{ width: '33%', textAlign: 'right' }}>
-                <span style={{ fontSize: '10px', fontWeight: 'bold', color: '#555555', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>Especialista Tratante</span>
-                <p style={{ fontSize: '14px', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{especialista?.nombre}</p>
-                <p style={{ fontSize: '12px', color: '#000000', margin: 0 }}>{especialista?.especialidad} {especialista?.rut !== '---' && `• RUT: ${especialista?.rut}`}</p>
+                <span style={{ fontSize: '9px', fontWeight: 'bold', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', display: 'block', marginBottom: '4px' }}>Especialista Tratante</span>
+                <p style={{ fontSize: '13px', fontWeight: 'bold', color: '#0f172a', textTransform: 'uppercase', margin: '0 0 3px 0' }}>{especialista?.nombre}</p>
+                <p style={{ fontSize: '11px', color: '#334155', margin: 0 }}>{especialista?.especialidad} {especialista?.rut !== '---' && `• RUT: ${especialista?.rut}`}</p>
               </div>
 
             </div>
 
+            {/* Contenido Legal */}
             <div 
-              style={{ fontSize: '14px', lineHeight: '1.6', color: '#000000', textAlign: 'justify', marginBottom: '60px', overflowWrap: 'break-word', wordBreak: 'normal', whiteSpace: 'pre-wrap' }} 
+              style={{ fontSize: '13.5px', lineHeight: '1.7', color: '#1e293b', textAlign: 'justify', marginBottom: '60px', overflowWrap: 'break-word', wordBreak: 'normal', whiteSpace: 'pre-wrap' }} 
               dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(documento?.contenido_legal ?? '') }}
             />
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '40px', pageBreakInside: 'avoid' }}>
+            {/* Firmas */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '30px', pageBreakInside: 'avoid' }}>
               <div style={{ width: '45%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ width: '100%', height: '80px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', borderBottom: '1px solid #000000', paddingBottom: '10px', marginBottom: '10px' }}>
+                <div style={{ width: '100%', height: '80px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', borderBottom: '1px solid #0f172a', paddingBottom: '10px', marginBottom: '10px' }}>
                   {(especialista?.firma_base64 || documento?.img_firma_especialista) && (
                     <img 
                       src={especialista?.firma_base64 || documento?.img_firma_especialista} 
@@ -225,22 +253,21 @@ export default function DetalleConsentimientoPage() {
                     />
                   )}
                 </div>
-                <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{especialista?.nombre}</p>
-                <p style={{ fontSize: '10px', color: '#555555', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Firma Especialista</p>
+                <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#0f172a', textTransform: 'uppercase', margin: '0 0 2px 0' }}>{especialista?.nombre}</p>
+                <p style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Firma Especialista</p>
               </div>
               
               <div style={{ width: '45%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ width: '100%', height: '80px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', borderBottom: '1px solid #000000', paddingBottom: '10px', marginBottom: '10px' }}>
+                <div style={{ width: '100%', height: '80px', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', borderBottom: '1px solid #0f172a', paddingBottom: '10px', marginBottom: '10px' }}>
                   {documento?.img_firma_paciente && <img src={documento.img_firma_paciente} style={{ maxHeight: '70px', objectFit: 'contain', mixBlendMode: 'multiply' }} crossOrigin="anonymous" />}
                 </div>
-                <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#000000', textTransform: 'uppercase', margin: '0 0 4px 0' }}>{paciente?.nombre} {paciente?.apellido}</p>
-                <p style={{ fontSize: '10px', color: '#555555', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Aceptación Paciente</p>
+                <p style={{ fontSize: '12px', fontWeight: 'bold', color: '#0f172a', textTransform: 'uppercase', margin: '0 0 2px 0' }}>{paciente?.nombre} {paciente?.apellido}</p>
+                <p style={{ fontSize: '9px', color: '#64748b', textTransform: 'uppercase', letterSpacing: '1px', margin: 0 }}>Aceptación Paciente</p>
               </div>
             </div>
 
           </div>
-        </div>
-
+        </motion.div>
       </main>
     </div>
   )
