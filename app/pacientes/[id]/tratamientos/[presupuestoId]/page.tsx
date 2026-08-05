@@ -87,7 +87,7 @@ export default function DetalleTratamientoPage() {
   const [pacienteId, setPacienteId] = useState<string>('')
   const [presupuestoData, setPresupuestoData] = useState<any>(null)
   const [citasRelacionadas, setCitasRelacionadas] = useState<any[]>([])
-  const [fechaEmisionPresupuesto, setFechaEmisionPresupuesto] = useState('')
+  
   const [acciones, setAcciones] = useState<any[]>([]) 
   const [historialPaciente, setHistorialPaciente] = useState<any[]>([]) 
   
@@ -217,11 +217,6 @@ export default function DetalleTratamientoPage() {
         return nuevoHistorial.slice(-10);
     });
   }
-
-  const imprimirPresupuesto = () => {
-  setFechaEmisionPresupuesto(new Date().toLocaleDateString('es-CL'))
-  setTimeout(() => window.print(), 100)
-}
 
   const handleDeshacer = async () => {
     if (historialOdontograma.length === 0) return toast.info("No hay acciones para deshacer");
@@ -426,7 +421,13 @@ export default function DetalleTratamientoPage() {
 
       const nombreLower = nombreDisplay.toLowerCase();
       const esGeneral = [
-          
+          "ortodoncia", "control", "evolución", "evolucion", "limpieza", "destartraje", 
+          "profilaxis", "rx", "radiografía", "radiografia", "panorámica", "scanner", 
+          "hialurónico", "blanqueamiento", "peeling", "evaluación", "evaluacion", 
+          "consulta", "modelo", "fotografía", "fotografia", "férula", "plano", 
+          "placa", "bótox", "botox", "presupuesto", "certificado", "receta", "insumos",
+          "contención", "contencion", "retenedor", "instalación", "instalacion", 
+          "retiro", "aparato", "estudio", "alta", "brackets", "frenillos"
       ].some(palabra => nombreLower.includes(palabra));
 
       if (esGeneral) {
@@ -880,7 +881,9 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     const updatePayload = {
         observacion: nuevaObs, 
         nombre_prestacion: nuevaObs, 
-        precio_pactado: nuevoPactado
+        precio_pactado: nuevoPactado,
+        costo_laboratorio: costoLabInput,
+        lab_pagado_por_dr: labPorDoctorInput
     };
 
     if (id) {
@@ -905,7 +908,9 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         texto_db: nuevaObs, 
         precio_pactado: nuevoPactado, 
         display_pactado: nuevoPactado, 
-        display_saldo: nuevoPactado - a.display_abonado
+        display_saldo: nuevoPactado - a.display_abonado,
+        costo_laboratorio: costoLabInput,
+        lab_pagado_por_dr: labPorDoctorInput
     } : a));
     
     setModalEditarItem({abierto: false, item: null});
@@ -1140,8 +1145,8 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         }
     }
 
-    if (!['ADMIN', 'DENTISTA', 'RECEPCIONISTA'].includes(perfil?.rol)) {
-      return toast.error("No tienes permisos para evolucionar tratamientos.");
+    if (perfil?.rol !== 'ADMIN' && perfil?.rol !== 'DENTISTA') {
+        return toast.error("No tienes permisos para evolucionar tratamientos.");
     }
 
     // 🔥 ALERTA SI SE EVOLUCIONA TRABAJO DE OTRO DOCTOR 🔥
@@ -1164,7 +1169,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     setAvanceEvolucion(avanceInicial);
     // Si el usuario es admin, se resetea para que deba elegir.
     // Si es dentista, se mantiene el ID del usuario logueado que se cargó al inicio.
-    if (['ADMIN', 'RECEPCIONISTA'].includes(perfil?.rol)) setProfesionalSeleccionado('');
+    if (perfil?.rol === 'ADMIN') setProfesionalSeleccionado('');
     setModalEvolucionAbierto(true);
   }
 
@@ -1425,14 +1430,13 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
   if (cargando) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
 
   return (
-    <>
-    <div className="flex flex-col lg:flex-row gap-6 w-full h-full relative p-6 bg-[#F8FAFC] min-h-screen font-sans print:hidden" id="odontograma-container" onClick={() => setMenuContextual(null)}>
+    <div className="flex flex-col lg:flex-row gap-6 w-full h-full relative p-6 bg-[#F8FAFC] min-h-screen font-sans" id="odontograma-container" onClick={() => setMenuContextual(null)}>
       
       {/* ======================================================= */}
       {/* PANEL LATERAL FINANCIERO (CLARO Y MODERNO) */}
       {/* ======================================================= */}
-      <aside className={`shrink-0 flex flex-col gap-4 print:hidden transition-all duration-300 ease-in-out ${panelColapsado ? 'w-0 opacity-0 overflow-hidden hidden lg:flex' : 'lg:w-[340px] opacity-100'}`}>
-        <div className="w-[340px] bg-white border border-slate-200 rounded-[1.5rem] shadow-sm overflow-hidden flex flex-col">
+      <aside className={`shrink-0 flex flex-col gap-4 print:hidden transition-all duration-300 ease-in-out ${panelColapsado ? 'w-0 opacity-0 overflow-hidden hidden lg:flex' : 'lg:w-[280px] opacity-100'}`}>
+  <div className="w-[280px] bg-white border border-slate-200 rounded-[1.5rem] shadow-sm overflow-hidden flex flex-col">
            <div className="bg-[#e0f2fe] border-b border-[#bae6fd] p-5 flex justify-between items-start">
               <div className="flex items-center gap-2">
                  <FileText size={16} className="text-blue-600" />
@@ -1533,7 +1537,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
       {/* ======================================================= */}
       {/* CONTENIDO PRINCIPAL (ODONTOGRAMA Y TABLAS) */}
       {/* ======================================================= */}
-      <div className="flex-1 flex flex-col gap-6 max-w-full">
+      <div className="flex-1 flex flex-col gap-6 max-w-full min-w-0">
         
         <div className="flex justify-between items-center print:hidden px-2">
           <div className="flex items-center gap-2">
@@ -1555,20 +1559,20 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
           </div>
             
             <div className="flex gap-2">
-                <button onClick={imprimirPresupuesto} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm">
+                <button onClick={() => setModalExportar({abierto: true, tipo: 'imprimir'})} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm">
                     <Printer size={16}/> Imprimir
                 </button>
             </div>
         </div>
 
-        <section id="seccion-odontograma" data-html2canvas-ignore={!exportarOpciones.odontograma ? "true" : undefined} className="bg-white p-8 md:p-12 rounded-[3.5rem] shadow-sm border border-slate-200 relative overflow-visible flex flex-col items-center">
+        <section id="seccion-odontograma" data-html2canvas-ignore={!exportarOpciones.odontograma ? "true" : undefined} className="bg-white p-5 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-200 relative overflow-visible flex flex-col items-center">
           
           <div className="w-full flex justify-between items-center mb-8 px-4" data-html2canvas-ignore="true">
               <button onClick={handleDeshacer} className="p-3 bg-slate-50 border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-100 hover:text-slate-800 transition-all shadow-sm flex items-center gap-2" title="Deshacer (Ctrl + Z)">
                   <Undo2 size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Deshacer</span>
               </button>
               <button onClick={() => setMostrarLeyenda(true)} className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all shadow-sm flex items-center gap-2">
-                  <HelpCircle size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Simbología</span>
+                  <HelpCircle size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Leyenda</span>
               </button>
           </div>
           <div className="w-full overflow-x-auto pb-4">
@@ -1580,8 +1584,8 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
             <div className="flex flex-col items-center gap-6 min-w-max">
                 {/* ARCADA SUPERIOR */}
-                <div className="flex gap-4">
-                  <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
+                <div className="flex gap-2">
+  <div className="flex gap-0.5 border-r-2 border-slate-100 pr-2">
                     {(!vistaTemporal ? c1 : t1).map(id => (
                       <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
                     ))}
@@ -1976,7 +1980,34 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                    </div>
 
                    {/* SECCIÓN LABORATORIO E INSUMOS */}
-                   
+                   <div className="space-y-4 p-5 bg-purple-50 border border-purple-100 rounded-2xl">
+                      <div>
+                          <label className="text-[10px] font-black uppercase text-purple-600">Costo de Insumo / Laboratorio ($)</label>
+                          <p className="text-[9px] text-purple-400 font-bold mb-2">Se ha autocompletado si hay un laboratorio registrado.</p>
+                          <input 
+                              type="number" 
+                              placeholder="Ej: 35000"
+                              value={costoLabInput || ''}
+                              onChange={(e) => setCostoLabInput(Number(e.target.value))}
+                              className="w-full p-4 rounded-xl bg-white font-black text-sm text-slate-800 border border-purple-200 outline-none focus:border-purple-500 transition-all shadow-sm"
+                          />
+                      </div>
+                      
+                      {costoLabInput > 0 && (
+                          <div className="flex items-center justify-between pt-2">
+                              <span className="text-[10px] font-black uppercase text-slate-600">¿Material aportado por el Doctor?</span>
+                              <label className="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" className="sr-only peer" checked={labPorDoctorInput} onChange={(e) => setLabPorDoctorInput(e.target.checked)} />
+                                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                              </label>
+                          </div>
+                      )}
+                      {costoLabInput > 0 && labPorDoctorInput && (
+                          <p className="text-[9px] font-bold text-purple-600 bg-purple-100 p-2 rounded-lg italic">
+                              💰 Estos ${costoLabInput.toLocaleString('es-CL')} se le reembolsarán al doctor en su liquidación.
+                          </p>
+                      )}
+                   </div>
 
                    <button onClick={handleGuardarAjustes} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-slate-800 transition-all">
                      Guardar Ajustes
@@ -2478,15 +2509,15 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                   <div className="space-y-6">
                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 pb-2">2. Registro Clínico Legal</h4>
                     <div className="space-y-4">
-                      {['ADMIN', 'RECEPCIONISTA'].includes(perfil?.rol) && (
-                      <div className="space-y-2 text-left">
+                      {perfil?.rol === 'ADMIN' && (
+                        <div className="space-y-2 text-left">
                           <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Profesional Actuante</label>
-                      <select className="..." value={profesionalSeleccionado} onChange={(e) => setProfesionalSeleccionado(e.target.value)}>
-                      <option value="">Seleccione su nombre...</option>
-                        {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
-                            </select>
-                          </div>
-                        )}
+                          <select className="w-full p-4 rounded-xl bg-slate-50 font-bold text-xs uppercase border border-slate-200 text-slate-900 outline-none focus:border-blue-500 transition-all cursor-pointer" value={profesionalSeleccionado} onChange={(e) => setProfesionalSeleccionado(e.target.value)}>
+                              <option value="">Seleccione su nombre...</option>
+                              {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                          </select>
+                        </div>
+                      )}
                       <div className="space-y-2 text-left">
                         <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Porcentaje de Avance</label>
                         <div className="flex items-center justify-center gap-1 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
@@ -2752,319 +2783,9 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* 🔥 MODAL DE LEYENDA DEL ODONTOGRAMA 🔥 */}
-      <AnimatePresence>
-        {mostrarLeyenda && (
-          <div className="fixed inset-0 z-[1050] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-2xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[80vh]">
-              <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-3">
-                  <HelpCircle size={20} className="text-emerald-400" />
-                  <h3 className="text-lg font-black uppercase italic tracking-tighter">Simbología del Odontograma</h3>
-                </div>
-                <button onClick={() => setMostrarLeyenda(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
-              </div>
-              
-              <div className="p-8 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8 custom-scrollbar text-slate-800">
-                 
-                 {/* Colores Base */}
-                 <div>
-                   <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Colores Base</h4>
-                   <div className="space-y-4">
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-blue-500 shadow-sm"></div>
-                        <span className="text-xs font-bold uppercase text-slate-600">Realizado / Preexistencia</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-red-500 shadow-sm"></div>
-                        <span className="text-xs font-bold uppercase text-slate-600">Pendiente (A tratar)</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-slate-900 shadow-sm"></div>
-                        <span className="text-xs font-bold uppercase text-slate-600">Lesión (Caries, Fractura)</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-emerald-500 shadow-sm"></div>
-                        <span className="text-xs font-bold uppercase text-slate-600">Sano / Alta</span>
-                     </div>
-                   </div>
-                 </div>
-                 
-                 {/* Iconos de Tratamientos/Hallazgos */}
-                 <div>
-                   <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Símbolos Frecuentes</h4>
-                   <div className="grid grid-cols-2 gap-4">
-                     {ICONOS_DISPONIBLES.slice(0, 10).map(ico => (
-                       <div key={ico.id} className="flex items-center gap-2">
-                         <div className="w-7 h-7 shrink-0">
-                            <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                               <LogoRender iconoKey={ico.id} hallazgo={ico.label} colorOverride="#64748b" />
-                            </svg>
-                         </div>
-                         <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{ico.label}</span>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-                 
-              </div>
-              
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
-                 <button onClick={() => setMostrarLeyenda(false)} className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 transition-all rounded-xl text-xs font-black uppercase shadow-lg">
-                   Cerrar Simbología
-                 </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {mostrarLeyenda && (
-          <div className="fixed inset-0 z-[1050] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-              <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-3">
-                  <HelpCircle size={20} className="text-emerald-400" />
-                  <h3 className="text-lg font-black uppercase italic tracking-tighter">Simbología del Odontograma</h3>
-                </div>
-                <button onClick={() => setMostrarLeyenda(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
-              </div>
-              
-              <div className="p-8 overflow-y-auto flex flex-col gap-8 custom-scrollbar text-slate-800">
-                 
-                 {/* Colores Base */}
-                 <div>
-                   <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Simbología de Colores</h4>
-                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-blue-500 shadow-sm shrink-0"></div>
-                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Preexistencia / Realizado</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-red-500 shadow-sm shrink-0"></div>
-                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Pendiente (A tratar)</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-slate-900 shadow-sm shrink-0"></div>
-                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Lesión / Mal estado</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-emerald-500 shadow-sm shrink-0"></div>
-                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Sano / Alta</span>
-                     </div>
-                   </div>
-                 </div>
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   {/* Preexistencias */}
-                   <div>
-                     <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Preexistencias (Azul)</h4>
-                     <div className="grid grid-cols-2 gap-4">
-                       {PREEXISTENCIAS_LISTA.map(pre => (
-                         <div key={pre} className="flex items-center gap-2">
-                           <div className="w-7 h-7 shrink-0">
-                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                 <LogoRender hallazgo={pre} colorOverride="#3b82f6" />
-                              </svg>
-                           </div>
-                           <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{pre}</span>
-                         </div>
-                       ))}
-                     </div>
-                   </div>
-
-                   {/* Lesiones */}
-                   <div>
-                     <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Lesiones (Oscuro)</h4>
-                     <div className="grid grid-cols-2 gap-4">
-                       {LESIONES_LISTA.map(les => (
-                         <div key={les} className="flex items-center gap-2">
-                           <div className="w-7 h-7 shrink-0">
-                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                 <LogoRender hallazgo={les} colorOverride="#0f172a" />
-                              </svg>
-                           </div>
-                           <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{les}</span>
-                         </div>
-                       ))}
-                     </div>
-                   </div>
-                 </div>
-                 
-              </div>
-
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
-                 <button onClick={() => setMostrarLeyenda(false)} className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 transition-all rounded-xl text-xs font-black uppercase shadow-lg">
-                   Cerrar Simbología
-                 </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      <AnimatePresence>
-        {mostrarLeyenda && (
-          <div className="fixed inset-0 z-[1050] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-4xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[85vh]">
-              <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
-                <div className="flex items-center gap-3">
-                  <HelpCircle size={20} className="text-emerald-400" />
-                  <h3 className="text-lg font-black uppercase italic tracking-tighter">Simbología del Odontograma</h3>
-                </div>
-                <button onClick={() => setMostrarLeyenda(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
-              </div>
-              
-              <div className="p-8 overflow-y-auto flex flex-col gap-8 custom-scrollbar text-slate-800">
-                 
-                 {/* Colores Base */}
-                 <div>
-                   <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Simbología de Colores</h4>
-                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-blue-500 shadow-sm shrink-0"></div>
-                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Preexistencia / Realizado</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-red-500 shadow-sm shrink-0"></div>
-                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Pendiente (A tratar)</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-slate-900 shadow-sm shrink-0"></div>
-                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Lesión / Mal estado</span>
-                     </div>
-                     <div className="flex items-center gap-3">
-                        <div className="w-5 h-5 rounded-full bg-emerald-500 shadow-sm shrink-0"></div>
-                        <span className="text-[10px] font-bold uppercase text-slate-600 leading-tight">Sano / Alta</span>
-                     </div>
-                   </div>
-                 </div>
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                   {/* Preexistencias */}
-                   <div>
-                     <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Preexistencias (Azul)</h4>
-                     <div className="grid grid-cols-2 gap-4">
-                       {PREEXISTENCIAS_LISTA.map(pre => (
-                         <div key={pre} className="flex items-center gap-2">
-                           <div className="w-7 h-7 shrink-0">
-                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                 <LogoRender hallazgo={pre} colorOverride="#3b82f6" />
-                              </svg>
-                           </div>
-                           <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{pre}</span>
-                         </div>
-                       ))}
-                     </div>
-                   </div>
-
-                   {/* Lesiones */}
-                   <div>
-                     <h4 className="text-[10px] font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-4">Lesiones (Oscuro)</h4>
-                     <div className="grid grid-cols-2 gap-4">
-                       {LESIONES_LISTA.map(les => (
-                         <div key={les} className="flex items-center gap-2">
-                           <div className="w-7 h-7 shrink-0">
-                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                 <LogoRender hallazgo={les} colorOverride="#0f172a" />
-                              </svg>
-                           </div>
-                           <span className="text-[9px] font-black uppercase text-slate-500 leading-tight">{les}</span>
-                         </div>
-                       ))}
-                     </div>
-                   </div>
-                 </div>
-                 
-              </div>
-
-              <div className="p-6 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
-                 <button onClick={() => setMostrarLeyenda(false)} className="px-8 py-3 bg-slate-900 text-white hover:bg-slate-800 transition-all rounded-xl text-xs font-black uppercase shadow-lg">
-                   Cerrar Simbología
-                 </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-      </div>
-
-      {/* VISTA DE IMPRESIÓN DEL PRESUPUESTO (solo visible al imprimir) */}
-      <div className="hidden print:block bg-white text-black p-6 font-sans text-[11px] leading-tight max-w-[800px] mx-auto">
-        <div className="text-center mb-6">
-          <h1 className="font-bold text-lg mb-1">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
-          <p className="text-[10px]">Plan de Tratamiento y Presupuesto</p>
-        </div>
-
-        <div className="mb-4 flex justify-between">
-          <div>
-            <p className="font-bold">Paciente:</p>
-            <p>{pacienteInfo?.nombre} {pacienteInfo?.apellido} · RUT: {pacienteInfo?.rut || 'Sin registrar'}</p>
-          </div>
-          <div className="text-right">
-            <p><span className="font-bold">Fecha emisión:</span> {fechaEmisionPresupuesto}</p>
-            <p><span className="font-bold">Plan N°:</span> {idURL.substring(0,8).toUpperCase()}</p>
-          </div>
-        </div>
-
-        <div className="mb-6">
-          <p><span className="font-bold">Profesional responsable:</span> Dr(a). {presupuestoData?.profesionales ? `${presupuestoData.profesionales.nombre} ${presupuestoData.profesionales.apellido}` : 'Sin asignar'}</p>
-          <p><span className="font-bold">Tratamiento:</span> {presupuestoData?.nombre_tratamiento || 'Tratamiento Integral'}</p>
-        </div>
-
-        {seccionesVisibles.map((seccion) => {
-          const itemsSeccion = acciones.filter(a => a.seccion_nombre === seccion && !a.es_oculto)
-          if (itemsSeccion.length === 0) return null
-          return (
-            <div key={seccion} className="mb-6">
-              <p className="font-bold underline mb-2">{seccion}</p>
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-black">
-                    <th className="py-1 pr-2 w-20">Pieza/Zona</th>
-                    <th className="py-1 pr-2">Prestación</th>
-                    <th className="py-1 pr-2 text-center w-16">Estado</th>
-                    <th className="py-1 text-right w-24">Pactado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {itemsSeccion.map((item: any, idx: number) => (
-                    <tr key={idx} className="border-b border-slate-200">
-                      <td className="py-1 pr-2">{item.zona || item.diente_id || 'General'}{item.cara ? ` (${item.cara})` : ''}</td>
-                      <td className="py-1 pr-2 uppercase">{item.display_nombre}</td>
-                      <td className="py-1 pr-2 text-center capitalize">{item.estado}</td>
-                      <td className="py-1 text-right">${Number(item.display_pactado).toLocaleString('es-CL')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        })}
-
-        <div className="mt-8 border-t border-black pt-4">
-          <div className="flex justify-between font-bold">
-            <span>Total del Plan:</span>
-            <span>${totalPlan.toLocaleString('es-CL')}</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Total Abonado:</span>
-            <span>${abonadoPlan.toLocaleString('es-CL')}</span>
-          </div>
-          <div className="flex justify-between font-bold">
-            <span>Saldo Pendiente:</span>
-            <span>${(totalPlan - abonadoPlan).toLocaleString('es-CL')}</span>
-          </div>
-        </div>
-
-        <div className="mt-16 text-center border-t border-black pt-4 text-[10px]">
-          <p className="font-bold uppercase">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</p>
-          <p>Venancia Leiva 1871, Región Metropolitana, La Pintana | +56966467641 / +56994464662</p>
-        </div>
-      </div>
-      </>
-  )
-}
-
+      </div> // <--- AGREGA ESTO
+  ) // <--- AGREGA ESTO
+} // <--- AGREGA ESTO
     function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFaceClick, invert }: any) {
       const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48) || (id >= 51 && id <= 55) || (id >= 81 && id <= 85);
       const faceLeft = screenLeft ? 'D' : 'M';
@@ -3121,7 +2842,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
   };
 
   return (
-    <svg viewBox="0 0 100 100" className={`w-9 h-9 drop-shadow-sm ${invert ? 'rotate-180' : ''}`}>
+    <svg viewBox="0 0 100 100" className={`w-7 h-7 drop-shadow-sm ${invert ? 'rotate-180' : ''}`}>
        <path d={paths.V} fill={getFill('V')} stroke="#cbd5e1" strokeWidth="3" className="hover:opacity-70 cursor-pointer transition-colors" onClick={(e) => { e.stopPropagation(); abrirPanelAgregar(id, 'V'); }} onContextMenu={(e) => onFaceClick && onFaceClick(e, 'V')} >
            <title>Cara Vestibular</title>
        </path>
@@ -3204,8 +2925,8 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
   }
 
   return (
-    <div className={`flex flex-col items-center gap-1.5 group ${invert ? 'flex-col-reverse' : ''} ${seleccionado ? 'ring-4 ring-blue-400 bg-blue-50 rounded-xl pb-1 px-1' : ''} ${isAusenteManual ? 'opacity-40' : ''}`}>
-      <div onClick={(e) => onSelect && onSelect(id, e)} onContextMenu={onContextMenu} className="relative w-12 h-14 cursor-pointer transition-all duration-300 drop-shadow-sm hover:scale-105">
+    <div className={`flex flex-col items-center gap-1 group ${invert ? 'flex-col-reverse' : ''} ${seleccionado ? 'ring-4 ring-blue-400 bg-blue-50 rounded-xl pb-1 px-1' : ''} ${isAusenteManual ? 'opacity-40' : ''}`}>
+  <div onClick={(e) => onSelect && onSelect(id, e)} onContextMenu={onContextMenu} className="relative w-9 h-11 cursor-pointer transition-all duration-300 drop-shadow-sm hover:scale-105">
         <svg viewBox="-10 -10 120 140" className={`w-full h-full overflow-visible ${invert ? 'rotate-180' : ''}`}>
           <defs>
             <linearGradient id={`g-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
