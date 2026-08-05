@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
-import { Loader2, CheckCircle2, Clock, ChevronRight, CalendarDays } from 'lucide-react'
+import { Loader2, CheckCircle2, Clock, ChevronRight, CalendarDays, Wallet } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface MesResumen {
@@ -170,13 +170,18 @@ export default function MisLiquidacionesPage() {
   }
 
   if (cargando) {
-    return <div className="p-40 text-center"><Loader2 className="animate-spin mx-auto text-blue-600" size={40} /></div>
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#FBF8F2] gap-4 relative z-0">
+        <Loader2 className="animate-spin text-[#C9A24B]" size={40} />
+        <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Cargando tus liquidaciones...</p>
+      </div>
+    )
   }
 
   if (errorSesion) {
     return (
-      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-8">
-        <div className="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm text-center max-w-md">
+      <div className="min-h-screen bg-[#FBF8F2] flex items-center justify-center p-8 relative overflow-hidden z-0">
+        <div className="bg-white/90 backdrop-blur-md p-10 rounded-[2.5rem] border border-slate-100 shadow-xl text-center max-w-md relative z-10">
           <p className="text-xs font-black text-red-500 uppercase tracking-widest">{errorSesion}</p>
         </div>
       </div>
@@ -184,67 +189,76 @@ export default function MisLiquidacionesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans">
-      <div className="max-w-5xl mx-auto space-y-8 p-8 pb-20">
+    <div className="min-h-screen bg-[#FBF8F2] font-sans relative overflow-hidden z-0 text-left">
+      
+      <div className="max-w-5xl mx-auto space-y-8 p-6 md:p-8 pb-20 relative z-10 text-left">
 
-        <div>
-          <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-2">Mis Finanzas</p>
-          <h1 className="text-3xl font-black text-slate-800 uppercase italic leading-none">
-            Mis Liquidaciones
-          </h1>
-          {profesional && (
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-3">
-              Dr. {profesional.nombre} {profesional.apellido} · Comisión {profesional.porcentaje_comision || 40}%
-            </p>
-          )}
+        {/* HEADER DE LA SECCIÓN */}
+        <div className="bg-white/90 backdrop-blur-md p-8 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+          <div className="text-left">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-[#0A111F] rounded-xl flex items-center justify-center text-[#C9A24B] shadow-lg shrink-0">
+                <Wallet size={18} />
+              </div>
+              <p className="text-[10px] font-black text-[#C9A24B] uppercase tracking-[0.2em]">Mis Finanzas</p>
+            </div>
+            <h1 className="text-3xl md:text-4xl font-black text-[#0A111F] uppercase italic leading-none tracking-tight">
+              Mis Liquidaciones
+            </h1>
+            {profesional && (
+              <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-4 bg-slate-50 inline-block px-4 py-2 rounded-lg border border-slate-100">
+                Dr. {profesional.nombre} {profesional.apellido} · <span className="text-[#0A111F] font-black">Comisión {profesional.porcentaje_comision || 40}%</span>
+              </p>
+            )}
+          </div>
         </div>
 
         {meses.length === 0 ? (
-          <div className="p-16 border-2 border-dashed border-slate-200 rounded-[2.5rem] text-center bg-white">
-            <CalendarDays size={40} className="mx-auto text-slate-300 mb-3" />
-            <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Aún no tienes movimientos</p>
-            <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">Cuando tengas producción registrada, aparecerá aquí.</p>
+          <div className="p-16 border border-dashed border-slate-300 rounded-[3rem] text-center bg-white/80 backdrop-blur-sm flex flex-col items-center">
+            <CalendarDays size={48} className="text-slate-300 mb-4 opacity-50" />
+            <p className="text-xs font-black text-[#0A111F] uppercase tracking-widest">Aún no tienes movimientos</p>
+            <p className="text-[10px] font-bold text-slate-400 mt-2 uppercase tracking-wide">Cuando tengas producción registrada, aparecerá aquí.</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
             {meses.map((r) => (
               <Link
                 key={r.mes}
                 href={`/mi-menu/liquidacion/${r.mes}`}
-                className="group bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-lg hover:border-blue-200 transition-all flex flex-col gap-5"
+                className="group bg-white/95 backdrop-blur-sm p-8 md:p-10 rounded-[2.5rem] border border-slate-100 shadow-sm hover:shadow-xl hover:border-[#C9A24B]/50 hover:-translate-y-1 transition-all duration-300 flex flex-col gap-6"
               >
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-black text-slate-800 uppercase italic">{r.etiqueta}</h2>
+                <div className="flex items-center justify-between text-left">
+                  <h2 className="text-xl font-black text-[#0A111F] uppercase italic tracking-tight">{r.etiqueta}</h2>
                   {r.estado === 'Finalizada' ? (
-                    <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700">
-                      <CheckCircle2 size={14} /> Finalizada
+                    <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] bg-emerald-50 text-emerald-600 border border-emerald-100/50 shadow-sm">
+                      <CheckCircle2 size={12} /> Finalizada
                     </span>
                   ) : (
-                    <span className="flex items-center gap-1 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest bg-amber-100 text-amber-700">
-                      <Clock size={14} /> Pendiente
+                    <span className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[9px] font-black uppercase tracking-[0.2em] bg-amber-50 text-amber-600 border border-amber-100/50 shadow-sm">
+                      <Clock size={12} /> Pendiente
                     </span>
                   )}
                 </div>
 
-                <div className="grid grid-cols-3 gap-3 text-left">
+                <div className="grid grid-cols-3 gap-4 text-left p-5 bg-slate-50/50 rounded-[1.5rem] border border-slate-100">
                   <div>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Generado</p>
-                    <p className="text-sm font-black text-slate-700">${Math.round(r.totalGenerado).toLocaleString('es-CL')}</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Generado</p>
+                    <p className="text-sm font-black text-[#0A111F]">${Math.round(r.totalGenerado).toLocaleString('es-CL')}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pagado</p>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Pagado</p>
                     <p className="text-sm font-black text-emerald-600">${Math.round(r.totalPagado).toLocaleString('es-CL')}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Saldo</p>
-                    <p className={`text-sm font-black ${r.saldoPendiente > 0 ? 'text-amber-600' : 'text-slate-300'}`}>
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Saldo</p>
+                    <p className={`text-sm font-black ${r.saldoPendiente > 0 ? 'text-amber-500' : 'text-slate-400'}`}>
                       ${Math.round(r.saldoPendiente).toLocaleString('es-CL')}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end text-[10px] font-black text-blue-500 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity">
-                  Ver detalle <ChevronRight size={14} />
+                <div className="flex items-center justify-end text-[10px] font-black text-[#C9A24B] uppercase tracking-widest opacity-0 group-hover:opacity-100 transition-opacity gap-1 mt-2">
+                  Ver detalle de liquidación <ChevronRight size={14} />
                 </div>
               </Link>
             ))}
