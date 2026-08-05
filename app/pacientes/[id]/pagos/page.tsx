@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { 
+import {  
   Loader2, Coins, ReceiptText, CheckCircle2, AlertCircle,
   CreditCard, Banknote, Landmark, History, Ban, EyeOff, ChevronUp,
   ChevronDown, Printer, Trash2, FileText, Wallet, Plus, User, X, ClipboardList
@@ -54,7 +54,6 @@ export default function PagosPacientePage() {
   async function cargarDatosFinancieros() {
     setCargando(true)
     try {
-      // OBTENER PERFIL DEL USUARIO LOGUEADO
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
           setUsuarioLogueado(session.user);
@@ -62,15 +61,12 @@ export default function PagosPacientePage() {
           setPerfil(perfilData);
       }
 
-      // OBTENER CAJA ACTIVA
       const { data: cajaActiva } = await supabase.from('sesiones_caja').select('id').eq('estado', 'abierta').maybeSingle();
       setCajaActivaId(cajaActiva?.id || null);
 
-      // 0. OBTENER INFO DEL PACIENTE
       const { data: pacData } = await supabase.from('pacientes').select('*').eq('id', paciente_id).single()
       setPacienteInfo(pacData)
 
-      // 1. OBTENER DEUDAS Y DOCTORES ASOCIADOS
       const { data: presupuestosPaciente } = await supabase
         .from('presupuestos')
         .select('id, nombre_tratamiento')
@@ -102,7 +98,6 @@ export default function PagosPacientePage() {
             
             let nombreDisplay = item.observacion || "Tratamiento";
             
-            // 1. CORRECCIÓN DE PRESTACIONES (Maneja objetos y arreglos de Supabase)
             if (item.prestaciones) {
                 const pres = Array.isArray(item.prestaciones)
                     ? (item.prestaciones[0] as Record<string, any>)
@@ -112,7 +107,6 @@ export default function PagosPacientePage() {
                 nombreDisplay = item.observacion.split('|')[0].trim();
             }
 
-            // 2. CORRECCIÓN DE PROFESIONAL / DOCTOR (Maneja objetos y arreglos de Supabase)
             const prof = Array.isArray(item.profesional) ? item.profesional[0] : item.profesional;
             const doctor = prof 
                 ? `Dr/a. ${(prof as any).nombre || ''} ${(prof as any).apellido || ''}`.trim() 
@@ -142,7 +136,6 @@ export default function PagosPacientePage() {
       setDeudaTotalPlan(deudaPlanCompleto);
       setPlanesDetallados(planesParaVista);
 
-      // 2. OBTENER HISTORIAL DE PAGOS
       const { data: pagosData } = await supabase
         .from('pagos')
         .select('*, perfiles:anulado_por(nombre_completo), receptor:profesional_id(nombre_completo)')
@@ -159,9 +152,6 @@ export default function PagosPacientePage() {
     }
   }
 
-  // ===============================================
-  // INGRESAR SALDO A FAVOR DE FORMA MANUAL
-  // ===============================================
   const procesarAbonoLibre = async () => {
     if (!cajaActivaId) {
       return toast.error("No se puede procesar el abono: No hay caja abierta.");
@@ -177,7 +167,6 @@ export default function PagosPacientePage() {
         const montoNuevo = Number(montoAbonoLibre);
         const saldoActual = Number(pacienteInfo?.saldo_a_favor || 0);
         
-        // 1. Guardar en la tabla de pagos como un ingreso libre (sin items_id)
         const detalleAbono = [{ prestacion: "Ingreso Manual a Saldo a Favor", diente: null, precio: montoNuevo, doctor: "-", abonado_ahora: montoNuevo }];
 
         const { data: nuevoPago, error: errPago } = await supabase.from('pagos').insert([{
@@ -193,10 +182,8 @@ export default function PagosPacientePage() {
 
         if (errPago) throw errPago;
 
-        // 2. Sumar el dinero al paciente
         await supabase.from('pacientes').update({ saldo_a_favor: saldoActual + montoNuevo }).eq('id', paciente_id);
 
-        // 3. Registrar en auditoría
         await supabase.from('auditoria_clinica').insert([{
             usuario_id: usuarioLogueado?.id,
             accion: 'INSERT / ABONO MANUAL',
@@ -222,9 +209,6 @@ export default function PagosPacientePage() {
     }
   }
 
-  // ===============================================
-  // PROCESAR PAGO DE DEUDA CON DISTRIBUCIÓN
-  // ===============================================
   const procesarPagoCaja = async () => {
     if (!cajaActivaId) {
       return toast.error("No se puede procesar el pago: No hay caja abierta.");
@@ -238,7 +222,6 @@ export default function PagosPacientePage() {
         return toast.error(`Debe ingresar el ${metodoPago === 'Efectivo' ? 'N° de Boleta' : 'código de referencia'} obligatoriamente.`);
     }
 
-    // Validación si se usa saldo a favor
     const saldoActual = Number(pacienteInfo?.saldo_a_favor || 0);
     const pago = Number(montoIngresado);
 
@@ -248,11 +231,9 @@ export default function PagosPacientePage() {
 
     setCargandoAccion(true);
     let montoRestante = pago;
-    // 3. CORRECCIÓN DE UNIÓN DE TIPOS: Definimos explícitamente detallesDelPago como un arreglo dinámico
     let detallesDelPago: any[] = []; 
     
     try {
-        // 1. CREAMOS UN REGISTRO DE PAGO POR CADA TRATAMIENTO ABONADO
         for (const item of deudas) {
             if (montoRestante <= 0) break;
             const aAbonar = Math.min(item.deuda, montoRestante);
@@ -267,14 +248,13 @@ export default function PagosPacientePage() {
             };
             detallesDelPago.push(detalleItem);
 
-            // CRÍTICO: Asignar profesional_id e item_id para las Liquidaciones
             await supabase.from('pagos').insert([{
                 paciente_id: paciente_id,
                 monto: aAbonar,
                 metodo_pago: metodoPago,
                 numero_boleta: numeroOperacion.trim() || 'S/N', 
-                profesional_id: item.profesional_id, // El doctor del tratamiento
-                item_id: item.id, // El tratamiento pagado
+                profesional_id: item.profesional_id,
+                item_id: item.id,
                 fecha_pago: new Date().toISOString(),
                 comentario: JSON.stringify([detalleItem]),
                 caja_id: cajaActivaId
@@ -284,7 +264,6 @@ export default function PagosPacientePage() {
             montoRestante -= aAbonar;
         }
 
-        // 2. GESTIONAMOS EL SALDO A FAVOR / VUELTOS
         let nuevoSaldoAFavor = saldoActual;
 
         if (metodoPago === 'Saldo a Favor') {
@@ -320,7 +299,6 @@ export default function PagosPacientePage() {
             }
         }
 
-        // 3. Registrar en auditoría
         const detalleAuditoriaPago = `Registró un pago de $${pago.toLocaleString('es-CL')} para ${pacienteInfo?.nombre} ${pacienteInfo?.apellido}. Método: ${metodoPago}. Deuda cubierta: ${detallesDelPago.filter(d => d.id).length} item(s). ${montoRestante > 0 ? `Sobrante a billetera: $${montoRestante.toLocaleString('es-CL')}` : ''}`;
         
         await supabase.from('auditoria_clinica').insert([{
@@ -337,7 +315,6 @@ export default function PagosPacientePage() {
         
         await cargarDatosFinancieros();
         
-        // 3. Generamos un pago agrupado solo para la vista de impresión
         const pagoConsolidadoParaImprimir = {
             monto: pago,
             metodo_pago: metodoPago,
@@ -357,9 +334,6 @@ export default function PagosPacientePage() {
     }
   }
 
-  // ===============================================
-  // REVERSAR PAGO Y RESTAURAR DEUDA (CORREGIDO)
-  // ===============================================
   const reversarPago = async (pago: any) => {
     if (perfil?.rol !== 'ADMIN' && perfil?.rol !== 'RECEPCIONISTA') {
       return toast.error('No tienes permisos para anular pagos.')
@@ -386,7 +360,6 @@ export default function PagosPacientePage() {
     try {
       const montoReversado = Number(pago.monto);
 
-      // 1. Si el pago está asociado a un tratamiento, restauramos la deuda.
       if (pago.item_id) {
         const { data: itemActual } = await supabase
           .from('presupuesto_items')
@@ -408,7 +381,6 @@ export default function PagosPacientePage() {
         }
       }
 
-      // 2. Gestionar la Billetera Virtual (Saldo a Favor) según el tipo de pago.
       const saldoActual = Number(pacienteInfo?.saldo_a_favor || 0);
       let nuevoSaldo;
       let detallesAuditoria;
@@ -424,7 +396,6 @@ export default function PagosPacientePage() {
       await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', paciente_id);
       setPacienteInfo((prev: any) => ({ ...prev, saldo_a_favor: nuevoSaldo }));
       
-      // 3. Anulamos el registro del pago y dejamos rastro en auditoría
       const { data: { session } } = await supabase.auth.getSession();
       await supabase.from('pagos').update({ estado: 'Anulado', anulado_por: session?.user?.id, fecha_anulacion: new Date().toISOString() }).eq('id', pago.id);
       
@@ -445,9 +416,6 @@ export default function PagosPacientePage() {
     }
   }
 
-  // ===============================================
-  // EDITAR SALDO A FAVOR MANUALMENTE (ADMIN)
-  // ===============================================
   const handleEditarSaldoAFavor = async () => {
     if (perfil?.rol !== 'ADMIN') {
       return toast.error("Solo los administradores pueden editar el saldo manualmente.");
@@ -502,9 +470,6 @@ export default function PagosPacientePage() {
     } catch (e) { toast.error("Error al actualizar el saldo."); } finally { setCargandoAccion(false); }
   }
 
-  // ===============================================
-  // IMPRESIÓN DEL COMPROBANTE 
-  // ===============================================
   const imprimirComprobante = (pago: any) => {
     setPagoAImprimir(pago);
     
@@ -553,8 +518,8 @@ export default function PagosPacientePage() {
 
   if (cargando) return (
     <div className="h-full min-h-[400px] flex flex-col items-center justify-center print:hidden">
-      <Loader2 className="animate-spin text-emerald-500 mb-4" size={40} />
-      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Cargando estado de cuenta...</p>
+      <Loader2 className="animate-spin text-emerald-500 mb-4" size={45} />
+      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Cargando estado de cuenta...</p>
     </div>
   )
 
@@ -562,13 +527,12 @@ export default function PagosPacientePage() {
   const deudaPlan = deudaTotalPlan;
   const saldoAFavor = Number(pacienteInfo?.saldo_a_favor || 0);
 
-  // VISTA PARA ROLES SIN PERMISOS (DENTISTAS)
   if (perfil && !puedeVerFinanzas) {
     return (
-      <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-8">
+      <div className="h-full min-h-[400px] flex flex-col items-center justify-center text-center p-8 bg-white/90 backdrop-blur-xl rounded-[3rem] shadow-xl border border-white/60">
         <EyeOff className="text-slate-300 mb-4" size={48} />
         <h3 className="text-lg font-black text-slate-700 uppercase">Acceso Restringido</h3>
-        <p className="text-sm text-slate-500 max-w-sm mt-2">No tienes los permisos necesarios para visualizar la información financiera de los pacientes. Contacta a un administrador si crees que esto es un error.</p>
+        <p className="text-sm text-slate-500 max-w-sm mt-2">No tienes los permisos necesarios para visualizar la información financiera de los pacientes.</p>
       </div>
     )
   }
@@ -577,23 +541,23 @@ export default function PagosPacientePage() {
 
   return (
     <>
-      <div className="p-8 md:p-12 text-left h-full print:hidden">
+      <div className="p-6 md:p-10 text-left h-full print:hidden">
         
         {/* CABECERA SUPERIOR */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-10 border-b border-slate-200 pb-8">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8 bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-xl border border-white/60">
             <div className="flex items-center gap-4">
-              <div className="p-4 rounded-2xl bg-emerald-500 text-white shadow-lg shadow-emerald-200 shrink-0">
-                <ReceiptText size={24} />
+              <div className="p-4 rounded-[1.5rem] bg-gradient-to-br from-emerald-500 to-emerald-700 text-white shadow-xl shadow-emerald-500/20">
+                <ReceiptText size={28} strokeWidth={2.5} />
               </div>
               <div>
-                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 leading-none">Caja y Recaudación</h2>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1.5 flex items-center gap-2">
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-slate-800 leading-none">Caja y Recaudación</h2>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 flex items-center gap-1.5">
                   <User size={12}/> {pacienteInfo?.nombre} {pacienteInfo?.apellido}
                 </p>
-                <div className={`mt-2 inline-flex items-center gap-2 border px-3 py-1.5 rounded-lg shadow-sm ${saldoAFavor > 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-slate-50 border-slate-200'}`}>
+                <div className={`mt-3 inline-flex items-center gap-2 border px-3.5 py-1.5 rounded-xl shadow-sm ${saldoAFavor > 0 ? 'bg-emerald-50/80 border-emerald-200' : 'bg-slate-50 border-slate-200/80'}`}>
                   <Wallet size={14} className={saldoAFavor > 0 ? 'text-emerald-600' : 'text-slate-400'} />
                   <span className={`text-[10px] font-black uppercase tracking-widest ${saldoAFavor > 0 ? 'text-emerald-700' : 'text-slate-500'}`}>
-                    Billetera: <span className={saldoAFavor > 0 ? 'text-emerald-500' : 'text-slate-700'}>${saldoAFavor.toLocaleString('es-CL')}</span>
+                    Billetera: <span className={saldoAFavor > 0 ? 'text-emerald-600' : 'text-slate-700'}>${saldoAFavor.toLocaleString('es-CL')}</span>
                   </span>
                 </div>
               </div>
@@ -603,9 +567,9 @@ export default function PagosPacientePage() {
                 <button 
                   disabled={!cajaActivaId}
                   onClick={() => setModalAbonoLibreAbierto(true)}
-                  className="bg-emerald-50 border border-emerald-200 text-emerald-600 px-5 py-3 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-emerald-500 hover:text-white transition-all flex items-center gap-2 whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-50 disabled:hover:text-emerald-600"
+                  className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all flex items-center gap-2 whitespace-nowrap shrink-0 disabled:opacity-50 disabled:cursor-not-allowed border border-emerald-400"
                 >
-                  <Plus size={16} /> Ingresar Saldo a Favor
+                  <Plus size={16} strokeWidth={3} /> Ingresar Saldo a Favor
                 </button>
             </div>
         </div>
@@ -613,14 +577,14 @@ export default function PagosPacientePage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
           {/* PANEL PRINCIPAL: COBRO DE DEUDAS */}
-          <div className="lg:col-span-7 space-y-8">
-            <div className="bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-center sm:items-start gap-6">
-              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <div className="lg:col-span-7 space-y-6">
+            <div className="bg-slate-900 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden flex flex-col sm:flex-row justify-between items-center sm:items-start gap-6 border border-slate-800">
+              <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none text-white">
                 <Coins size={120} />
               </div>
               <div className="relative z-10 w-full">
                 <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Deuda Exigible (Trabajo Realizado)</p>
-                <p className={`text-5xl font-black tracking-tighter ${deudaTotal > 0 ? 'text-white' : 'text-emerald-400'}`}>
+                <p className={`text-4xl md:text-5xl font-black tracking-tighter ${deudaTotal > 0 ? 'text-white' : 'text-emerald-400'}`}>
                   ${deudaTotal.toLocaleString('es-CL')}
                 </p>
                 {planesDetallados.length > 1 && deudaPlan > deudaTotal ? (
@@ -640,7 +604,7 @@ export default function PagosPacientePage() {
                 ) : null}
               </div>
 
-              <div className="relative z-10 bg-emerald-500/20 border border-emerald-500/30 p-5 rounded-3xl w-full sm:w-auto shrink-0 text-center sm:text-right flex flex-col justify-between">
+              <div className="relative z-10 bg-emerald-500/20 border border-emerald-500/30 p-5 rounded-3xl w-full sm:w-auto shrink-0 text-center sm:text-right flex flex-col justify-between backdrop-blur-md">
                 <div>
                     <p className="text-[9px] font-black text-emerald-300 uppercase tracking-widest mb-1">Saldo a Favor</p>
                     <p className="text-2xl font-black text-emerald-400">${saldoAFavor.toLocaleString('es-CL')}</p>
@@ -648,7 +612,7 @@ export default function PagosPacientePage() {
                 {perfil?.rol === 'ADMIN' && (
                   <button 
                     onClick={handleEditarSaldoAFavor}
-                    className="mt-3 bg-amber-400/20 border border-amber-400/30 text-amber-300 text-[9px] font-black uppercase tracking-widest px-3 py-1.5 rounded-lg hover:bg-amber-400 hover:text-slate-900 transition-all"
+                    className="mt-3 bg-amber-400/20 border border-amber-400/30 text-amber-300 text-[9px] font-black uppercase tracking-widest px-3.5 py-1.5 rounded-xl hover:bg-amber-400 hover:text-slate-900 transition-all"
                     title="Editar Saldo Manualmente (Acción Delicada)"
                   >
                     Editar Saldo
@@ -659,17 +623,17 @@ export default function PagosPacientePage() {
 
             {/* DETALLE DE LO QUE SE DEBE */}
             {deudas.length > 0 && (
-              <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-sm">
-                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                    <ClipboardList size={14} /> Detalle de Tratamientos Impagos
-                 </h4>
-                 <div className="space-y-3">
+              <div className="bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] border border-white/60 shadow-xl">
+                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                      <ClipboardList size={14} /> Detalle de Tratamientos Impagos
+                   </h4>
+                   <div className="space-y-3">
                     {deudas.map(d => (
-                        <div key={d.id} className="flex justify-between items-center bg-slate-50 p-4 md:p-5 rounded-2xl border border-slate-100 text-left transition-colors hover:border-slate-200">
+                        <div key={d.id} className="flex justify-between items-center bg-slate-50/80 p-4 md:p-5 rounded-2xl border border-slate-200/60 text-left transition-colors hover:bg-white shadow-sm">
                             <div className="text-left flex-1 pr-4">
                                <div className="flex items-center gap-3 mb-1.5 flex-wrap">
                                    <p className="text-xs font-black uppercase text-slate-800 leading-none">{d.nombreDisplay} {d.diente_id ? `(Pieza ${d.diente_id})` : ''}</p>
-                                   <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest leading-none ${d.estado === 'realizado' ? 'bg-emerald-100 text-emerald-600 border border-emerald-100' : 'bg-amber-100 text-amber-600 border border-amber-100'}`}>
+                                   <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest leading-none ${d.estado === 'realizado' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>
                                        {d.estado}
                                    </span>
                                </div>
@@ -682,18 +646,18 @@ export default function PagosPacientePage() {
                             </div>
                         </div>
                     ))}
-                 </div>
+                   </div>
               </div>
             )}
 
             {deudaTotal > 0 ? (
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-emerald-50 p-8 rounded-[2.5rem] border border-emerald-100 space-y-6">
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/60 shadow-xl space-y-6">
                 <h3 className="text-sm font-black text-emerald-700 uppercase flex items-center gap-2">
                   <Coins size={16} /> Pagar Tratamientos
                 </h3>
                 {!cajaActivaId && (
-                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-xs font-bold flex items-center gap-3">
-                        <AlertCircle size={20} />
+                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-xs font-bold flex items-center gap-3 shadow-sm">
+                        <AlertCircle size={20} className="shrink-0" />
                         <div>
                             <p className="font-black">PAGOS BLOQUEADOS: NO HAY CAJA ABIERTA</p>
                             <p className="font-medium">Para poder registrar pagos, un recepcionista debe iniciar un turno desde el módulo de Cajas.</p>
@@ -702,12 +666,12 @@ export default function PagosPacientePage() {
                 )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest pl-2">Método de Pago</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Método de Pago</label>
                     <div className="relative">
                       <select 
                         disabled={!cajaActivaId}
-                        className="w-full p-4 pl-12 bg-white border border-emerald-200 rounded-2xl font-bold text-xs uppercase text-emerald-700 outline-none focus:border-emerald-500 appearance-none cursor-pointer" 
+                        className="w-full p-4 pl-11 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 focus:border-emerald-500/50 rounded-2xl font-bold text-xs uppercase text-slate-700 outline-none focus:ring-4 focus:ring-emerald-500/10 appearance-none cursor-pointer shadow-sm" 
                         value={metodoPago} 
                         onChange={(e) => setMetodoPago(e.target.value)}
                       >
@@ -718,21 +682,21 @@ export default function PagosPacientePage() {
                               <option value="Saldo a Favor">💰 Saldo a Favor (${saldoAFavor.toLocaleString('es-CL')})</option>
                           )}
                       </select>
-                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-500 pointer-events-none">
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
                         {metodoPago === 'Tarjeta' ? <CreditCard size={18} /> : metodoPago === 'Efectivo' ? <Banknote size={18} /> : metodoPago === 'Saldo a Favor' ? <Wallet size={18}/> : <Landmark size={18} />}
                       </div>
-                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-emerald-300 pointer-events-none" size={16}/>
+                      <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest pl-2">Monto a pagar</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Monto a pagar</label>
                     <div className="relative">
-                      <span className="absolute left-5 top-1/2 -translate-y-1/2 text-emerald-600 font-black text-lg">$</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-base">$</span>
                       <input 
                         type="number" 
                         disabled={!cajaActivaId}
                         placeholder="0" 
-                        className="w-full py-4 pl-10 pr-5 bg-white border border-emerald-200 rounded-2xl font-black text-lg text-emerald-700 outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-emerald-200" 
+                        className="w-full py-4 pl-10 pr-5 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 focus:border-emerald-500/50 rounded-2xl font-black text-base text-slate-800 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-slate-300 shadow-sm" 
                         value={montoIngresado} 
                         onChange={(e) => setMontoIngresado(Number(e.target.value))} 
                       />
@@ -740,8 +704,8 @@ export default function PagosPacientePage() {
                   </div>
                 </div>
 
-                <div className="space-y-2 mb-6">
-                  <label className="text-[10px] font-black text-emerald-600/60 uppercase tracking-widest pl-2">
+                <div className="space-y-1.5 mb-6">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">
                     {metodoPago === 'Transferencia' ? 'Código de Transferencia (*)' :
                      metodoPago === 'Tarjeta' ? 'N° Voucher Transbank (*)' : 
                      'N° Boleta SII (*)'}
@@ -751,64 +715,63 @@ export default function PagosPacientePage() {
                       type="text" 
                       disabled={metodoPago === 'Saldo a Favor' || !cajaActivaId}
                       placeholder={metodoPago === 'Saldo a Favor' ? "Pago interno automático" : metodoPago === 'Transferencia' ? "Ej: TR-109244" : metodoPago === 'Tarjeta' ? "Ej: V973W6" : "Ej: Boleta 102"}
-                      className={`w-full p-4 pl-12 bg-white border rounded-2xl font-bold text-xs uppercase text-emerald-700 outline-none focus:ring-4 transition-all placeholder:text-emerald-200/70 disabled:opacity-50 disabled:bg-slate-50 disabled:border-emerald-100 ${
+                      className={`w-full p-4 pl-11 bg-slate-50/80 hover:bg-white focus:bg-white border rounded-2xl font-bold text-xs uppercase text-slate-800 outline-none focus:ring-4 transition-all placeholder:text-slate-300 shadow-sm disabled:opacity-50 disabled:bg-slate-100 ${
                         (metodoPago !== 'Saldo a Favor') && !numeroOperacion.trim() 
                           ? 'border-amber-300 focus:border-amber-500 focus:ring-amber-500/10' 
-                          : 'border-emerald-200 focus:border-emerald-500 focus:ring-emerald-500/10'
+                          : 'border-slate-200/60 focus:border-emerald-500/50 focus:ring-emerald-500/10'
                       }`} 
                       value={numeroOperacion} 
                       onChange={(e) => setNumeroOperacion(e.target.value)} 
                     />
-                    <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-400" size={18} />
+                    <FileText className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
                   </div>
                   {(metodoPago !== 'Saldo a Favor') && !numeroOperacion.trim() && (
-                    <p className="text-[9px] font-bold text-amber-600 pl-2 mt-1">Este campo es obligatorio para este método de pago.</p>
+                    <p className="text-[9px] font-bold text-amber-600 pl-1 mt-1">Este campo es obligatorio para este método de pago.</p>
                   )}
                 </div>
 
                 <button 
                   onClick={procesarPagoCaja}
                   disabled={cargandoAccion || !montoIngresado || Number(montoIngresado) <= 0 || !cajaActivaId}
-                  className="w-full py-5 bg-emerald-500 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/30 hover:bg-emerald-600 hover:-translate-y-1 transition-all disabled:opacity-50 disabled:bg-emerald-300 disabled:shadow-none disabled:hover:translate-y-0 flex items-center justify-center gap-3"
+                  className="w-full py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center gap-3 border border-emerald-400"
                 >
-                  {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle2 size={18}/>}
+                  {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle2 size={18} strokeWidth={2.5}/>}
                   Procesar Pago
                 </button>
               </motion.div>
             ) : (
-              <div className="py-12 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center text-center bg-slate-50/50">
-                 <CheckCircle2 size={64} className="text-emerald-400 mb-4 opacity-50"/>
-                 <h3 className="text-lg font-black uppercase text-slate-800">Paciente al día</h3>
-                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2 max-w-[250px]">No existen tratamientos aprobados con deuda pendiente por cobrar.</p>
+              <div className="py-16 border-2 border-dashed border-slate-200 rounded-[2.5rem] flex flex-col items-center justify-center text-center bg-white/50 backdrop-blur-md shadow-sm">
+                   <CheckCircle2 size={56} className="text-emerald-500 mb-4 opacity-80"/>
+                   <h3 className="text-lg font-black uppercase text-slate-800">Paciente al día</h3>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1 max-w-[250px]">No existen tratamientos aprobados con deuda pendiente por cobrar.</p>
               </div>
             )}
           </div>
 
           {/* PANEL SECUNDARIO: HISTORIAL DE PAGOS */}
           <aside className="lg:col-span-5">
-            <div className="bg-white rounded-[2.5rem] p-8 border border-slate-100 h-full">
+            <div className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] p-8 border border-white/60 shadow-xl h-full">
                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
                     <History size={14} /> Historial de Pagos
                 </h4>
 
                 {historialPagos.length === 0 ? (
-                    <div className="text-center py-10 opacity-50">
-                        <ReceiptText size={32} className="mx-auto text-slate-400 mb-3" />
+                    <div className="text-center py-16 opacity-50">
+                        <ReceiptText size={40} className="mx-auto text-slate-400 mb-3" />
                         <p className="text-[10px] font-bold uppercase text-slate-500 tracking-widest">No hay pagos registrados</p>
                     </div>
                 ) : (
                     <div className="overflow-x-auto">
-                        <table className="w-full text-left min-w-[600px]">
+                        <table className="w-full text-left min-w-[500px]">
                             <thead>
                                 <tr className="border-b border-slate-100">
                                     <th className="p-3 text-[9px] font-black text-slate-400 uppercase"># Pago</th>
-                                    <th className="p-3 text-[9px] font-black text-slate-400 uppercase">Medio de Pago</th>
-                                    <th className="p-3 text-[9px] font-black text-slate-400 uppercase">Recepción</th>
+                                    <th className="p-3 text-[9px] font-black text-slate-400 uppercase">Medio</th>
                                     <th className="p-3 text-[9px] font-black text-slate-400 uppercase text-right">Monto</th>
                                     <th className="p-3 text-[9px] font-black text-slate-400 uppercase text-center">Acciones</th>
                                 </tr>
                             </thead>
-                            <tbody>
+                            <tbody className="divide-y divide-slate-100">
                                 {historialPagos.map((pago) => {
                                     const isExpanded = expandedRow === pago.id;
                                     const dt = getDetalles(pago.comentario);
@@ -817,31 +780,30 @@ export default function PagosPacientePage() {
 
                                     return (
                                         <React.Fragment key={pago.id}>
-                                            <tr className={`transition-colors text-xs ${isExpanded ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
-                                                <td className="p-4 align-top">
+                                            <tr className={`transition-colors text-xs ${isExpanded ? 'bg-blue-50/50' : 'hover:bg-slate-50/80'}`}>
+                                                <td className="p-3.5 align-top">
                                                     <p className="font-black text-slate-700 uppercase">#{pago.id.substring(0, 6)}</p>
-                                                    <p className="text-[10px] font-medium text-slate-400">{new Date(pago.fecha_pago).toLocaleDateString('es-CL')}</p>
+                                                    <p className="text-[9px] font-bold text-slate-400">{new Date(pago.fecha_pago).toLocaleDateString('es-CL')}</p>
                                                 </td>
-                                                <td className="p-4 align-top">
+                                                <td className="p-3.5 align-top">
                                                     <p className="font-bold text-slate-600">{pago.metodo_pago}</p>
-                                                    <p className="text-[10px] text-slate-400">Ref: {pago.numero_boleta || 'S/N'}</p>
+                                                    <p className="text-[9px] text-slate-400">Ref: {pago.numero_boleta || 'S/N'}</p>
                                                 </td>
-                                                <td className="p-4 align-top text-slate-500">{receptor}</td>
-                                                <td className="p-4 align-top text-right">
+                                                <td className="p-3.5 align-top text-right">
                                                     <p className={`font-black text-sm ${isAnulado ? 'text-red-500 line-through' : 'text-emerald-600'}`}>
                                                         ${Number(pago.monto).toLocaleString('es-CL')}
                                                     </p>
                                                 </td>
-                                                <td className="p-4 align-top text-center">
+                                                <td className="p-3.5 align-top text-center">
                                                     <div className="flex items-center justify-center gap-1">
-                                                        <button onClick={() => setExpandedRow(isExpanded ? null : pago.id)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-md" title="Ver desglose">
+                                                        <button onClick={() => setExpandedRow(isExpanded ? null : pago.id)} className="p-2 text-slate-400 hover:bg-slate-200/80 rounded-xl transition-colors" title="Ver desglose">
                                                             {isExpanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
                                                         </button>
-                                                        <button onClick={() => imprimirComprobante(pago)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-md" title="Imprimir">
+                                                        <button onClick={() => imprimirComprobante(pago)} className="p-2 text-slate-400 hover:bg-slate-200/80 rounded-xl transition-colors" title="Imprimir">
                                                             <Printer size={14} />
                                                         </button>
                                                         {!isAnulado && (
-                                                            <button onClick={() => reversarPago(pago)} className="p-2 text-red-400 hover:bg-red-100 rounded-md" title="Anular">
+                                                            <button onClick={() => reversarPago(pago)} className="p-2 text-red-400 hover:bg-red-50 rounded-xl transition-colors" title="Anular">
                                                                 <Trash2 size={14} />
                                                             </button>
                                                         )}
@@ -850,13 +812,13 @@ export default function PagosPacientePage() {
                                             </tr>
                                             {isExpanded && (
                                                 <tr>
-                                                    <td colSpan={5} className="p-0">
-                                                        <motion.div initial={{height: 0, opacity: 0}} animate={{height: 'auto', opacity: 1}} className="bg-slate-100 p-4 m-2 rounded-xl">
+                                                    <td colSpan={4} className="p-0">
+                                                        <motion.div initial={{height: 0, opacity: 0}} animate={{height: 'auto', opacity: 1}} className="bg-slate-100/80 p-4 m-2 rounded-2xl border border-slate-200/60">
                                                             <h5 className="text-[9px] font-black text-slate-500 uppercase mb-2">Desglose del Pago</h5>
                                                             {dt.length > 0 ? (
                                                                 <div className="space-y-2">
                                                                     {dt.map((d:any, i:number) => (
-                                                                        <div key={i} className="flex justify-between items-start bg-white p-3 rounded-lg">
+                                                                        <div key={i} className="flex justify-between items-start bg-white p-3 rounded-xl shadow-sm border border-slate-100">
                                                                             <div>
                                                                                 <p className="text-[10px] font-black text-slate-700 uppercase">{d.prestacion} {d.diente ? `(Pza ${d.diente})` : ''}</p>
                                                                                 <p className="text-[9px] font-bold text-slate-400">{d.doctor}</p>
@@ -891,30 +853,30 @@ export default function PagosPacientePage() {
       {/* MODAL INGRESO MANUAL DE BILLETERA VIRTUAL */}
       <AnimatePresence>
         {modalAbonoLibreAbierto && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-900/60 backdrop-blur-md p-4">
-             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden text-left">
-                <div className="p-8 border-b border-emerald-100 bg-emerald-50 flex justify-between items-center shrink-0">
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/40 backdrop-blur-md p-4">
+             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white/95 backdrop-blur-2xl w-full max-w-lg rounded-[3rem] shadow-2xl flex flex-col overflow-hidden text-left border border-white/80">
+                <div className="p-8 border-b border-emerald-100 bg-emerald-50/80 flex justify-between items-center shrink-0">
                    <div className="flex items-center gap-4">
-                      <div className="p-3 bg-emerald-500 text-white rounded-xl shadow-sm"><Wallet size={24}/></div>
+                      <div className="p-3.5 bg-emerald-500 text-white rounded-2xl shadow-sm"><Wallet size={24}/></div>
                       <div>
-                        <h2 className="font-black text-xl uppercase tracking-tighter text-emerald-800 leading-none">Ingresar Dinero</h2>
-                        <p className="text-[10px] text-emerald-600/60 font-bold uppercase tracking-widest mt-1">Abono libre a Billetera Virtual</p>
+                        <h2 className="font-black text-xl uppercase tracking-tighter text-emerald-900 leading-none">Ingresar Dinero</h2>
+                        <p className="text-[10px] text-emerald-700/60 font-bold uppercase tracking-widest mt-1">Abono libre a Billetera Virtual</p>
                       </div>
                    </div>
-                   <button onClick={() => setModalAbonoLibreAbierto(false)} className="p-2 text-emerald-400 hover:bg-emerald-100 rounded-full transition-colors"><X size={20}/></button>
+                   <button onClick={() => setModalAbonoLibreAbierto(false)} className="p-2.5 text-emerald-500 hover:bg-emerald-100 rounded-2xl transition-colors"><X size={20}/></button>
                 </div>
 
-                <div className="p-8 space-y-5">
-                    <p className="text-xs font-bold text-slate-500 leading-relaxed mb-6">Utilice esta opción cuando el paciente entregue un dinero por adelantado sin asignarlo a un tratamiento específico todavía.</p>
+                <div className="p-8 space-y-6">
+                    <p className="text-xs font-bold text-slate-500 leading-relaxed">Utilice esta opción cuando el paciente entregue un dinero por adelantado sin asignarlo a un tratamiento específico todavía.</p>
                     
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Monto del abono libre ($)</label>
-                        <input type="number" placeholder="Ej: 50000" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl font-black text-lg text-emerald-600 outline-none focus:border-emerald-500 transition-all shadow-sm" value={montoAbonoLibre} onChange={(e) => setMontoAbonoLibre(Number(e.target.value))} />
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Monto del abono libre ($)</label>
+                        <input type="number" placeholder="Ej: 50000" className="w-full p-4 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 focus:border-emerald-500/50 rounded-2xl font-black text-base text-emerald-600 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm placeholder:text-slate-300" value={montoAbonoLibre} onChange={(e) => setMontoAbonoLibre(Number(e.target.value))} />
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Método de Pago</label>
-                        <select className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-emerald-500 transition-all shadow-sm cursor-pointer" value={metodoAbonoLibre} onChange={(e) => setMetodoAbonoLibre(e.target.value)}>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Método de Pago</label>
+                        <select className="w-full p-4 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 focus:border-emerald-500/50 rounded-2xl font-bold text-xs uppercase text-slate-700 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm cursor-pointer" value={metodoAbonoLibre} onChange={(e) => setMetodoAbonoLibre(e.target.value)}>
                             <option value="Transferencia">Transferencia</option>
                             <option value="Tarjeta">Tarjeta de Crédito/Débito</option>
                             <option value="Efectivo">Efectivo</option>
@@ -922,17 +884,17 @@ export default function PagosPacientePage() {
                     </div>
 
                     {(metodoAbonoLibre === 'Tarjeta' || metodoAbonoLibre === 'Transferencia') && (
-                        <div className="space-y-2">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">Comprobante (Obligatorio)</label>
-                            <input type="text" placeholder="Ej: TR-109244" className="w-full p-4 bg-slate-50 border border-slate-200 rounded-xl font-bold text-xs uppercase outline-none focus:border-emerald-500 transition-all shadow-sm" value={codigoAbonoLibre} onChange={(e) => setCodigoAbonoLibre(e.target.value)} />
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Comprobante (Obligatorio)</label>
+                            <input type="text" placeholder="Ej: TR-109244" className="w-full p-4 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 focus:border-emerald-500/50 rounded-2xl font-bold text-xs uppercase text-slate-700 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all shadow-sm placeholder:text-slate-300" value={codigoAbonoLibre} onChange={(e) => setCodigoAbonoLibre(e.target.value)} />
                         </div>
                     )}
                 </div>
 
-                <div className="p-8 border-t border-slate-100 bg-white shrink-0 text-right flex gap-3">
-                   <button onClick={() => setModalAbonoLibreAbierto(false)} className="w-full py-4 bg-slate-100 text-slate-500 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all">Cancelar</button>
-                   <button onClick={procesarAbonoLibre} disabled={cargandoAccion || !montoAbonoLibre} className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                      {cargandoAccion ? <Loader2 className="animate-spin" size={16}/> : <Plus size={16}/>} Ingresar Dinero
+                <div className="p-8 border-t border-slate-100 bg-white/50 shrink-0 text-right flex gap-3">
+                   <button onClick={() => setModalAbonoLibreAbierto(false)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-200 transition-all shadow-sm">Cancelar</button>
+                   <button onClick={procesarAbonoLibre} disabled={cargandoAccion || !montoAbonoLibre} className="w-full py-4 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-emerald-400">
+                      {cargandoAccion ? <Loader2 className="animate-spin" size={16}/> : <Plus size={16} strokeWidth={3}/>} Ingresar Dinero
                    </button>
                 </div>
              </motion.div>
@@ -1032,7 +994,6 @@ export default function PagosPacientePage() {
           </footer>
         </div>
       </div>
-
     </>
   )
 }
