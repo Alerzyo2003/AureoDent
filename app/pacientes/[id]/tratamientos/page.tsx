@@ -11,12 +11,12 @@ import Link from 'next/link'
 import { toast } from 'sonner'
 
 const ESTADOS_PLAN: Record<string, { label: string, tagColor: string, borderColor: string, progressColor: string }> = {
-    BORRADOR: { label: 'Borrador', tagColor: 'bg-slate-100 text-slate-500', borderColor: 'border-slate-200 hover:border-slate-400', progressColor: 'bg-slate-400' },
-    POR_INICIAR: { label: 'Por Iniciar', tagColor: 'bg-indigo-100 text-indigo-600', borderColor: 'border-indigo-200 hover:border-indigo-500', progressColor: 'bg-indigo-500' },
-    EN_CURSO: { label: 'En Curso', tagColor: 'bg-blue-100 text-blue-600', borderColor: 'border-blue-200 hover:border-blue-500', progressColor: 'bg-blue-500' },
-    FINALIZADO_CON_DEUDA: { label: 'Finalizado (con deuda)', tagColor: 'bg-yellow-100 text-yellow-700', borderColor: 'border-yellow-300 hover:border-yellow-500', progressColor: 'bg-yellow-500' },
-    FINALIZADO: { label: 'Finalizado y Saldado', tagColor: 'bg-emerald-100 text-emerald-700', borderColor: 'border-emerald-200 hover:border-emerald-500', progressColor: 'bg-emerald-500' },
-    IMPORTADO: { label: 'Importado', tagColor: 'bg-amber-100 text-amber-700', borderColor: 'border-amber-200 hover:border-amber-500', progressColor: 'bg-amber-500' },
+    BORRADOR: { label: 'Borrador', tagColor: 'bg-slate-100 text-slate-600', borderColor: 'border-white/80 hover:border-blue-300', progressColor: 'bg-slate-400' },
+    POR_INICIAR: { label: 'Por Iniciar', tagColor: 'bg-indigo-50 text-indigo-600 border border-indigo-100', borderColor: 'border-white/80 hover:border-indigo-300', progressColor: 'bg-indigo-500' },
+    EN_CURSO: { label: 'En Curso', tagColor: 'bg-blue-50 text-blue-600 border border-blue-100', borderColor: 'border-white/80 hover:border-blue-400', progressColor: 'bg-blue-600' },
+    FINALIZADO_CON_DEUDA: { label: 'Finalizado (con deuda)', tagColor: 'bg-amber-50 text-amber-700 border border-amber-200', borderColor: 'border-white/80 hover:border-amber-400', progressColor: 'bg-amber-500' },
+    FINALIZADO: { label: 'Finalizado y Saldado', tagColor: 'bg-emerald-50 text-emerald-700 border border-emerald-200', borderColor: 'border-white/80 hover:border-emerald-400', progressColor: 'bg-emerald-500' },
+    IMPORTADO: { label: 'Importado', tagColor: 'bg-amber-50 text-amber-700 border border-amber-200', borderColor: 'border-white/80 hover:border-amber-300', progressColor: 'bg-amber-500' },
 };
 
 export default function ListaTratamientosPage() {
@@ -52,7 +52,6 @@ export default function ListaTratamientosPage() {
         const { data: pData } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single()
         setPerfil(pData)
         
-        // 1. CAMBIO AQUÍ: Traemos el 'id' relacional de la tabla profesionales en vez de user_id
         if (pData?.rol === 'DENTISTA') {
           const { data: profData } = await supabase
             .from('profesionales')
@@ -77,14 +76,11 @@ export default function ListaTratamientosPage() {
   const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'DENTISTA';
 
   async function fetchProfesionales() {
-    // 2. CAMBIO AQUÍ: Agregamos 'id' en la selección de campos
     const { data } = await supabase.from('profesionales').select('id, user_id, nombre, apellido').eq('activo', true)
     setProfesionales(data || [])
   }
 
   async function fetchPlanes() {
-    console.log("%c🚀 INICIANDO CARGA DE HISTORIAL COMPLETO", "background: #2563eb; color: white; padding: 5px; font-weight: bold;");
-   
     const { data: paciente } = await supabase.from('pacientes').select('rut, nombre').eq('id', paciente_id).single();
     if (!paciente) return;
 
@@ -235,140 +231,145 @@ export default function ListaTratamientosPage() {
   });
 
   if (cargando) return (
-    <div className="h-96 flex flex-col items-center justify-center bg-white/50 rounded-[3rem] gap-4">
-      <Loader2 className="animate-spin text-blue-600" size={40} />
-      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Cargando historial completo...</p>
+    <div className="h-[70vh] flex flex-col items-center justify-center gap-4">
+      <Loader2 className="animate-spin text-blue-600" size={45} />
+      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Cargando historial clínico...</p>
     </div>
   )
 
   return (
-    <div className="space-y-8 text-left font-sans pb-20">
-      
-      {/* HEADER */}
-      <div className="flex justify-between items-center bg-white p-8 rounded-[3rem] shadow-sm border border-slate-100">
-        <div>
-          <h2 className="text-2xl font-black text-slate-800 uppercase italic flex items-center gap-3 leading-none">
-            {puedeVerFinanzas ? <Wallet className="text-blue-600" size={24} /> : <StethoscopeIcon className="text-blue-600" size={24} />}
-            Tratamientos y Evoluciones
-          </h2>
-          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-2 ml-1">Historial Clínico del Paciente</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link href={`/pacientes/${paciente_id}`} className="text-[10px] font-black uppercase text-slate-400 hover:text-blue-600 transition-colors">Volver</Link>
-          <button onClick={() => setModalNuevoPlan(true)} className="bg-blue-600 text-white px-8 py-4 rounded-2xl font-black text-[11px] uppercase shadow-lg hover:bg-slate-900 transition-all flex items-center gap-2">
-            <Plus size={18} /> Nuevo Tratamiento
-          </button>
-        </div>
-      </div>
-
-      {/* FILTROS */}
-      <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
-        {['TODOS', 'EN CURSO', 'FINALIZADOS', ...(puedeVerFinanzas ? ['DEUDA'] : [])].map(f => (
-          <button key={f} onClick={() => setFiltroActivo(f)} className={`px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border-2 ${filtroActivo === f ? 'bg-slate-900 text-white border-slate-900 shadow-xl' : 'bg-white text-slate-500 border-slate-100 hover:border-slate-300'}`}>
-            {f}
-          </button>
-        ))}
-      </div>
-
-      {/* GRID DE PLANES */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {planesFiltrados.length === 0 ? (
-          <div className="lg:col-span-2 bg-white p-20 rounded-[3rem] text-center border-2 border-dashed border-slate-100">
-            <FileText size={40} className="mx-auto text-slate-200 mb-4" />
-            <p className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Sin registros</p>
+    <div className="min-h-screen p-6 md:p-10 font-sans text-left pb-24" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
+      <div className="max-w-7xl mx-auto space-y-8">
+        
+        {/* HEADER PRINCIPAL */}
+        <div className="bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-white/60 flex justify-between items-center">
+          <div className="flex items-center gap-4">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-[1.5rem] text-white shadow-xl shadow-blue-600/20">
+              {puedeVerFinanzas ? <Wallet size={24} strokeWidth={2.5} /> : <StethoscopeIcon size={24} strokeWidth={2.5} />}
+            </div>
+            <div>
+              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-slate-800 leading-none">Tratamientos y Evoluciones</h2>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Historial Clínico del Paciente</p>
+            </div>
           </div>
-        ) : (
-          planesFiltrados.map((plan) => {
-            const configEstado = ESTADOS_PLAN[plan.estadoGeneral] || ESTADOS_PLAN.BORRADOR;
-            return (
-            <motion.div layout key={plan.id} onClick={() => {
-                const idReal = plan.id.startsWith('temp-') ? plan.id_dentalink : plan.id;
-                router.push(`/pacientes/${paciente_id}/tratamientos/${idReal}`);
-            }} className={`group bg-white p-8 rounded-[2.5rem] border-2 ${configEstado.borderColor} transition-all cursor-pointer shadow-sm relative flex flex-col justify-between h-full`}>
-              
-              {puedeVerFinanzas && (
-                <div className="absolute top-6 right-6">
-                   {plan.estadoFinanciero === 'SALDADO' && <span className="bg-emerald-50 text-emerald-600 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-1"><CheckCircle2 size={12}/> Saldado</span>}
-                   {plan.estadoFinanciero === 'CON DEUDA' && <span className="bg-red-50 text-red-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-1"><AlertCircle size={12}/> Con Deuda</span>}
-                </div>
-              )}
-
-              <div className="flex items-start gap-5 mb-8">
-                <div className="bg-slate-50 w-16 h-16 rounded-2xl flex flex-col items-center justify-center text-slate-400 shrink-0 border transition-colors">
-                  <span className="text-[8px] font-black uppercase opacity-50">Folio</span>
-                  <span className="text-sm font-black italic">#{String(plan.id_dentalink || plan.id).substring(0,4)}</span>
-                </div>
-                <div className="flex-1 pr-24 text-left">
-                  <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full mb-3 inline-block ${configEstado.tagColor}`}>
-                    {configEstado.label}
-                  </span>
-                  <h3 className="text-xl font-black text-slate-800 uppercase leading-none mb-2 mt-1">{plan.nombre_tratamiento || plan.nombre || 'Diagnóstico'}</h3>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1"><Stethoscope size={12}/> {plan.nombreDoctor}</p>
-                </div>
-              </div>
-
-              <div className="mb-8">
-                  <div className="flex justify-between items-end mb-2">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><Activity size={12}/> Progreso Clínico</p>
-                    <p className="text-xs font-black text-slate-800">{plan.progresoClinico}%</p>
-                  </div>
-                  <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden relative">
-                    <div className={`h-full absolute left-0 top-0 rounded-full ${configEstado.progressColor}`} style={{ width: `${plan.progresoClinico}%` }} />
-                  </div>
-              </div>
-
-              {puedeVerFinanzas && (
-                <div className="flex justify-between items-end border-t border-slate-100 pt-6">
-                  <div className="space-y-1">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Finanzas</p>
-                    <p className="text-[10px] font-bold text-slate-500">
-                      Total: ${Number(plan.totalCalculado).toLocaleString('es-CL')} <br/>
-                      Abonado: <span className="text-emerald-500">${Number(plan.abonadoCalculado).toLocaleString('es-CL')}</span>
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pendiente</p>
-                    <p className={`text-2xl font-black leading-none mt-1 ${plan.deuda > 0 ? 'text-red-500' : 'text-slate-300'}`}>${Number(plan.deuda).toLocaleString('es-CL')}</p>
-                  </div>
-                </div>
-              )}
-
-            </motion.div>
-          )})
-        )}
-      </div>
-
-      {/* MODAL NUEVO PLAN */}
-      <AnimatePresence>
-        {modalNuevoPlan && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left">
-              <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
-                <h2 className="text-xl font-black uppercase italic tracking-tighter">Nuevo Tratamiento</h2>
-                <button onClick={() => setModalNuevoPlan(false)}><X size={20}/></button>
-              </div>
-              <div className="p-8 space-y-6">
-                <div className="space-y-2"><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nombre del Plan</label><input autoFocus className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-black text-sm uppercase text-slate-800" value={nuevoPlan.nombre} onChange={(e) => setNuevoPlan({...nuevoPlan, nombre: e.target.value})} /></div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Especialista</label>
-                  <select className="w-full p-5 bg-slate-50 rounded-2xl outline-none font-black text-sm text-slate-800" value={nuevoPlan.especialista_id} onChange={(e) => setNuevoPlan({...nuevoPlan, especialista_id: e.target.value})} disabled={perfil?.rol === 'DENTISTA'}>
-                    <option value="">SELECCIONAR...</option>
-                    {profesionales.map(p => (
-                      // 3 y 4. CAMBIO AQUÍ: Cambiados key y value a p.id
-                      <option key={p.id} value={p.id}>
-                        DR/A. {p.nombre} {p.apellido}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button onClick={handleCrearPlan} disabled={creandoPlan} className="w-full bg-blue-600 text-white py-6 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3 disabled:bg-slate-300">
-                  {creandoPlan ? <Loader2 className="animate-spin" /> : <CheckCircle2 size={18} />} Crear Plan
-                </button>
-              </div>
-            </motion.div>
+          <div className="flex items-center gap-3">
+            <Link href={`/pacientes/${paciente_id}`} className="bg-slate-100 text-slate-600 px-5 py-3.5 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all shadow-sm">
+              Volver
+            </Link>
+            <button onClick={() => setModalNuevoPlan(true)} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-7 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:from-slate-900 hover:to-slate-900 transition-all flex items-center gap-2 border border-blue-500">
+              <Plus size={16} strokeWidth={3} /> Nuevo Tratamiento
+            </button>
           </div>
-        )}
-      </AnimatePresence>
+        </div>
+
+        {/* FILTROS */}
+        <div className="flex gap-2 overflow-x-auto pb-2 custom-scrollbar">
+          {['TODOS', 'EN CURSO', 'FINALIZADOS', ...(puedeVerFinanzas ? ['DEUDA'] : [])].map(f => (
+            <button key={f} onClick={() => setFiltroActivo(f)} className={`px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all border shadow-sm ${filtroActivo === f ? 'bg-slate-900 text-white border-slate-900 shadow-md' : 'bg-white/90 backdrop-blur-xl text-slate-600 border-white/80 hover:border-slate-300'}`}>
+              {f}
+            </button>
+          ))}
+        </div>
+
+        {/* GRID DE PLANES */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {planesFiltrados.length === 0 ? (
+            <div className="lg:col-span-2 bg-white/90 backdrop-blur-xl p-20 rounded-[3rem] text-center border border-white/60 shadow-xl">
+              <FileText size={48} className="mx-auto text-slate-300 mb-4" />
+              <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Sin registros de tratamientos</p>
+            </div>
+          ) : (
+            planesFiltrados.map((plan) => {
+              const configEstado = ESTADOS_PLAN[plan.estadoGeneral] || ESTADOS_PLAN.BORRADOR;
+              return (
+              <motion.div layout key={plan.id} onClick={() => {
+                  const idReal = plan.id.startsWith('temp-') ? plan.id_dentalink : plan.id;
+                  router.push(`/pacientes/${paciente_id}/tratamientos/${idReal}`);
+                }} className={`group bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] border ${configEstado.borderColor} transition-all cursor-pointer shadow-xl relative flex flex-col justify-between h-full`}>
+                
+                {puedeVerFinanzas && (
+                  <div className="absolute top-6 right-6">
+                     {plan.estadoFinanciero === 'SALDADO' && <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-3.5 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-1.5 shadow-sm"><CheckCircle2 size={12}/> Saldado</span>}
+                     {plan.estadoFinanciero === 'CON DEUDA' && <span className="bg-red-50 text-red-500 border border-red-200 px-3.5 py-1.5 rounded-xl text-[9px] font-black uppercase flex items-center gap-1.5 shadow-sm"><AlertCircle size={12}/> Con Deuda</span>}
+                  </div>
+                )}
+
+                <div className="flex items-start gap-5 mb-8">
+                  <div className="bg-slate-100/80 w-16 h-16 rounded-2xl flex flex-col items-center justify-center text-slate-500 shrink-0 border border-slate-200/60 shadow-inner">
+                    <span className="text-[7px] font-black uppercase opacity-60">Folio</span>
+                    <span className="text-xs font-black italic">#{String(plan.id_dentalink || plan.id).substring(0,4)}</span>
+                  </div>
+                  <div className="flex-1 pr-24 text-left">
+                    <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full mb-2 inline-block ${configEstado.tagColor}`}>
+                      {configEstado.label}
+                    </span>
+                    <h3 className="text-lg font-black text-slate-800 uppercase leading-tight mb-1.5 mt-0.5">{plan.nombre_tratamiento || plan.nombre || 'Diagnóstico'}</h3>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase flex items-center gap-1.5"><Stethoscope size={12} className="text-blue-600"/> {plan.nombreDoctor}</p>
+                  </div>
+                </div>
+
+                <div className="mb-8">
+                    <div className="flex justify-between items-end mb-2">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Activity size={12}/> Progreso Clínico</p>
+                      <p className="text-xs font-black text-slate-800">{plan.progresoClinico}%</p>
+                    </div>
+                    <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden relative shadow-inner">
+                      <div className={`h-full absolute left-0 top-0 rounded-full ${configEstado.progressColor}`} style={{ width: `${plan.progresoClinico}%` }} />
+                    </div>
+                </div>
+
+                {puedeVerFinanzas && (
+                  <div className="flex justify-between items-end border-t border-slate-100 pt-6">
+                    <div className="space-y-1">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Finanzas</p>
+                      <p className="text-[10px] font-bold text-slate-500">
+                        Total: ${Number(plan.totalCalculado).toLocaleString('es-CL')} <br/>
+                        Abonado: <span className="text-emerald-600">${Number(plan.abonadoCalculado).toLocaleString('es-CL')}</span>
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Pendiente</p>
+                      <p className={`text-2xl font-black leading-none mt-1 ${plan.deuda > 0 ? 'text-red-500' : 'text-slate-300'}`}>${Number(plan.deuda).toLocaleString('es-CL')}</p>
+                    </div>
+                  </div>
+                )}
+
+              </motion.div>
+            )})
+          )}
+        </div>
+
+        {/* MODAL NUEVO PLAN */}
+        <AnimatePresence>
+          {modalNuevoPlan && (
+            <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white/95 backdrop-blur-2xl w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left border border-white/80">
+                <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
+                  <h2 className="text-xl font-black uppercase italic tracking-tighter">Nuevo Tratamiento</h2>
+                  <button onClick={() => setModalNuevoPlan(false)} className="p-2 text-slate-400 hover:text-white transition-colors"><X size={20}/></button>
+                </div>
+                <div className="p-8 space-y-6">
+                  <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Nombre del Plan</label><input autoFocus className="w-full p-4 bg-slate-50/80 hover:bg-white focus:bg-white rounded-2xl outline-none font-bold text-xs uppercase text-slate-800 border border-slate-200/60 shadow-sm" value={nuevoPlan.nombre} onChange={(e) => setNuevoPlan({...nuevoPlan, nombre: e.target.value})} placeholder="Ej: Rehabilitación Oral" /></div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Especialista</label>
+                    <select className="w-full p-4 bg-slate-50/80 hover:bg-white focus:bg-white rounded-2xl outline-none font-bold text-xs uppercase text-slate-800 border border-slate-200/60 shadow-sm cursor-pointer" value={nuevoPlan.especialista_id} onChange={(e) => setNuevoPlan({...nuevoPlan, especialista_id: e.target.value})} disabled={perfil?.rol === 'DENTISTA'}>
+                      <option value="">SELECCIONAR...</option>
+                      {profesionales.map(p => (
+                        <option key={p.id} value={p.id}>
+                          DR/A. {p.nombre} {p.apellido}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button onClick={handleCrearPlan} disabled={creandoPlan} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40 transition-all flex items-center justify-center gap-2 border border-blue-500 disabled:opacity-50">
+                    {creandoPlan ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />} Crear Plan
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   )
 }
