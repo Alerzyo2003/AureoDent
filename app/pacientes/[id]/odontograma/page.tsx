@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
   Loader2, ChevronLeft, X, User, Baby, 
-  Trash2, Info, CalendarDays, EyeOff, Settings, CheckCircle2, ChevronRight, Activity
+  Trash2, Info, CalendarDays, EyeOff, Settings, CheckCircle2, ChevronRight, Activity, Stethoscope
 } from 'lucide-react'
 import Link from 'next/link'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -83,7 +83,6 @@ export default function OdontogramaHistorialPage() {
       }
       const { data: presupuestos } = await supabase.from('presupuestos').select('id').eq('paciente_id', pacienteId);
       if (presupuestos?.length) {
-          // 🔥 FILTRO ESTRICTO: Solo trae tratamientos con "progreso" > 0 o que estén realizados 🔥
           const { data: allItems } = await supabase
             .from('presupuesto_items')
             .select(`*, progreso, prestaciones:prestacion_id("Nombre Accion", "Nombre", icono_tipo)`)
@@ -96,7 +95,6 @@ export default function OdontogramaHistorialPage() {
                 const finalizado = ['realizado', 'atendido', 'terminado', 'completado', 'finalizado'].includes(est);
                 const enProgreso = ['en proceso', 'iniciado'].includes(est) || (i.progreso && Number(i.progreso) > 0);
                 
-                // Retornar solo lo que está terminado o ya se empezó
                 return finalizado || enProgreso;
             });
 
@@ -177,24 +175,42 @@ export default function OdontogramaHistorialPage() {
       guardarEnBD(nuevoEstado);
   }
 
-  if (cargando) return <div className="h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4"><Loader2 className="animate-spin text-blue-600" size={40} /><p className="text-[10px] font-black uppercase text-slate-400">Cargando...</p></div>
+  if (cargando) return (
+    <div className="h-screen flex flex-col items-center justify-center bg-slate-50 gap-4">
+      <Loader2 className="animate-spin text-blue-600" size={45} />
+      <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest italic">Cargando Odontograma Histórico...</p>
+    </div>
+  )
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] p-8 md:p-12 font-sans text-left pb-24" onClick={() => setMenuContextual(null)}>
+    <div className="min-h-screen p-6 md:p-10 font-sans text-left pb-24" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }} onClick={() => setMenuContextual(null)}>
       <div className="max-w-7xl mx-auto space-y-8">
         
-        <div className="flex justify-between items-center">
-            <Link href={`/pacientes/${pacienteId}`} className="group inline-flex items-center gap-3 font-black text-[10px] text-slate-400 uppercase hover:text-blue-600 transition-all"><div className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center group-hover:bg-blue-50"><ChevronLeft size={16}/></div> Volver a la ficha</Link>
-            <div className="flex bg-white rounded-xl shadow-sm border border-slate-200 p-1">
-                <button onClick={() => setVistaTemporal(false)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${!vistaTemporal ? 'bg-blue-50 text-blue-600' : 'text-slate-400'}`}>Permanente</button>
-                <button onClick={() => setVistaTemporal(true)} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${vistaTemporal ? 'bg-purple-50 text-purple-600' : 'text-slate-400'}`}>Temporal</button>
+        {/* HEADER / NAVEGACIÓN */}
+        <div className="flex justify-between items-center bg-white/90 backdrop-blur-xl p-6 rounded-[2rem] shadow-xl border border-white/60">
+            <Link href={`/pacientes/${pacienteId}`} className="group inline-flex items-center gap-2 font-black text-[10px] text-slate-500 uppercase tracking-widest hover:text-blue-600 transition-all bg-slate-100/80 px-4 py-2.5 rounded-xl shadow-sm border border-slate-200/60">
+              <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform"/> Volver a la ficha
+            </Link>
+            
+            <div className="flex bg-slate-100/80 backdrop-blur-md rounded-2xl shadow-sm border border-slate-200/60 p-1.5">
+                <button onClick={() => setVistaTemporal(false)} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${!vistaTemporal ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Permanente</button>
+                <button onClick={() => setVistaTemporal(true)} className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-[10px] font-black uppercase transition-all ${vistaTemporal ? 'bg-white text-purple-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}>Temporal</button>
             </div>
         </div>
 
-        <section id="odontograma-historial" className="bg-white p-10 md:p-14 rounded-[3rem] shadow-sm border border-slate-100 overflow-visible">
-          <h2 className="text-2xl font-black uppercase italic tracking-tighter text-slate-900 mb-10 border-b pb-6">Odontograma Histórico (Iniciado / Realizado)</h2>
+        {/* ODONTOGRAMA VISUAL */}
+        <section id="odontograma-historial" className="bg-white/90 backdrop-blur-xl p-8 md:p-12 rounded-[3rem] shadow-2xl border border-white/60 overflow-visible relative">
+          <div className="flex items-center gap-3 mb-8 text-blue-600 border-b border-slate-100 pb-6">
+            <div className="bg-blue-50 p-2.5 rounded-2xl shadow-inner">
+              <Stethoscope size={22} strokeWidth={2.5}/>
+            </div>
+            <div>
+              <h2 className="text-xl font-black uppercase italic tracking-tight text-slate-800">Odontograma Histórico</h2>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tratamientos Iniciados y Realizados</p>
+            </div>
+          </div>
 
-          <div className="flex flex-col items-center gap-16 py-10 overflow-x-auto min-w-max">
+          <div className="flex flex-col items-center gap-16 py-6 overflow-x-auto min-w-max">
             <div className="flex gap-8">
               <div className="flex gap-1.5 border-r-2 border-slate-100 pr-8">
                 {(!vistaTemporal ? c1 : t1).map(id => <DienteVisual key={id} id={id} seleccionado={false} onSelect={()=>{}} estadoDiente={dentadura[id.toString()]} itemsDiente={todosLosTratamientos.filter(t => String(t.diente_id) === String(id))} onContextMenu={(e:any) => handleContextMenu(e, id)} onFaceClick={(e:any, c:string) => handleContextMenu(e, id, c)} abrirPanelAgregar={()=>{}} />)}
@@ -203,7 +219,7 @@ export default function OdontogramaHistorialPage() {
                 {(!vistaTemporal ? c2 : t2).map(id => <DienteVisual key={id} id={id} seleccionado={false} onSelect={()=>{}} estadoDiente={dentadura[id.toString()]} itemsDiente={todosLosTratamientos.filter(t => String(t.diente_id) === String(id))} onContextMenu={(e:any) => handleContextMenu(e, id)} onFaceClick={(e:any, c:string) => handleContextMenu(e, id, c)} abrirPanelAgregar={()=>{}} />)}
               </div>
             </div>
-            <div className="flex gap-8 mt-4">
+            <div className="flex gap-8 mt-2">
               <div className="flex gap-1.5 border-r-2 border-slate-100 pr-8">
                 {(!vistaTemporal ? c3 : t3).map(id => <DienteVisual key={id} id={id} invert seleccionado={false} onSelect={()=>{}} estadoDiente={dentadura[id.toString()]} itemsDiente={todosLosTratamientos.filter(t => String(t.diente_id) === String(id))} onContextMenu={(e:any) => handleContextMenu(e, id)} onFaceClick={(e:any, c:string) => handleContextMenu(e, id, c)} abrirPanelAgregar={()=>{}} />)}
               </div>
@@ -213,42 +229,41 @@ export default function OdontogramaHistorialPage() {
             </div>
           </div>
 
-          <div className="mt-12 flex gap-10 justify-center border-t border-slate-50 pt-10">
+          <div className="mt-12 flex flex-wrap gap-6 justify-center border-t border-slate-100 pt-8">
              <div className="grid grid-cols-3 gap-2">
-                {[1,2,3,6,5,4].map(s => <button key={s} onContextMenu={(e) => handleContextMenu(e, null, undefined, `Sextante ${s}`)} className="px-4 py-2 bg-slate-50 border rounded-lg text-[9px] font-black uppercase text-slate-500 hover:bg-blue-50 transition-all">Sextante {s}</button>)}
+                {[1,2,3,6,5,4].map(s => <button key={s} onContextMenu={(e) => handleContextMenu(e, null, undefined, `Sextante ${s}`)} className="px-4 py-2.5 bg-slate-50 hover:bg-white border border-slate-200/80 rounded-xl text-[9px] font-black uppercase text-slate-600 shadow-sm transition-all">Sextante {s}</button>)}
              </div>
              <div className="flex flex-col gap-2">
-                <button onContextMenu={(e) => handleContextMenu(e, null, undefined, 'Arcada Superior')} className="px-5 py-2 bg-slate-50 border rounded-lg text-[9px] font-black uppercase text-slate-500 hover:bg-blue-50 transition-all">Arcada Superior</button>
-                <button onContextMenu={(e) => handleContextMenu(e, null, undefined, 'Arcada Inferior')} className="px-5 py-2 bg-slate-50 border rounded-lg text-[9px] font-black uppercase text-slate-500 hover:bg-blue-50 transition-all">Arcada Inferior</button>
+                <button onContextMenu={(e) => handleContextMenu(e, null, undefined, 'Arcada Superior')} className="px-5 py-2.5 bg-slate-50 hover:bg-white border border-slate-200/80 rounded-xl text-[9px] font-black uppercase text-slate-600 shadow-sm transition-all">Arcada Superior</button>
+                <button onContextMenu={(e) => handleContextMenu(e, null, undefined, 'Arcada Inferior')} className="px-5 py-2.5 bg-slate-50 hover:bg-white border border-slate-200/80 rounded-xl text-[9px] font-black uppercase text-slate-600 shadow-sm transition-all">Arcada Inferior</button>
              </div>
           </div>
 
           <AnimatePresence>
             {menuContextual && (
               <div style={{ position: 'absolute', top: menuContextual.y + 10, left: menuContextual.lado === 'derecha' ? menuContextual.x + 20 : menuContextual.x - 220, zIndex: 999 }}>
-                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="bg-white border shadow-2xl rounded-[2rem] p-2 w-[220px]" onClick={(e) => e.stopPropagation()}>
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="bg-white/95 backdrop-blur-2xl border border-white/80 shadow-2xl rounded-[2rem] p-3 w-[220px]" onClick={(e) => e.stopPropagation()}>
                   {vistaMenu === 'principal' ? (
-                      <div className="p-3 space-y-1 text-left">
-                        <p className="px-3 py-2 text-[10px] font-black uppercase text-blue-600 border-b mb-2 text-center italic">{menuContextual.zona || (menuContextual.cara ? `Pieza ${menuContextual.diente} (${menuContextual.cara})` : `Pieza ${menuContextual.diente}`)}</p>
-                        <button onClick={() => setVistaMenu('preexistencias')} className="w-full flex justify-between items-center px-3 py-2.5 rounded-xl hover:bg-blue-50 font-black uppercase text-[9px] text-slate-700">Preexistencia <ChevronRight size={14}/></button>
-                        <button onClick={() => setVistaMenu('lesiones')} className="w-full flex justify-between items-center px-3 py-2.5 rounded-xl hover:bg-red-50 font-black uppercase text-[9px] text-slate-700">Definir Lesión <ChevronRight size={14}/></button>
+                      <div className="space-y-1 text-left">
+                        <p className="px-3 py-2 text-[10px] font-black uppercase text-blue-600 border-b border-slate-100 mb-2 text-center italic">{menuContextual.zona || (menuContextual.cara ? `Pieza ${menuContextual.diente} (${menuContextual.cara})` : `Pieza ${menuContextual.diente}`)}</p>
+                        <button onClick={() => setVistaMenu('preexistencias')} className="w-full flex justify-between items-center px-3 py-2.5 rounded-xl hover:bg-blue-50 font-black uppercase text-[9px] text-slate-700 transition-colors">Preexistencia <ChevronRight size={14}/></button>
+                        <button onClick={() => setVistaMenu('lesiones')} className="w-full flex justify-between items-center px-3 py-2.5 rounded-xl hover:bg-red-50 font-black uppercase text-[9px] text-slate-700 transition-colors">Definir Lesión <ChevronRight size={14}/></button>
                         <div className="h-px bg-slate-100 my-1"></div>
-                        <button onClick={() => toast.info("Funcionalidad disponible en Planificación")} className="w-full flex gap-2 px-3 py-2.5 rounded-xl hover:bg-slate-50 font-black uppercase text-[9px] text-slate-600"><Settings size={14}/> Agregar Prestación</button>
+                        <button onClick={() => toast.info("Funcionalidad disponible en Planificación")} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-slate-50 font-black uppercase text-[9px] text-slate-600 transition-colors"><Settings size={14}/> Agregar Prestación</button>
                         
-                        {/* 🔥 BOTÓN VER INFO FUNCIONAL 🔥 */}
-                        <button onClick={() => { setVerInfoElemento(menuContextual.diente || menuContextual.zona!); setMenuContextual(null); }} className="w-full flex gap-2 px-3 py-2.5 rounded-xl hover:bg-slate-50 font-black uppercase text-[9px] text-slate-600"><Info size={14} className="text-blue-500"/> Ver Información</button>
+                        <button onClick={() => { setVerInfoElemento(menuContextual.diente || menuContextual.zona!); setMenuContextual(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-slate-50 font-black uppercase text-[9px] text-slate-600 transition-colors"><Info size={14} className="text-blue-500"/> Ver Información</button>
                         
-                        <button onClick={() => aplicarHallazgo('Ausente')} className="w-full flex gap-2 px-3 py-2.5 rounded-xl hover:bg-slate-50 font-black uppercase text-[9px] text-red-500"><EyeOff size={14}/> Ausente</button>
-                        <button onClick={() => aplicarHallazgo('Sano')} className="w-full flex gap-2 px-3 py-2.5 rounded-xl hover:bg-emerald-50 font-black uppercase text-[9px] text-emerald-600"><CheckCircle2 size={14}/> Diente Sano</button>
+                        <button onClick={() => aplicarHallazgo('Ausente')} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-red-50 font-black uppercase text-[9px] text-red-500 transition-colors"><EyeOff size={14}/> Ausente</button>
+                        <button onClick={() => aplicarHallazgo('Sano')} className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl hover:bg-emerald-50 font-black uppercase text-[9px] text-emerald-600 transition-colors"><CheckCircle2 size={14}/> Diente Sano</button>
                       </div>
                   ) : (
-                      <div className="p-2 flex flex-col">
-                        <div className="flex justify-between mb-3 border-b pb-2 px-2"><p className="text-[9px] font-black uppercase text-slate-400 italic">{vistaMenu}</p><button onClick={() => setVistaMenu('principal')} className="text-[8px] font-black uppercase bg-slate-100 px-2 rounded-full hover:bg-slate-200">Volver</button></div>
-                        <div className="grid grid-cols-1 gap-1 max-h-[300px] overflow-y-auto custom-scrollbar p-1">
+                      <div className="p-1 flex flex-col">
+                        <div className="flex justify-between items-center mb-2 border-b border-slate-100 pb-2 px-2"><p className="text-[9px] font-black uppercase text-slate-400 italic">{vistaMenu}</p><button onClick={() => setVistaMenu('principal')} className="text-[8px] font-black uppercase bg-slate-100 px-2.5 py-1 rounded-full hover:bg-slate-200 transition-all">Volver</button></div>
+                        <div className="grid grid-cols-1 gap-1 max-h-[260px] overflow-y-auto custom-scrollbar p-1">
                           {(vistaMenu === 'preexistencias' ? PREEXISTENCIAS_LISTA : LESIONES_LISTA).map(op => (
-                            <button key={op} onClick={() => aplicarHallazgo(op)} className="flex items-center gap-3 w-full p-2 hover:bg-blue-50 rounded-lg text-left transition-colors">
+                            <button key={op} onClick={() => aplicarHallazgo(op)} className="flex items-center gap-3 w-full p-2.5 hover:bg-blue-50 rounded-xl text-left transition-colors">
                               <div className="w-6 h-6 shrink-0"><svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo={op} /></svg></div>
-                              <span className="text-[9px] font-black uppercase text-slate-600">{op}</span>
+                              <span className="text-[9px] font-black uppercase text-slate-700">{op}</span>
                             </button>
                           ))}
                         </div>
@@ -261,59 +276,91 @@ export default function OdontogramaHistorialPage() {
         </section>
 
         {/* TABLA HISTORIAL */}
-        <section className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
-          <div className="p-8 border-b bg-slate-50/50 flex items-center gap-3"><CalendarDays size={20} className="text-blue-500"/><h3 className="text-lg font-black uppercase text-slate-800">Registro Clínico</h3></div>
-          <div className="overflow-x-auto"><table className="w-full text-left">
-              <thead><tr className="bg-white"><th className="px-8 py-5 text-[9px] font-black uppercase text-slate-400">Fecha</th><th className="px-6 py-5 text-[9px] font-black uppercase text-slate-400 text-center">Pieza</th><th className="px-6 py-5 text-[9px] font-black uppercase text-slate-400 text-center">Caras</th><th className="px-6 py-5 text-[9px] font-black uppercase text-slate-400">Diagnóstico</th><th className="px-6 py-5 text-[9px] font-black uppercase text-slate-400 text-center">Estado</th><th className="px-8 py-5 text-[9px] font-black uppercase text-slate-400 text-right">Anular</th></tr></thead>
-              <tbody className="divide-y divide-slate-50">{historialCombinado.length === 0 ? (<tr><td colSpan={6} className="py-12 text-center text-slate-400 italic text-xs uppercase">Sin registros</td></tr>) : (
-                historialCombinado.map((h, i) => (
-                    <tr key={i} className={`hover:bg-slate-50 transition-colors group ${h.estado === 'Realizado' ? 'bg-emerald-50/20' : !h.esManual ? 'bg-amber-50/20' : ''}`}>
+        <section className="bg-white/90 backdrop-blur-xl rounded-[3rem] shadow-2xl border border-white/60 overflow-hidden">
+          <div className="p-8 border-b border-slate-100 flex items-center gap-3 bg-slate-50/50">
+            <div className="bg-blue-50 p-2.5 rounded-2xl text-blue-600 shadow-inner">
+              <CalendarDays size={20} strokeWidth={2.5}/>
+            </div>
+            <h3 className="text-lg font-black uppercase italic tracking-tight text-slate-800">Registro Clínico</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-[0.2em]">
+                  <th className="px-8 py-5">Fecha</th>
+                  <th className="px-6 py-5 text-center">Pieza</th>
+                  <th className="px-6 py-5 text-center">Caras</th>
+                  <th className="px-6 py-5">Diagnóstico</th>
+                  <th className="px-6 py-5 text-center">Estado</th>
+                  <th className="px-8 py-5 text-right">Anular</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {historialCombinado.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-16 text-center text-slate-400 italic text-xs uppercase tracking-wider font-bold">Sin registros clínicos</td>
+                  </tr>
+                ) : (
+                  historialCombinado.map((h, i) => (
+                    <tr key={i} className={`hover:bg-blue-50/30 transition-colors group ${h.estado === 'Realizado' ? 'bg-emerald-50/20' : !h.esManual ? 'bg-amber-50/20' : ''}`}>
                       <td className="px-8 py-5 text-[10px] font-bold text-slate-500">{h.fecha}</td>
                       <td className="px-6 py-5 text-center font-black text-xs text-slate-700">{h.pieza}</td>
                       <td className="px-6 py-5 text-center text-[10px] font-black text-slate-400 uppercase">{h.caras}</td>
                       <td className="px-6 py-5 text-xs font-black uppercase text-slate-800">{h.tipo}</td>
-                      <td className="px-6 py-5 text-center"><span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase ${h.estado === 'Preexistencia' ? 'bg-blue-50 text-blue-600' : h.estado === 'Realizado' ? 'bg-emerald-100 text-emerald-700' : h.estado === 'En Proceso' ? 'bg-amber-100 text-amber-700' : 'bg-red-50 text-red-600'}`}>{h.estado}</span></td>
-                      <td className="px-8 py-5 text-right">{h.esManual ? <button onClick={() => eliminarRegistroManual(h)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button> : <span className="text-[8px] font-black text-slate-300 italic uppercase px-3 py-1 bg-white rounded border">Histórico</span>}</td>
+                      <td className="px-6 py-5 text-center">
+                        <span className={`px-2.5 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${h.estado === 'Preexistencia' ? 'bg-blue-50 text-blue-600 border border-blue-100' : h.estado === 'Realizado' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : h.estado === 'En Proceso' ? 'bg-amber-100 text-amber-700 border border-amber-200' : 'bg-red-50 text-red-600 border border-red-100'}`}>
+                          {h.estado}
+                        </span>
+                      </td>
+                      <td className="px-8 py-5 text-right">
+                        {h.esManual ? (
+                          <button onClick={() => eliminarRegistroManual(h)} className="p-2.5 bg-slate-100 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm">
+                            <Trash2 size={16}/>
+                          </button>
+                        ) : (
+                          <span className="text-[8px] font-black text-slate-400 uppercase px-3 py-1 bg-slate-100/80 rounded-xl border border-slate-200/60 shadow-sm">Histórico</span>
+                        )}
+                      </td>
                     </tr>
                   ))
-                )}</tbody></table></div>
+                )}
+              </tbody>
+            </table>
+          </div>
         </section>
       </div>
 
-      {/* 🔥 PANEL LATERAL: INFORMACIÓN DEL DIENTE 🔥 */}
+      {/* PANEL LATERAL: INFORMACIÓN DEL DIENTE */}
       <AnimatePresence>
         {verInfoElemento && (
-          <motion.aside initial={{ x: 450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 450, opacity: 0 }} className="fixed top-0 right-0 h-screen w-[380px] bg-white shadow-2xl z-[1000] border-l border-slate-100 flex flex-col overflow-hidden">
+          <motion.aside initial={{ x: 450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 450, opacity: 0 }} className="fixed top-0 right-0 h-screen w-[400px] bg-white/95 backdrop-blur-2xl shadow-2xl z-[1000] border-l border-white/80 flex flex-col overflow-hidden">
             <div className="p-6 bg-slate-900 text-white flex justify-between items-center">
-              <h3 className="font-black text-lg uppercase italic tracking-tighter">Detalles {typeof verInfoElemento === 'number' ? `Pieza ${verInfoElemento}` : verInfoElemento}</h3>
-              <button onClick={() => setVerInfoElemento(null)} className="p-2 hover:bg-white/10 rounded-full"><X size={20}/></button>
+              <h3 className="font-black text-base uppercase italic tracking-tight">Detalles {typeof verInfoElemento === 'number' ? `Pieza ${verInfoElemento}` : verInfoElemento}</h3>
+              <button onClick={() => setVerInfoElemento(null)} className="p-2.5 bg-white/10 hover:bg-white/20 rounded-2xl transition-all"><X size={18}/></button>
             </div>
             
             <div className="flex-1 overflow-y-auto p-8 space-y-8 text-left text-slate-800">
-               
-               {/* VISTA PREVIA (Solo si es un diente individual) */}
                {typeof verInfoElemento === 'number' && (
-                 <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col items-center">
+                 <div className="bg-slate-50/80 p-6 rounded-[2rem] border border-slate-200/60 flex flex-col items-center shadow-inner">
                     <div className="w-24 h-28 mb-4 pointer-events-none">
                        <DienteVisual id={verInfoElemento} seleccionado={false} onSelect={()=>{}} estadoDiente={dentadura[verInfoElemento.toString()]} itemsDiente={todosLosTratamientos.filter(t => String(t.diente_id) === String(verInfoElemento))} onFaceClick={()=>{}} onContextMenu={()=>{}} abrirPanelAgregar={()=>{}} />
                     </div>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vista Previa</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vista Previa anatómica</span>
                  </div>
                )}
 
-               {/* LESIONES MANUALES PREVIAS */}
                <div className="space-y-4">
-                 <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest border-b pb-2">Hallazgos Manuales</h4>
+                 <h4 className="text-[10px] font-black text-blue-600 uppercase tracking-widest border-b border-slate-100 pb-2">Hallazgos Manuales</h4>
                  {typeof verInfoElemento === 'number' && (dentadura[verInfoElemento.toString()]?.hallazgos?.length || dentadura[verInfoElemento.toString()]?.caras) ? (
                    <>
                      {dentadura[verInfoElemento.toString()]?.hallazgos?.map((h:string, idx:number)=>(
-                        <div key={idx} className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center gap-4">
+                        <div key={idx} className="p-4 bg-white border border-slate-200/80 rounded-2xl flex items-center gap-4 shadow-sm">
                           <div className="w-8 h-8"><svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo={h} /></svg></div>
                           <span className="text-xs font-black uppercase text-slate-700">{h} (Raíz)</span>
                         </div>
                      ))}
                      {dentadura[verInfoElemento.toString()]?.caras && Object.entries(dentadura[verInfoElemento.toString()].caras).map(([cara, val]) => val && (
-                        <div key={cara} className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center gap-4">
+                        <div key={cara} className="p-4 bg-white border border-slate-200/80 rounded-2xl flex items-center gap-4 shadow-sm">
                           <div className="w-8 h-8"><svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo={val as string} /></svg></div>
                           <span className="text-xs font-black uppercase text-slate-700">{String(val)} (Cara {cara})</span>
                         </div>
@@ -322,9 +369,8 @@ export default function OdontogramaHistorialPage() {
                  ) : <p className="text-xs text-slate-400 italic">Sin hallazgos clínicos manuales</p>}
                </div>
 
-               {/* 🔥 NUEVO: LISTA DE TRATAMIENTOS DE LA PIEZA 🔥 */}
                <div className="space-y-4">
-                 <h4 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest border-b pb-2 mt-8">Tratamientos Iniciados</h4>
+                 <h4 className="text-[10px] font-black text-emerald-600 uppercase tracking-widest border-b border-slate-100 pb-2 mt-8">Tratamientos Iniciados</h4>
                  {(() => {
                     const tratsFiltrados = typeof verInfoElemento === 'number' 
                         ? todosLosTratamientos.filter(t => String(t.diente_id) === String(verInfoElemento))
@@ -333,7 +379,7 @@ export default function OdontogramaHistorialPage() {
                     if (tratsFiltrados.length === 0) return <p className="text-xs text-slate-400 italic">No hay tratamientos en curso para esta área.</p>;
 
                     return tratsFiltrados.map((t, idx) => (
-                        <div key={idx} className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center gap-4 shadow-sm">
+                        <div key={idx} className="p-4 bg-white border border-slate-200/80 rounded-2xl flex items-center gap-4 shadow-sm">
                           <div className="w-8 h-8 shrink-0">
                              <svg viewBox="-10 -10 120 140" className="w-full h-full">
                                 <LogoRender hallazgo={t.display_nombre} iconoKey={t.prestaciones?.icono_tipo} isRealizado={t.estado === 'realizado'} isPendiente={t.estado === 'pendiente'} />
@@ -342,7 +388,7 @@ export default function OdontogramaHistorialPage() {
                           <div className="flex-1">
                              <p className="text-xs font-black uppercase text-slate-700 leading-tight">{t.display_nombre}</p>
                              <div className="flex items-center gap-2 mt-1.5">
-                                <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest leading-none ${t.estado === 'realizado' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                                <span className={`px-2 py-0.5 rounded-lg text-[8px] font-black uppercase tracking-widest leading-none ${t.estado === 'realizado' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                                     {t.estado === 'realizado' ? 'Realizado' : 'En Proceso'}
                                 </span>
                                 {t.progreso > 0 && t.estado !== 'realizado' && <span className="text-[9px] font-bold text-slate-400">{t.progreso}%</span>}
@@ -352,7 +398,6 @@ export default function OdontogramaHistorialPage() {
                     ));
                  })()}
                </div>
-
             </div>
           </motion.aside>
         )}
@@ -373,7 +418,7 @@ function CarasDentales({ id, itemsDiente = [], estado, onFaceClick, invert }: an
         if (low.includes('caries') || low.includes('erosi') || low.includes('atrici') || low.includes('abfrac')) {
             return "#0f172a"; 
         }
-        return "#3b82f6"; 
+        return "#2563eb"; 
     }
 
     const hallazgosGenerales = estado?.hallazgos || [];
@@ -389,10 +434,10 @@ function CarasDentales({ id, itemsDiente = [], estado, onFaceClick, invert }: an
     try {
         if (itemsDiente && itemsDiente.length > 0) {
             const realiz = itemsDiente.some((i:any) => i.cara && typeof i.cara === 'string' && i.cara.includes(c) && i.estado === 'realizado');
-            if (realiz) return "#10b981"; 
+            if (realiz) return "#059669"; 
             
             const pend = itemsDiente.some((i:any) => i.cara && typeof i.cara === 'string' && i.cara.includes(c) && i.estado !== 'realizado');
-            if (pend) return "#ef4444"; 
+            if (pend) return "#dc2626"; 
         }
     } catch (error) {
         console.error(`Error al evaluar color en diente ${id}:`, error);
@@ -455,7 +500,7 @@ function DienteVisual({ id, invert = false, estadoDiente, onContextMenu, onFaceC
       }
   });
 
-  let start = "#ffffff", end = "#f1f5f9", stroke = "#cbd5e1";
+  let start = "#ffffff", end = "#f8fafc", stroke = "#cbd5e1";
   
   if (isAusente) { 
       start = "#f8fafc"; end = "#f1f5f9"; stroke = "#e2e8f0"; 
@@ -495,15 +540,15 @@ function DienteVisual({ id, invert = false, estadoDiente, onContextMenu, onFaceC
                <line x1="90" y1="20" x2="10" y2="100" />
              </g>
           ) : (
-              elementosRaiz.map((el, i) => {
-                  const isTtoRealizado = !el.isManual && itemsDiente.some((t:any) => t.display_nombre === el.nombre && t.estado === 'realizado');
-                  const isTtoPendiente = !el.isManual && itemsDiente.some((t:any) => t.display_nombre === el.nombre && t.estado !== 'realizado');
-                  return <LogoRender key={`h-${i}`} hallazgo={el.nombre} iconoKey={el.icono} isRealizado={isTtoRealizado} isPendiente={isTtoPendiente} />
-              })
+             elementosRaiz.map((el, i) => {
+                 const isTtoRealizado = !el.isManual && itemsDiente.some((t:any) => t.display_nombre === el.nombre && t.estado === 'realizado');
+                 const isTtoPendiente = !el.isManual && itemsDiente.some((t:any) => t.display_nombre === el.nombre && t.estado !== 'realizado');
+                 return <LogoRender key={`h-${i}`} hallazgo={el.nombre} iconoKey={el.icono} isRealizado={isTtoRealizado} isPendiente={isTtoPendiente} />
+             })
           )}
         </svg>
       </div>
-      <span className="text-[10px] font-black text-slate-400 italic group-hover:text-blue-500 cursor-pointer" onClick={onContextMenu} onContextMenu={onContextMenu}>{id}</span>
+      <span className="text-[10px] font-black text-slate-400 italic group-hover:text-blue-600 transition-colors cursor-pointer" onClick={onContextMenu} onContextMenu={onContextMenu}>{id}</span>
       
       <div>
          <CarasDentales id={id} estado={estadoDiente} itemsDiente={itemsDiente} onFaceClick={onFaceClick} invert={invert} />
@@ -520,11 +565,11 @@ function LogoRender({ hallazgo, iconoKey, colorOverride, isRealizado, isPendient
   const isLesion = LESIONES_LISTA.some(l => l.toLowerCase() === originalName);
   const isMalEstado = originalName.includes("mal estado") || originalName.includes("fractu") || originalName.includes("infec");
   
-  let color = "#2563eb"; // Azul base
+  let color = "#2563eb"; 
   if (colorOverride) color = colorOverride;
-  else if (isRealizado) color = "#059669"; // Verde
-  else if (isPendiente) color = "#5e75f2"; // Rojo
-  else if (isLesion || isMalEstado) color = "#0f172a"; // Negro / Gris muy oscuro
+  else if (isRealizado) color = "#059669"; 
+  else if (isPendiente) color = "#dc2626"; 
+  else if (isLesion || isMalEstado) color = "#0f172a"; 
 
   const patternId = `hash-${Math.random().toString(36).substring(2, 9)}`;
   const pattern = isMalEstado ? (<defs><pattern id={patternId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke={color} strokeWidth="3" /></pattern></defs>) : null;
@@ -552,14 +597,3 @@ function LogoRender({ hallazgo, iconoKey, colorOverride, isRealizado, isPendient
 
   return <circle cx="50" cy="50" r="25" fill={fill} opacity="0.8" />;
 }
-
-// Iconos Sextantes y Arcadas
-const commonSvgProps = { viewBox: "0 0 100 100", className: "w-4 h-4 text-slate-400 group-hover:text-blue-500", stroke: "currentColor", fill: "none", strokeWidth: "10" };
-function LogoSextante1() { return <svg {...commonSvgProps}><polyline points="10,0 100,100 0,100"/></svg>; }
-function LogoSextante2() { return <svg {...commonSvgProps}><polyline points="10,20 50,100 90,20"/></svg>; }
-function LogoSextante3() { return <svg {...commonSvgProps}><polyline points="90,0 0,100 100,100"/></svg>; }
-function LogoSextante4() { return <svg {...commonSvgProps}><polyline points="10,0 100,0 20,100"/></svg>; }
-function LogoSextante5() { return <svg {...commonSvgProps}><polyline points="10,80 50,0 90,80"/></svg>; }
-function LogoSextante6() { return <svg {...commonSvgProps}><polyline points="90,0 0,0 80,100"/></svg>; }
-function LogoArcadaSup() { return <svg viewBox="0 0 100 100" className="w-5 h-5 text-slate-400 group-hover:text-blue-500"><path d="M10,80 Q50,0 90,80" stroke="currentColor" fill="none" strokeWidth="12" /></svg>; }
-function LogoArcadaInf() { return <svg viewBox="0 0 100 100" className="w-5 h-5 text-slate-400 group-hover:text-blue-500 rotate-180"><path d="M10,80 Q50,0 90,80" stroke="currentColor" fill="none" strokeWidth="12" /></svg>; }
