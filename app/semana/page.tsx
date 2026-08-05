@@ -546,13 +546,21 @@ export default function DiarioGlobalPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] font-sans p-2 md:p-4 pb-24 text-left">
+    <main 
+      className="min-h-screen font-sans p-2 md:p-4 pb-24 text-left"
+      style={{
+        backgroundImage: "url('/fondo-agenda.png')",
+        backgroundSize: 'cover',
+        backgroundPosition: 'center top',
+        backgroundAttachment: 'fixed'
+      }}
+    >
       <div className="max-w-[1600px] mx-auto space-y-4">
 
         {/* HEADER MODERNO */}
-        <header className="bg-white p-8 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col xl:flex-row justify-between items-center gap-6 text-left">
+        <header className="bg-white/90 backdrop-blur-xl p-8 md:p-10 rounded-[3rem] shadow-sm border border-white/60 flex flex-col xl:flex-row justify-between items-center gap-6 text-left">
           <div className="flex items-center gap-6 text-left w-full xl:w-auto">
-            <div className="p-5 bg-blue-600 rounded-[2rem] text-white shadow-xl shadow-blue-200 shrink-0">
+            <div className="p-5 bg-blue-600 rounded-[2rem] text-white shadow-xl shadow-blue-200/50 shrink-0">
               <LayoutGrid size={32} />
             </div>
             <div>
@@ -563,7 +571,7 @@ export default function DiarioGlobalPage() {
 
           <div className="flex flex-col md:flex-row items-center gap-4 w-full xl:w-auto">
             {/* Control de Fechas */}
-            <div className="bg-slate-50 border border-slate-100 rounded-[2rem] p-2 flex items-center gap-4 shadow-inner">
+            <div className="bg-slate-50/80 border border-slate-200/60 rounded-[2rem] p-2 flex items-center gap-4 shadow-inner">
               <button onClick={() => navegarSemana('atras')} className="p-3 hover:bg-white hover:shadow-sm rounded-2xl transition-all text-slate-500">
                 <ChevronLeft size={20} />
               </button>
@@ -578,7 +586,7 @@ export default function DiarioGlobalPage() {
             <div className="relative w-full md:w-72 group">
               <User className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-500 transition-colors" size={16} />
               <select
-                className="w-full pl-12 pr-10 py-4 bg-white border border-slate-200 rounded-[2rem] text-xs font-bold uppercase outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all appearance-none cursor-pointer"
+                className="w-full pl-12 pr-10 py-4 bg-white/90 backdrop-blur-md border border-slate-200/80 rounded-[2rem] text-xs font-bold uppercase outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 shadow-sm transition-all appearance-none cursor-pointer"
                 value={filtroDoctor}
                 onChange={(e) => setFiltroDoctor(e.target.value)}
               >
@@ -600,12 +608,12 @@ export default function DiarioGlobalPage() {
         {cargando ? (
           <div className="flex flex-col justify-center items-center py-32 gap-4">
             <Loader2 className="animate-spin text-blue-600" size={48} />
-            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cargando disponibilidad...</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Cargando disponibilidad...</p>
           </div>
         ) : (
           <div className="space-y-12">
             {profesionalesFiltrados.length === 0 ? (
-              <div className="p-10 font-bold text-slate-400 text-center w-full bg-white rounded-[3rem] shadow-sm border border-slate-100">Ningún especialista programado para esta semana.</div>
+              <div className="p-10 font-bold text-slate-400 text-center w-full bg-white/90 backdrop-blur-xl rounded-[3rem] shadow-sm border border-white/60">Ningún especialista programado para esta semana.</div>
             ) : profesionalesFiltrados.map(p => {
                 const citasDelProfesional = citas.filter(c => c.profesional_id === p.user_id);
                 const disponibilidadesDelProfesional = disponibilidades.filter(d => d.profesional_id === p.user_id);
@@ -613,8 +621,8 @@ export default function DiarioGlobalPage() {
                 const getHoraLimpias = (fechaString: string) => fechaString.includes('T') ? fechaString.split('T')[1].substring(0, 5) : fechaString.split(' ')[1].substring(0, 5);
 
                 return (
-                  <div key={p.user_id} className="bg-white rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden">
-                    <div className="p-6 text-sm font-black text-slate-700 uppercase border-b border-slate-100 sticky top-0 bg-white/80 backdrop-blur-md z-20 h-[90px] flex items-center justify-between">
+                  <div key={p.user_id} className="bg-white/90 backdrop-blur-xl rounded-[3rem] shadow-sm border border-white/60 overflow-hidden">
+                    <div className="p-6 text-sm font-black text-slate-700 uppercase border-b border-slate-100 sticky top-0 bg-white/90 backdrop-blur-md z-20 h-[90px] flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center shadow-sm">
                           <User size={18} className="text-blue-600" />
@@ -652,82 +660,82 @@ export default function DiarioGlobalPage() {
                                 </div>
                               )}
                               {slotsHorarios.map(hora => {
-                            const slotInicioMins = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1]);
+                              const slotInicioMins = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1]);
                                 const esBloqueado = bloqueosDelProfesional.some(b => {
                                   if (b.fecha !== fechaISOActual) return false;
-                              if (!b.hora_inicio || !b.hora_fin) return true;
-                              const bIni = parseInt(b.hora_inicio.split(':')[0]) * 60 + parseInt(b.hora_inicio.split(':')[1]);
-                              const bFin = parseInt(b.hora_fin.split(':')[0]) * 60 + parseInt(b.hora_fin.split(':')[1]);
-                              return slotInicioMins >= bIni && slotInicioMins < bFin;
-                            });
+                                  if (!b.hora_inicio || !b.hora_fin) return true;
+                                  const bIni = parseInt(b.hora_inicio.split(':')[0]) * 60 + parseInt(b.hora_inicio.split(':')[1]);
+                                  const bFin = parseInt(b.hora_fin.split(':')[0]) * 60 + parseInt(b.hora_fin.split(':')[1]);
+                                  return slotInicioMins >= bIni && slotInicioMins < bFin;
+                                });
                                 const esDisponible = disponibilidadesDelProfesional.some(d => {
-                              const esDia = (d.fecha_especifica && d.fecha_especifica === fechaISOActual) || (!d.fecha_especifica && d.dia_semana === diaSemanaActual);
-                              if (esDia) {
-                                const dIni = parseInt(d.hora_inicio.split(':')[0]) * 60 + parseInt(d.hora_inicio.split(':')[1]);
-                                const dFin = parseInt(d.hora_fin.split(':')[0]) * 60 + parseInt(d.hora_fin.split(':')[1]);
-                                return slotInicioMins >= dIni && slotInicioMins < dFin;
-                              }
-                              return false;
+                                const esDia = (d.fecha_especifica && d.fecha_especifica === fechaISOActual) || (!d.fecha_especifica && d.dia_semana === diaSemanaActual);
+                                if (esDia) {
+                                  const dIni = parseInt(d.hora_inicio.split(':')[0]) * 60 + parseInt(d.hora_inicio.split(':')[1]);
+                                  const dFin = parseInt(d.hora_fin.split(':')[0]) * 60 + parseInt(d.hora_fin.split(':')[1]);
+                                  return slotInicioMins >= dIni && slotInicioMins < dFin;
+                                }
+                                return false;
                                 }) && esSlotLibre(p.user_id, fechaISOActual, hora, 15);
 
-                            return (
-                              <div key={hora} className="flex items-stretch h-10 border-b border-slate-100 group">
-                                <div className="w-16 text-center p-2 text-[9px] font-black border-r border-slate-100 flex items-center justify-center bg-slate-50/50 text-slate-400 group-hover:bg-slate-100">
-                                  {hora}
-                                </div>
-                                <div className="flex-1 relative p-1">
-                                  {esBloqueoDiaCompleto || esBloqueado ? (
-                                    <div className="h-full w-full rounded-xl bg-rose-50/50 border border-rose-200 border-dashed flex items-center justify-center" title="Horario Bloqueado">
-                                      <Ban size={16} className="text-rose-300" />
+                                return (
+                                  <div key={hora} className="flex items-stretch h-10 border-b border-slate-100 group">
+                                    <div className="w-16 text-center p-2 text-[9px] font-black border-r border-slate-100 flex items-center justify-center bg-slate-50/50 text-slate-400 group-hover:bg-slate-100">
+                                      {hora}
                                     </div>
-                                  ) : esDisponible ? (
-                                    <div onClick={() => agendarDesdeSlot(p.user_id, hora, fechaISOActual)} className="h-full w-full rounded-xl bg-emerald-100 border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-200 cursor-pointer transition-all flex items-center justify-center" title="Agendar nueva cita">
-                                      <Plus size={16} className="text-emerald-500" />
+                                    <div className="flex-1 relative p-1">
+                                      {esBloqueoDiaCompleto || esBloqueado ? (
+                                        <div className="h-full w-full rounded-xl bg-rose-50/50 border border-rose-200 border-dashed flex items-center justify-center" title="Horario Bloqueado">
+                                          <Ban size={16} className="text-rose-300" />
+                                        </div>
+                                      ) : esDisponible ? (
+                                        <div onClick={() => agendarDesdeSlot(p.user_id, hora, fechaISOActual)} className="h-full w-full rounded-xl bg-emerald-100 border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-200 cursor-pointer transition-all flex items-center justify-center" title="Agendar nueva cita">
+                                          <Plus size={16} className="text-emerald-500" />
+                                        </div>
+                                      ) : <div className="h-full w-full rounded-xl bg-slate-50/40" />}
                                     </div>
-                                  ) : <div className="h-full w-full rounded-xl bg-slate-50/40" />}
-                                </div>
-                              </div>
-                            );
-                          })}
-                              {citasDelDia.map(cita => {
-                            const ini = getHoraLimpias(cita.inicio);
-                            const fin = getHoraLimpias(cita.fin);
-                            const iniMins = parseInt(ini.split(':')[0]) * 60 + parseInt(ini.split(':')[1]);
-                            const finMins = parseInt(fin.split(':')[0]) * 60 + parseInt(fin.split(':')[1]);
-                            const duracionMins = finMins - iniMins;
-                            const top = (iniMins - (8 * 60)) / 15 * 2.5; // 2.5rem (h-10) per 15 mins
-                            const height = duracionMins / 15 * 2.5;
-                            const estadoStyle = ESTADOS_CITA[cita.estado] || ESTADOS_CITA.programada;
-                            const iniciales = getIniciales(cita.pacientes?.nombre, cita.pacientes?.apellido);
-
-                            return (
-                              <motion.div
-                                key={cita.id}
-                                initial={{ opacity: 0, scale: 0.9 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                onClick={() => iniciarReprogramacion(cita)}
-                                className={`absolute z-10 w-[calc(100%-8px)] left-1 ${estadoStyle.bg} border ${estadoStyle.bg.replace('bg-', 'border-')} rounded-lg p-2 cursor-pointer hover:shadow-lg transition-all duration-200 flex flex-col justify-center overflow-hidden`}
-                                style={{ top: `${top}rem`, height: `${height}rem` }}
-                                title={`${cita.pacientes?.nombre} ${cita.pacientes?.apellido} (${ini} - ${fin})`}
-                              >
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-center gap-1.5 overflow-hidden">
-                                    <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-[10px] font-black text-slate-700 shadow-sm border border-slate-100/50 shrink-0">
-                                      {iniciales}
-                                    </div>
-                                    <span className="text-[11px] font-black text-slate-800 truncate uppercase">
-                                      {cita.pacientes?.nombre?.split(' ')[0]} {cita.pacientes?.apellido?.split(' ')[0]}
-                                    </span>
                                   </div>
-                                  <span className="text-[9px] font-black tracking-widest text-slate-500 opacity-80">{ini}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5 mt-1">
-                                  <span className={`w-2 h-2 rounded-full ${estadoStyle.dot}`}></span>
-                                  <span className={`text-[9px] font-bold uppercase tracking-widest ${estadoStyle.text}`}>{estadoStyle.label}</span>
-                                </div>
-                              </motion.div>
-                            );
-                          })}
+                                );
+                              })}
+                                {citasDelDia.map(cita => {
+                                const ini = getHoraLimpias(cita.inicio);
+                                const fin = getHoraLimpias(cita.fin);
+                                const iniMins = parseInt(ini.split(':')[0]) * 60 + parseInt(ini.split(':')[1]);
+                                const finMins = parseInt(fin.split(':')[0]) * 60 + parseInt(fin.split(':')[1]);
+                                const duracionMins = finMins - iniMins;
+                                const top = (iniMins - (8 * 60)) / 15 * 2.5; // 2.5rem (h-10) per 15 mins
+                                const height = duracionMins / 15 * 2.5;
+                                const estadoStyle = ESTADOS_CITA[cita.estado] || ESTADOS_CITA.programada;
+                                const iniciales = getIniciales(cita.pacientes?.nombre, cita.pacientes?.apellido);
+
+                                return (
+                                  <motion.div
+                                    key={cita.id}
+                                    initial={{ opacity: 0, scale: 0.9 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    onClick={() => iniciarReprogramacion(cita)}
+                                    className={`absolute z-10 w-[calc(100%-8px)] left-1 ${estadoStyle.bg} border ${estadoStyle.bg.replace('bg-', 'border-')} rounded-lg p-2 cursor-pointer hover:shadow-lg transition-all duration-200 flex flex-col justify-center overflow-hidden`}
+                                    style={{ top: `${top}rem`, height: `${height}rem` }}
+                                    title={`${cita.pacientes?.nombre} ${cita.pacientes?.apellido} (${ini} - ${fin})`}
+                                  >
+                                    <div className="flex items-center justify-between mb-1">
+                                      <div className="flex items-center gap-1.5 overflow-hidden">
+                                        <div className="w-6 h-6 rounded-full bg-white/90 flex items-center justify-center text-[10px] font-black text-slate-700 shadow-sm border border-slate-100/50 shrink-0">
+                                          {iniciales}
+                                        </div>
+                                        <span className="text-[11px] font-black text-slate-800 truncate uppercase">
+                                          {cita.pacientes?.nombre?.split(' ')[0]} {cita.pacientes?.apellido?.split(' ')[0]}
+                                        </span>
+                                      </div>
+                                      <span className="text-[9px] font-black tracking-widest text-slate-500 opacity-80">{ini}</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 mt-1">
+                                      <span className={`w-2 h-2 rounded-full ${estadoStyle.dot}`}></span>
+                                      <span className={`text-[9px] font-bold uppercase tracking-widest ${estadoStyle.text}`}>{estadoStyle.label}</span>
+                                    </div>
+                                  </motion.div>
+                                );
+                                })}
                             </div>
                           </div>
                         )
@@ -1076,7 +1084,7 @@ export default function DiarioGlobalPage() {
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
                                 <input placeholder="Nombre" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" value={nuevoPaciente.nombre} onChange={e => setNuevoPaciente(prev => ({ ...prev, nombre: e.target.value }))} />
                                 <input placeholder="Apellido" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" value={nuevoPaciente.apellido} onChange={e => setNuevoPaciente(prev => ({ ...prev, apellido: e.target.value }))} />
-                                
+                                 
                                 <div className="md:col-span-2 flex items-center gap-2 mt-2">
                                     <input 
                                         type="checkbox" 
@@ -1103,7 +1111,7 @@ export default function DiarioGlobalPage() {
                                 </div>
 
                                 <input placeholder="Teléfono" className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold uppercase outline-none focus:ring-4 focus:ring-blue-500/10 transition-all" value={nuevoPaciente.telefono} onChange={e => setNuevoPaciente(prev => ({ ...prev, telefono: e.target.value }))} />
-                                
+                                 
                                 <div className="space-y-1">
                                     <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Fecha de Nacimiento</label>
                                     <input 
