@@ -1,14 +1,17 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { 
   UploadCloud, ImageIcon, FileText, Trash2, 
   ExternalLink, Loader2, Plus, X, Search,
-  Filter, Eye, Download
+  Filter, Eye, Download, ZoomIn, ZoomOut, RotateCcw,
+  Pencil, Save // <-- NUEVOS ÍCONOS AÑADIDOS
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
+import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch"
 
 export default function PacienteArchivosPage() {
   const { id } = useParams()
@@ -17,8 +20,16 @@ export default function PacienteArchivosPage() {
   const [subiendo, setSubiendo] = useState(false)
   const [filtro, setFiltro] = useState('')
   const [modalImagen, setModalImagen] = useState<string | null>(null)
+  const [mounted, setMounted] = useState(false)
+
+  // --- NUEVOS ESTADOS PARA EDICIÓN ---
+  const [modalEditar, setModalEditar] = useState<any>(null)
+  const [editTitulo, setEditTitulo] = useState('')
+  const [editDescripcion, setEditDescripcion] = useState('')
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
 
   useEffect(() => {
+    setMounted(true)
     if (id) fetchArchivos()
   }, [id])
 
@@ -44,13 +55,11 @@ export default function PacienteArchivosPage() {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validar tipo real, no solo el atributo accept
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     if (!allowedTypes.includes(file.type)) {
       toast.error('Tipo de archivo no permitido');
       return;
     }
-    // Validar tamaño máximo (ej: 10MB)
     if (file.size > 10 * 1024 * 1024) {
       toast.error('El archivo no puede superar 10MB');
       return;
@@ -58,7 +67,6 @@ export default function PacienteArchivosPage() {
 
     setSubiendo(true)
     try {
-      // 1. Subir a Storage
       const fileExt = file.name.split('.').pop()
       const fileName = `${id}/${Date.now()}.${fileExt}`
       const { error: storageError } = await supabase.storage
@@ -67,12 +75,10 @@ export default function PacienteArchivosPage() {
 
       if (storageError) throw storageError
 
-      // 2. Obtener URL pública
       const { data: { publicUrl } } = supabase.storage
         .from('documentos_pacientes')
         .getPublicUrl(fileName)
 
-      // 3. Registrar en la tabla documentos_pacientes
       const { error: dbError } = await supabase
         .from('documentos_pacientes')
         .insert([{
@@ -80,7 +86,8 @@ export default function PacienteArchivosPage() {
           nombre_archivo: file.name,
           url_archivo: publicUrl,
           tipo_archivo: file.type,
-          titulo: file.name.split('.')[0].toUpperCase()
+          titulo: file.name.split('.')[0].toUpperCase(),
+          descripcion: '' // Inicializamos vacío
         }])
 
       if (dbError) throw dbError
@@ -113,9 +120,52 @@ export default function PacienteArchivosPage() {
     }
   }
 
+  // --- NUEVA FUNCIÓN: ABRIR MODAL EDICIÓN ---
+  const abrirModalEdicion = (archivo: any) => {
+    setModalEditar(archivo)
+    setEditTitulo(archivo.titulo || '')
+    setEditDescripcion(archivo.descripcion || '')
+  }
+
+  // --- NUEVA FUNCIÓN: GUARDAR EDICIÓN ---
+  const guardarEdicion = async () => {
+    if (!editTitulo.trim()) {
+      toast.error("El título no puede estar vacío")
+      return
+    }
+
+    setGuardandoEdicion(true)
+    try {
+      const { error } = await supabase
+        .from('documentos_pacientes')
+        .update({ 
+          titulo: editTitulo.toUpperCase(), 
+          descripcion: editDescripcion 
+        })
+        .eq('id', modalEditar.id)
+
+      if (error) throw error
+
+      // Actualizamos el estado local para no tener que recargar toda la base de datos
+      setArchivos(archivos.map(a => a.id === modalEditar.id ? { 
+        ...a, 
+        titulo: editTitulo.toUpperCase(), 
+        descripcion: editDescripcion 
+      } : a))
+      
+      toast.success("Información actualizada")
+      setModalEditar(null)
+    } catch (error) {
+      toast.error("Error al guardar los cambios")
+    } finally {
+      setGuardandoEdicion(false)
+    }
+  }
+
   const archivosFiltrados = archivos.filter(a => 
     (a.titulo || '').toLowerCase().includes(filtro.toLowerCase()) ||
-    (a.nombre_archivo || '').toLowerCase().includes(filtro.toLowerCase())
+    (a.nombre_archivo || '').toLowerCase().includes(filtro.toLowerCase()) ||
+    (a.descripcion || '').toLowerCase().includes(filtro.toLowerCase()) // Agregado al filtro
   )
 
   if (cargando) return (
@@ -165,10 +215,10 @@ export default function PacienteArchivosPage() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
                 key={arc.id}
-                className="group bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-200 transition-all text-left"
+                className="group bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm hover:shadow-xl hover:border-blue-200 transition-all text-left flex flex-col"
               >
                 {/* PREVIEW */}
-                <div className="aspect-video bg-slate-50 relative overflow-hidden flex items-center justify-center">
+                <div className="aspect-video bg-slate-50 relative overflow-hidden flex items-center justify-center shrink-0">
                   {(arc.tipo_archivo || '').includes('image') ? (
                     <img 
                       src={arc.url_archivo} 
@@ -185,25 +235,37 @@ export default function PacienteArchivosPage() {
                   )}
                   
                   {/* OVERLAY ACTIONS */}
-                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3 backdrop-blur-sm">
+                  <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-sm px-2">
                     {(arc.tipo_archivo || '').includes('image') && (
-                      <button onClick={() => setModalImagen(arc.url_archivo)} className="p-3 bg-white rounded-xl text-slate-900 hover:bg-blue-600 hover:text-white transition-all">
-                        <Eye size={18} />
+                      <button onClick={() => setModalImagen(arc.url_archivo)} className="p-2.5 bg-white rounded-xl text-slate-900 hover:bg-blue-600 hover:text-white transition-all" title="Ver imagen">
+                        <Eye size={16} />
                       </button>
                     )}
-                    <a href={arc.url_archivo} target="_blank" rel="noopener noreferrer" className="p-3 bg-white rounded-xl text-slate-900 hover:bg-blue-600 hover:text-white transition-all">
-                      <Download size={18} />
+                    <a href={arc.url_archivo} target="_blank" rel="noopener noreferrer" className="p-2.5 bg-white rounded-xl text-slate-900 hover:bg-blue-600 hover:text-white transition-all" title="Descargar">
+                      <Download size={16} />
                     </a>
-                    <button onClick={() => eliminarArchivo(arc)} className="p-3 bg-white rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all">
-                      <Trash2 size={18} />
+                    
+                    {/* BOTÓN EDITAR */}
+                    <button onClick={() => abrirModalEdicion(arc)} className="p-2.5 bg-white rounded-xl text-slate-900 hover:bg-amber-500 hover:text-white transition-all" title="Editar detalles">
+                      <Pencil size={16} />
+                    </button>
+
+                    <button onClick={() => eliminarArchivo(arc)} className="p-2.5 bg-white rounded-xl text-red-500 hover:bg-red-500 hover:text-white transition-all" title="Eliminar">
+                      <Trash2 size={16} />
                     </button>
                   </div>
                 </div>
 
                 {/* INFO */}
-                <div className="p-5 text-left">
-                  <h3 className="text-xs font-black text-slate-800 uppercase truncate mb-1 text-left">{arc.titulo || 'Sin título'}</h3>
-                  <div className="flex justify-between items-center text-left">
+                <div className="p-5 flex-1 flex flex-col justify-between text-left">
+                  <div>
+                    <h3 className="text-xs font-black text-slate-800 uppercase truncate mb-1 text-left">{arc.titulo || 'Sin título'}</h3>
+                    {/* Mostrar descripción si existe */}
+                    {arc.descripcion && (
+                      <p className="text-[10px] text-slate-500 line-clamp-2 leading-snug mb-3">{arc.descripcion}</p>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center text-left mt-2">
                     <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest text-left">
                       {arc.fecha_subida ? new Date(arc.fecha_subida).toLocaleDateString('es-CL') : 'S/F'}
                     </span>
@@ -226,31 +288,139 @@ export default function PacienteArchivosPage() {
         </div>
       )}
 
-      {/* LIGHTBOX DE IMAGEN */}
-      <AnimatePresence>
-        {modalImagen && (
-          <div 
-            className="fixed inset-0 z-[1000] flex items-center justify-center bg-slate-950/90 backdrop-blur-md p-4"
-            onClick={() => setModalImagen(null)}
-          >
+      {/* LIGHTBOX DE IMAGEN A PANTALLA COMPLETA */}
+      {mounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {modalImagen && (
             <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              className="relative max-w-5xl max-h-full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999 }}
+              className="flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-4 md:p-8"
+              onClick={() => setModalImagen(null)}
             >
-              <button className="absolute -top-12 right-0 text-white hover:text-blue-400 transition-colors">
-                <X size={32} />
-              </button>
-              <img 
-                src={modalImagen} 
-                referrerPolicy="no-referrer"
-                className="rounded-2xl shadow-2xl max-h-[85vh] object-contain" 
-              />
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{ type: "spring", bounce: 0.3, duration: 0.5 }}
+                className="relative max-w-6xl w-full max-h-[85vh] flex items-center justify-center"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button 
+                  onClick={() => setModalImagen(null)}
+                  className="absolute -top-14 right-0 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 p-3 rounded-2xl backdrop-blur-md transition-all z-50 shadow-lg cursor-pointer"
+                >
+                  <X size={24} strokeWidth={2.5} />
+                </button>
+                
+                <TransformWrapper initialScale={1} minScale={0.5} maxScale={5} centerOnInit={true}>
+                  {({ zoomIn, zoomOut, resetTransform }) => (
+                    <div className="relative w-full h-full flex flex-col items-center justify-center">
+                      <div className="absolute bottom-4 z-50 flex gap-2 bg-slate-900/60 backdrop-blur-md p-2 rounded-2xl border border-white/10 shadow-xl">
+                        <button onClick={() => zoomIn()} className="p-2 text-white hover:bg-blue-600 rounded-xl transition-colors"><ZoomIn size={20} /></button>
+                        <button onClick={() => zoomOut()} className="p-2 text-white hover:bg-blue-600 rounded-xl transition-colors"><ZoomOut size={20} /></button>
+                        <button onClick={() => resetTransform()} className="p-2 text-white hover:bg-blue-600 rounded-xl transition-colors"><RotateCcw size={20} /></button>
+                      </div>
+                      <TransformComponent wrapperStyle={{ width: "100%", height: "100%", maxHeight: "85vh" }} contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyItems: "center" }}>
+                        <img 
+                          src={modalImagen} 
+                          referrerPolicy="no-referrer"
+                          className="rounded-3xl shadow-2xl max-h-[85vh] object-contain border border-white/10 relative z-40 cursor-grab active:cursor-grabbing" 
+                          alt="Vista completa"
+                        />
+                      </TransformComponent>
+                    </div>
+                  )}
+                </TransformWrapper>
+              </motion.div>
             </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
+
+      {/* MODAL PARA EDITAR INFORMACIÓN (TÍTULO Y DESCRIPCIÓN) */}
+      {mounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {modalEditar && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 999999 }}
+              className="flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+              onClick={() => !guardandoEdicion && setModalEditar(null)}
+            >
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden text-slate-900"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                  <div>
+                    <h3 className="font-black uppercase italic text-sm text-slate-800">Editar Archivo</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Actualiza los detalles</p>
+                  </div>
+                  <button 
+                    onClick={() => setModalEditar(null)}
+                    disabled={guardandoEdicion}
+                    className="p-2 bg-white border border-slate-200 text-slate-400 hover:text-slate-800 rounded-xl transition-all"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Título del archivo</label>
+                    <input 
+                      type="text" 
+                      value={editTitulo}
+                      onChange={(e) => setEditTitulo(e.target.value)}
+                      placeholder="Ej: RADIOGRAFÍA PANORÁMICA"
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-xs font-bold text-slate-800 outline-none focus:border-blue-500 focus:bg-white transition-all uppercase"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Descripción (Opcional)</label>
+                    <textarea 
+                      value={editDescripcion}
+                      onChange={(e) => setEditDescripcion(e.target.value)}
+                      placeholder="Agrega notas o detalles sobre este documento..."
+                      rows={4}
+                      className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-xs text-slate-700 outline-none focus:border-blue-500 focus:bg-white transition-all resize-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3">
+                  <button 
+                    onClick={() => setModalEditar(null)}
+                    disabled={guardandoEdicion}
+                    className="flex-1 py-3 bg-white border-2 border-slate-200 text-slate-500 rounded-xl font-black text-[10px] uppercase hover:bg-slate-100 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    onClick={guardarEdicion}
+                    disabled={guardandoEdicion}
+                    className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                  >
+                    {guardandoEdicion ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                    {guardandoEdicion ? 'Guardando...' : 'Guardar'}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </div>
   )
 }
