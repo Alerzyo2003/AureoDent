@@ -24,7 +24,6 @@ export default function PagosPage() {
     setCargando(true)
     
     try {
-      // 1. Obtenemos el catálogo de profesionales (Como respaldo)
       const { data: profs } = await supabase.from('profesionales').select('user_id, nombre, apellido');
       
       const getDentista = (id: string) => {
@@ -33,7 +32,6 @@ export default function PagosPage() {
           return doc ? `Dr. ${doc.apellido}` : 'Sin asignar';
       }
 
-      // 2. Traer todos los pagos cruzando explícitamente con el Perfil del Doctor
       const { data: resPagos, error } = await supabase
         .from('pagos')
         .select(`
@@ -57,7 +55,6 @@ export default function PagosPage() {
       const consolidado: any[] = []
 
       resPagos?.forEach((p: any) => {
-        // 🔥 ARMADO INTELIGENTE DEL DETALLE DEL TRATAMIENTO 🔥
         let detallePrestacion = 'Abono General';
         let nombrePresupuesto = p.presupuestos?.nombre_tratamiento || 'Tratamiento Clínico';
         let doctorJSON = null;
@@ -70,19 +67,18 @@ export default function PagosPage() {
             detallePrestacion = nombreReal;
             
             if (p.presupuesto_items.diente_id) {
-               detallePrestacion += ` (Pieza: ${p.presupuesto_items.diente_id}`;
-               if (p.presupuesto_items.cara) detallePrestacion += ` - Cara: ${p.presupuesto_items.cara}`;
-               detallePrestacion += `)`;
+                detallePrestacion += ` (Pieza: ${p.presupuesto_items.diente_id}`;
+                if (p.presupuesto_items.cara) detallePrestacion += ` - Cara: ${p.presupuesto_items.cara}`;
+                detallePrestacion += `)`;
             }
         } else if (p.comentario) {
             try { 
                 const parsed = JSON.parse(p.comentario);
                 detallePrestacion = parsed[0]?.prestacion || p.comentario;
-                doctorJSON = parsed[0]?.doctor; // Extraemos el doctor del JSON si existe
+                doctorJSON = parsed[0]?.doctor;
             } catch(e) { detallePrestacion = p.comentario }
         }
 
-        // 🔥 ASIGNACIÓN BLINDADA DEL ESPECIALISTA 🔥
         let doctorFinal = 'Sin asignar';
         if (p.receptor?.nombre_completo) {
             doctorFinal = `Dr/a. ${p.receptor.nombre_completo}`;
@@ -134,7 +130,7 @@ export default function PagosPage() {
     );
 
     if (!enviarASaldo) {
-      return; // Si el usuario aprieta "Cancelar", no hacemos nada.
+      return;
     }
     
     const toastId = toast.loading("Reversando finanzas y restaurando deuda...");
@@ -159,8 +155,6 @@ export default function PagosPage() {
       }
 
       if (pago.paciente_id) {
-         // Solo se suma a la billetera si el pago era de un tratamiento.
-         // Si era un abono libre, el dinero ya estaba en la billetera, por lo que no se toca.
          if (pago.item_id) {
              const { data: pacActual } = await supabase.from('pacientes').select('saldo_a_favor').eq('id', pago.paciente_id).single();
              const saldoActual = Number(pacActual?.saldo_a_favor || 0);
@@ -193,66 +187,68 @@ export default function PagosPage() {
   }
 
   if (!mounted || cargando) return (
-    <div className="h-screen flex flex-col items-center justify-center bg-[#F8FAFC] gap-4">
-      <Loader2 className="animate-spin text-blue-600" size={40} />
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Consolidando Caja Global...</p>
+    <div className="h-screen flex flex-col items-center justify-center gap-4 bg-slate-50">
+      <Loader2 className="animate-spin text-blue-600" size={45} />
+      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 italic">Consolidando Caja Global...</p>
     </div>
   )
 
   return (
-    <main className="min-h-screen bg-[#F8FAFC] p-8 pb-20 font-sans text-left">
-      <div className="max-w-screen-2xl mx-auto space-y-10 text-left">
+    <main className="min-h-screen p-6 md:p-10 font-sans text-left pb-24" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
+      <div className="max-w-screen-2xl mx-auto space-y-8 text-left">
         
-        <header className="bg-white p-10 rounded-[3rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 text-left">
-          <div className="flex items-center gap-6 text-left">
-            <div className="bg-emerald-500 p-5 rounded-[2rem] text-white shadow-xl shadow-emerald-100">
-              <Wallet size={32} />
+        {/* HEADER PRINCIPAL */}
+        <header className="bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-white/60 flex flex-col md:flex-row justify-between items-start md:items-center gap-6 text-left">
+          <div className="flex items-center gap-4 text-left">
+            <div className="bg-gradient-to-br from-emerald-500 to-emerald-700 p-4 rounded-[1.5rem] text-white shadow-xl shadow-emerald-500/20">
+              <Wallet size={28} strokeWidth={2.5} />
             </div>
             <div className="text-left">
-              <h1 className="text-3xl font-black text-slate-800 uppercase italic leading-none text-left">Registro de Pagos</h1>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.3em] mt-3 text-left">Auditoría completa de movimientos e ingresos</p>
+              <h1 className="text-2xl font-black text-slate-800 uppercase italic leading-none text-left">Registro de Pagos</h1>
+              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1 text-left">Auditoría completa de movimientos e ingresos</p>
             </div>
           </div>
           <button 
             onClick={() => window.print()}
-            className="bg-slate-900 text-white px-10 py-5 rounded-3xl font-black text-xs uppercase shadow-xl hover:bg-blue-600 transition-all flex items-center gap-2 active:scale-95 text-left"
+            className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-7 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:from-slate-900 hover:to-slate-900 transition-all flex items-center gap-2 border border-blue-500 text-left"
           >
-            <Download size={18} /> Exportar
+            <Download size={16} strokeWidth={2.5} /> Exportar
           </button>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
-          <StatCard label="Ingresos Totales" value={`$${stats.total.toLocaleString('es-CL')}`} icon={<DollarSign size={24} />} color="text-emerald-600" bg="bg-emerald-50" trend="Total percibido" />
-          <StatCard label="Promedio Transacción" value={`$${Math.round(stats.promedio).toLocaleString('es-CL')}`} icon={<TrendingUp size={24} />} color="text-blue-600" bg="bg-blue-50" trend="Ticket medio" />
-          <StatCard label="Movimientos" value={stats.cantidad.toString()} icon={<Receipt size={24} />} color="text-purple-600" bg="bg-purple-50" trend="Operaciones totales" />
+        {/* TARJETAS DE ESTADÍSTICAS */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+          <StatCard label="Ingresos Totales" value={`$${stats.total.toLocaleString('es-CL')}`} icon={<DollarSign size={24} strokeWidth={2.5} />} color="text-emerald-600" bg="bg-emerald-50/80 border border-emerald-100" trend="Total percibido" />
+          <StatCard label="Promedio Transacción" value={`$${Math.round(stats.promedio).toLocaleString('es-CL')}`} icon={<TrendingUp size={24} strokeWidth={2.5} />} color="text-blue-600" bg="bg-blue-50/80 border border-blue-100" trend="Ticket medio" />
+          <StatCard label="Movimientos" value={stats.cantidad.toString()} icon={<Receipt size={24} strokeWidth={2.5} />} color="text-purple-600" bg="bg-purple-50/80 border border-purple-100" trend="Operaciones totales" />
         </div>
 
-        <section className="bg-white rounded-[3.5rem] shadow-sm border border-slate-100 overflow-hidden text-left">
+        {/* TABLA GLOBAL DE PAGOS */}
+        <section className="bg-white/90 backdrop-blur-xl rounded-[2.5rem] shadow-xl border border-white/60 overflow-hidden text-left">
           <div className="overflow-x-auto text-left">
-            <table className="w-full text-left">
+            <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-slate-50/50 text-slate-400 text-[10px] font-black uppercase tracking-widest text-left border-b border-slate-100">
-                  <th className="p-6 text-left whitespace-nowrap">Fecha y Caja</th>
-                  <th className="p-6 text-left">Paciente</th>
-                  <th className="p-6 text-left">Dr / Especialista</th>
-                  <th className="p-6 text-left">Detalle de Prestación</th>
-                  <th className="p-6 text-left">Información de Pago</th>
-                  <th className="p-6 text-right">Monto</th>
-                  <th className="p-6 text-center">Acciones</th>
+                <tr className="bg-slate-900 text-white text-[9px] font-black uppercase tracking-[0.2em] text-left">
+                  <th className="px-6 py-5 text-left whitespace-nowrap">Fecha y Caja</th>
+                  <th className="px-6 py-5 text-left">Paciente</th>
+                  <th className="px-6 py-5 text-left">Dr / Especialista</th>
+                  <th className="px-6 py-5 text-left">Detalle de Prestación</th>
+                  <th className="px-6 py-5 text-left">Información de Pago</th>
+                  <th className="px-6 py-5 text-right">Monto</th>
+                  <th className="px-6 py-5 text-center">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-50 text-left">
+              <tbody className="divide-y divide-slate-100 text-left">
                 {pagos.length > 0 ? pagos.map((p, index) => (
                   <motion.tr 
                     key={`pago-${p.id}-${index}`}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: index * 0.01 }}
-                    className="hover:bg-slate-50 transition-colors group text-left align-top"
+                    className="hover:bg-blue-50/40 transition-colors group text-left align-top"
                   >
-                    {/* FECHA Y CAJA */}
-                    <td className="p-6 text-left">
-                      <div className="flex flex-col gap-1.5 text-left">
+                    <td className="px-6 py-5 text-left">
+                      <div className="flex flex-col gap-1 text-left">
                         <span className="text-xs font-black text-slate-800 text-left whitespace-nowrap">
                           {p.fecha ? new Date(p.fecha).toLocaleString('es-CL', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'S/F'}
                         </span>
@@ -263,16 +259,14 @@ export default function PagosPage() {
                       </div>
                     </td>
                     
-                    {/* PACIENTE */}
-                    <td className="p-6 text-left">
+                    <td className="px-6 py-5 text-left">
                         <div className="flex flex-col text-left">
                             <span className="font-black text-slate-800 uppercase text-xs text-left leading-tight">{p.paciente}</span>
                             <span className="text-[10px] font-bold text-slate-400 mt-1">{p.rut_paciente}</span>
                         </div>
                     </td>
                     
-                    {/* ESPECIALISTA */}
-                    <td className="p-6 text-left">
+                    <td className="px-6 py-5 text-left">
                       <div className="flex items-center gap-2">
                         <Stethoscope size={14} className="text-slate-400 shrink-0" />
                         <span className={`text-[10px] font-black uppercase ${p.dentista === 'Sin asignar' ? 'text-slate-400 italic' : 'text-blue-600'}`}>
@@ -281,8 +275,7 @@ export default function PagosPage() {
                       </div>
                     </td>
 
-                    {/* DETALLE PRESTACIÓN */}
-                    <td className="p-6 text-left">
+                    <td className="px-6 py-5 text-left">
                        <div className="flex flex-col gap-1 text-left max-w-sm">
                           <span className="text-xs font-bold text-slate-700 leading-tight">
                              {p.detalle_prestacion}
@@ -293,38 +286,35 @@ export default function PagosPage() {
                        </div>
                     </td>
 
-                    {/* METODO DE PAGO Y BOLETA */}
-                    <td className="p-6 text-left">
+                    <td className="px-6 py-5 text-left">
                         <div className="flex flex-col gap-2">
-                            <span className={`flex items-center gap-1.5 px-2.5 py-1 w-fit rounded-md text-[9px] font-black uppercase tracking-widest border ${
-                                p.metodo_pago?.toLowerCase() === 'efectivo' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                                p.metodo_pago?.toLowerCase() === 'transferencia' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' :
-                                p.metodo_pago?.toLowerCase() === 'saldo a favor' ? 'bg-purple-50 text-purple-600 border-purple-100' :
-                                'bg-slate-100 text-slate-600 border-slate-200'
+                            <span className={`flex items-center gap-1.5 px-3 py-1 w-fit rounded-lg text-[9px] font-black uppercase tracking-widest border shadow-sm ${
+                                p.metodo_pago?.toLowerCase() === 'efectivo' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                                p.metodo_pago?.toLowerCase() === 'transferencia' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                                p.metodo_pago?.toLowerCase() === 'saldo a favor' ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                                'bg-slate-100 text-slate-700 border-slate-200'
                             }`}>
                                 {p.metodo_pago?.toLowerCase() === 'efectivo' ? <Banknote size={12} /> : <CreditCard size={12} />}
                                 {p.metodo_pago}
                             </span>
                             
-                            <span className="flex items-center gap-1.5 px-2.5 py-1 w-fit bg-slate-50 text-slate-500 rounded-md text-[9px] font-black uppercase tracking-widest border border-slate-200">
+                            <span className="flex items-center gap-1.5 px-3 py-1 w-fit bg-slate-50 text-slate-600 rounded-lg text-[9px] font-black uppercase tracking-widest border border-slate-200/80 shadow-sm">
                                 <Receipt size={12} /> N°: {p.numero_boleta}
                             </span>
                         </div>
                     </td>
 
-                    {/* MONTO */}
-                    <td className="p-6 text-right font-black text-emerald-600 text-lg align-middle">
+                    <td className="px-6 py-5 text-right font-black text-emerald-600 text-base align-middle">
                       ${p.monto.toLocaleString('es-CL')}
                     </td>
 
-                    {/* ACCIONES */}
-                    <td className="p-6 text-center align-middle">
+                    <td className="px-6 py-5 text-center align-middle">
                         <button 
                           onClick={() => handleAnularPago(p)}
-                          className="bg-white border border-red-100 text-red-400 hover:text-white hover:bg-red-500 hover:border-red-500 p-2.5 rounded-xl transition-all shadow-sm mx-auto flex items-center justify-center group"
+                          className="bg-white border border-red-200 text-red-400 hover:text-white hover:bg-red-500 hover:border-red-500 p-2.5 rounded-xl transition-all shadow-sm mx-auto flex items-center justify-center group"
                           title="Anular pago y restaurar deuda"
                         >
-                          <Trash2 size={16} className="group-hover:scale-110 transition-transform"/>
+                          <Trash2 size={16} className="group-hover:scale-110 transition-transform" strokeWidth={2.5}/>
                         </button>
                     </td>
                   </motion.tr>
@@ -340,16 +330,16 @@ export default function PagosPage() {
           </div>
         </section>
       </div>
-    </main>
+   </main>
   )
 }
 
 function StatCard({ label, value, icon, color, bg, trend }: any) {
   return (
-    <motion.div whileHover={{ y: -5 }} className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col gap-6 relative overflow-hidden text-left">
+    <motion.div whileHover={{ y: -5 }} className="bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/60 shadow-xl flex flex-col gap-6 relative overflow-hidden text-left">
       <div className="flex justify-between items-start relative z-10 text-left">
-        <div className={`${bg} ${color} p-4 rounded-2xl`}>{icon}</div>
-        <div className="text-[9px] font-black text-slate-300 uppercase bg-slate-50 px-3 py-1 rounded-full text-left">{trend}</div>
+        <div className={`${bg} ${color} p-4 rounded-2xl shadow-sm`}>{icon}</div>
+        <div className="text-[9px] font-black text-slate-400 uppercase bg-slate-100/80 px-3.5 py-1.5 rounded-full text-left tracking-wider">{trend}</div>
       </div>
       <div className="relative z-10 text-left">
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 text-left">{label}</p>
