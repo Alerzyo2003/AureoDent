@@ -189,11 +189,11 @@ export default function LoginPage() {
             transition={{ duration: 0.7, delay: 0.15 }}
             className="flex flex-col items-center mb-8"
           >
-            <div className="relative w-28 mb-5 mt-2">
-              {/* Aquí se sube la línea del halo */}
-              <div className="-translate-y-4">
-                <TopHalo />
-              </div>
+            <div className="relative w-38 mb-5 mt-1">
+  {/* Agregamos este div con -translate-y-4 para subir la línea */}
+  <div className="-translate-y-6"> 
+    <TopHalo />
+  </div>
               
               {/* El contenedor ancla el círculo del diente al centro absoluto */}
               <div className="absolute left-1/2 bottom-0 -translate-x-1/2 translate-y-0 flex items-center justify-center">
