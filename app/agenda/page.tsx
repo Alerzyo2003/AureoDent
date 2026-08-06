@@ -1192,17 +1192,17 @@ export default function AgendaPage() {
         <div className="grid grid-cols-2 lg:flex lg:flex-wrap items-center gap-2 sm:gap-3 w-full xl:w-auto mt-4 xl:mt-0">
           {puedeVerFinanzas && (
             <button onClick={() => setModalBloqueo(true)} className="w-full lg:w-auto justify-center px-2 md:px-5 py-2.5 md:py-2.5 rounded-lg border border-red-200 text-red-500 text-[10px] md:text-[11px] font-bold uppercase tracking-wider hover:bg-red-50 transition-colors flex items-center gap-2 bg-white">
-              <Lock size={14} className="md:w-[14px] md:h-[14px]"/> Bloquear
+              <Lock className="md:w-[14px] md:h-[14px]" size={14} /> Bloquear
             </button>
           )}
           <Link href="/semana" className="w-full lg:w-auto justify-center px-2 md:px-5 py-2.5 md:py-2.5 rounded-lg border border-[#C9A24B]/30 text-slate-600 text-[10px] md:text-[11px] font-bold uppercase tracking-wider hover:bg-[#C9A24B]/5 transition-colors flex items-center gap-2 bg-white">
-            <CalendarDays size={14} className="text-[#C9A24B] md:w-[14px] md:h-[14px]"/> <span className="truncate">Semana</span>
+            <CalendarDays className="text-[#C9A24B] md:w-[14px] md:h-[14px]" size={14} /> <span className="truncate">Semana</span>
           </Link>
           <button onClick={() => { fetchCitasHuerfanas(); setModalHuerfanasAbierto(true); }} className="w-full lg:w-auto justify-center px-2 md:px-5 py-2.5 md:py-2.5 rounded-lg border border-amber-200 text-slate-600 text-[10px] md:text-[11px] font-bold uppercase tracking-wider hover:bg-amber-50 transition-colors flex items-center gap-2 bg-white">
-            <AlertTriangle size={14} className="text-amber-500 md:w-[14px] md:h-[14px]" /> Huérfanas
+            <AlertTriangle className="text-amber-500 md:w-[14px] md:h-[14px]" size={14} /> Huérfanas
           </button>
           <button onClick={() => { resetEstados(); setModalAbierto(true); }} className="w-full lg:w-auto justify-center px-2 md:px-6 py-2.5 md:py-2.5 rounded-lg font-bold text-[10px] md:text-[11px] uppercase tracking-wider shadow-md transition-all flex items-center gap-2 text-[#0A111F] bg-[#C9A24B] hover:bg-[#B38D3A]">
-            <Plus size={14} strokeWidth={3} className="md:w-[14px] md:h-[14px]"/> Agendar
+            <Plus className="md:w-[14px] md:h-[14px]" size={14} strokeWidth={3} /> Agendar
           </button>
         </div>
       </div>
@@ -1222,10 +1222,10 @@ export default function AgendaPage() {
         {/* Toggle Día / Semana */}
         <div className="flex items-center justify-between bg-white rounded-full p-1 border border-slate-200 shadow-sm w-full md:w-auto">
           <button onClick={() => setVistaAgenda('dia')} className={`flex-1 justify-center px-4 md:px-6 py-2.5 md:py-2 rounded-full text-sm md:text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${vistaAgenda === 'dia' ? 'bg-[#C9A24B] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-            <List size={16} className="md:w-[14px] md:h-[14px]"/> Día
+            <List className="md:w-[14px] md:h-[14px]" size={16} /> Día
           </button>
           <button onClick={() => setVistaAgenda('semana')} className={`flex-1 justify-center px-4 md:px-6 py-2.5 md:py-2 rounded-full text-sm md:text-[11px] font-bold uppercase tracking-wider transition-all flex items-center gap-2 ${vistaAgenda === 'semana' ? 'bg-[#C9A24B] text-white shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
-            <LayoutGrid size={16} className="md:w-[14px] md:h-[14px]"/> Semana
+            <LayoutGrid className="md:w-[14px] md:h-[14px]" size={16} /> Semana
           </button>
         </div>
 
@@ -1235,7 +1235,7 @@ export default function AgendaPage() {
             const newDate = new Date(selectedDate);
             newDate.setDate(newDate.getDate() - (vistaAgenda === 'semana' ? 7 : 1));
             setSelectedDate(newDate);
-          }} className="p-2 text-slate-400 hover:text-[#0A111F] transition-colors"><ChevronLeft size={20} className="md:w-[16px] md:h-[16px]"/></button>
+          }} className="p-2 text-slate-400 hover:text-[#0A111F] transition-colors"><ChevronLeft className="md:w-[16px] md:h-[16px]" size={20} /></button>
           
           <div className="flex-1 relative flex items-center justify-center px-4 md:px-6 cursor-pointer group" onClick={() => dateInputRef.current?.showPicker()}>
              <CalendarIcon size={16} className="mr-2 text-slate-400 shrink-0" />
@@ -1249,14 +1249,14 @@ export default function AgendaPage() {
             const newDate = new Date(selectedDate);
             newDate.setDate(newDate.getDate() + (vistaAgenda === 'semana' ? 7 : 1));
             setSelectedDate(newDate);
-          }} className="p-2 text-slate-400 hover:text-[#0A111F] transition-colors"><ChevronRight size={20} className="md:w-[16px] md:h-[16px]"/></button>
+          }} className="p-2 text-slate-400 hover:text-[#0A111F] transition-colors"><ChevronRight className="md:w-[16px] md:h-[16px]" size={20} /></button>
         </div>
       </div>
 
       {/* BUSCADOR Y BADGE */}
       <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-center gap-4 mb-8 text-left">
          <div className="relative w-full max-w-full sm:max-w-lg group">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-[#C9A24B] transition-colors" size={18} />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 md:w-[18px] md:h-[18px]" size={20} />
             <input 
                type="text" 
                placeholder="Buscar por paciente o RUT..." 
@@ -1266,7 +1266,7 @@ export default function AgendaPage() {
             />
          </div>
          <div className="bg-white text-slate-700 px-6 py-3.5 md:py-3 rounded-full border border-slate-200 shadow-sm flex items-center justify-center sm:justify-start gap-2 shrink-0 w-full sm:w-auto">
-            <CalendarDays size={18} className="text-[#C9A24B] md:w-[16px] md:h-[16px]" />
+            <CalendarDays className="text-[#C9A24B] md:w-[16px] md:h-[16px]" size={18} />
             <span className="font-bold text-sm md:text-xs uppercase tracking-widest">{citasFiltradas.length} Citas hoy</span>
          </div>
       </div>
@@ -1345,13 +1345,13 @@ export default function AgendaPage() {
     }`}
     title="Ver motivo de la cita"
 >
-    <MessageSquareText size={18} className="md:w-[15px] md:h-[15px]"/>
+    <MessageSquareText className="md:w-[15px] md:h-[15px]" size={18} />
 </button>
 </div>
 <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs font-semibold text-slate-400 uppercase">
     <span>RUT: {c.pacientes?.rut || 'S/N'}</span>
     <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
-    <span className="flex items-center gap-1"><User size={14} className="text-slate-400 md:w-[12px] md:h-[12px]"/> Dr. {doctor?.apellido || 'S/A'}</span>
+    <span className="flex items-center gap-1"><User className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> Dr. {doctor?.apellido || 'S/A'}</span>
 </div>
 
 <AnimatePresence>
@@ -1397,7 +1397,7 @@ export default function AgendaPage() {
     <select value={c.estado || 'programada'} onChange={(e) => actualizarEstadoCita(c.id, e.target.value)} className={`appearance-none bg-transparent outline-none cursor-pointer pr-5 font-black ${estadoConfig.text} text-base md:text-[10px]`}>
     {Object.entries(ESTADOS_CITA).map(([key, val]) => ( <option key={key} value={key} className="text-slate-800 bg-white">{val.label.toUpperCase()}</option> ))}
     </select>
-    <ChevronDown size={14} className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${estadoConfig.text} opacity-60 md:w-[12px] md:h-[12px]`}/>
+    <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${estadoConfig.text} opacity-60 md:w-[12px] md:h-[12px]`} size={14} />
 </div>
                         </div>
 
@@ -1420,15 +1420,15 @@ export default function AgendaPage() {
                         </div>
 
                         <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-start sm:justify-end">
-                            <button onClick={() => iniciarReprogramacion(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-[#C9A24B] hover:bg-slate-50 transition-colors" title="Reprogramar"><CalendarClock size={18} className="md:w-[16px] md:h-[16px]"/></button>
-                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-emerald-500 hover:bg-slate-50 transition-colors" title="WhatsApp"><MessageCircle size={18} className="md:w-[16px] md:h-[16px]"/></button>
-                            <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-blue-500 hover:bg-slate-50 transition-colors" title="Enviar Presupuesto"><FileText size={18} className="md:w-[16px] md:h-[16px]"/></button>
+                            <button onClick={() => iniciarReprogramacion(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-[#C9A24B] hover:bg-slate-50 transition-colors" title="Reprogramar"><CalendarClock className="md:w-[16px] md:h-[16px]" size={18} /></button>
+                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-emerald-500 hover:bg-slate-50 transition-colors" title="WhatsApp"><MessageCircle className="md:w-[16px] md:h-[16px]" size={18} /></button>
+                            <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-blue-500 hover:bg-slate-50 transition-colors" title="Enviar Presupuesto"><FileText className="md:w-[16px] md:h-[16px]" size={18} /></button>
                             
                             {puedeVerFinanzas && (
-                            <button onClick={() => abrirCaja(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-amber-500 hover:bg-slate-50 transition-colors" title="Caja/Cobrar"><Coins size={18} className="md:w-[16px] md:h-[16px]"/></button>
+                            <button onClick={() => abrirCaja(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-amber-500 hover:bg-slate-50 transition-colors" title="Caja/Cobrar"><Coins className="md:w-[16px] md:h-[16px]" size={18} /></button>
                             )}
                             
-                            <button onClick={() => handleEliminarCita(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-red-500 hover:bg-red-50 transition-colors" title="Eliminar"><Trash2 size={18} className="md:w-[16px] md:h-[16px]"/></button>
+                            <button onClick={() => handleEliminarCita(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-red-500 hover:bg-red-50 transition-colors" title="Eliminar"><Trash2 className="md:w-[16px] md:h-[16px]" size={18} /></button>
                             
                             <Link href={`/pacientes/${c.paciente_id}`} className="ml-auto sm:ml-2 text-xs md:text-[10px] font-black text-blue-600 px-4 py-2 uppercase tracking-widest hover:bg-blue-50 rounded-lg transition-colors">
                             FICHA
@@ -1499,11 +1499,11 @@ export default function AgendaPage() {
                                           
                                           {/* Overlay Hover Actions */}
                                           <div className="absolute inset-0 bg-white/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 md:gap-1">
-                                              <button onClick={(e) => { e.stopPropagation(); iniciarReprogramacion(c); }} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><CalendarClock size={16} className="md:w-[14px] md:h-[14px]"/></button>
-                                              <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><FileText size={16} className="md:w-[14px] md:h-[14px]"/></button>
-                                              <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 md:p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle size={16} className="md:w-[14px] md:h-[14px]"/></button>
+                                              <button onClick={(e) => { e.stopPropagation(); iniciarReprogramacion(c); }} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><CalendarClock className="md:w-[14px] md:h-[14px]" size={16} /></button>
+                                              <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><FileText className="md:w-[14px] md:h-[14px]" size={16} /></button>
+                                              <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 md:p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               {puedeVerFinanzas && (
-                                                  <button onClick={(e) => { e.stopPropagation(); abrirCaja(c); }} className="p-2 md:p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 rounded-md transition-all"><Coins size={16} className="md:w-[14px] md:h-[14px]"/></button>
+                                                  <button onClick={(e) => { e.stopPropagation(); abrirCaja(c); }} className="p-2 md:p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 rounded-md transition-all"><Coins className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               )}
                                           </div>
                                       </motion.div>
@@ -1535,7 +1535,7 @@ export default function AgendaPage() {
                             <p className="text-[10px] md:text-[9px] font-bold uppercase tracking-widest mt-1" style={{ color: GOLD }}>Pre-armado automático</p>
                           </div>
                        </div>
-                       <button onClick={() => setModalEnvioPresupuesto({...modalEnvioPresupuesto, abierto: false})} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X size={20} className="md:w-[18px] md:h-[18px]"/></button>
+                       <button onClick={() => setModalEnvioPresupuesto({...modalEnvioPresupuesto, abierto: false})} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X className="md:w-[18px] md:h-[18px]" size={20} /></button>
                     </div>
                     <div className="p-6 md:p-8 space-y-4">
                         <p className="text-sm md:text-xs font-bold text-slate-500 leading-relaxed">Puedes editar el texto antes de enviarlo. Al hacer clic en enviar, se abrirá WhatsApp Web/Móvil con este mensaje listo para tu paciente <span className="font-black text-slate-800">{modalEnvioPresupuesto.cita?.pacientes?.nombre}</span>.</p>
@@ -1555,7 +1555,7 @@ export default function AgendaPage() {
                            }} 
                            className="w-full py-4 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
                        >
-                          <MessageCircle size={18} className="md:w-[16px] md:h-[16px]"/> Abrir WhatsApp y Enviar
+                          <MessageCircle className="md:w-[16px] md:h-[16px]" size={18} /> Abrir WhatsApp y Enviar
                        </button>
                     </div>
                  </motion.div>
@@ -1575,7 +1575,7 @@ export default function AgendaPage() {
                             <p className="text-[10px] md:text-[9px] font-bold uppercase tracking-widest mt-1" style={{ color: GOLD }}>Elige qué plan enviar</p>
                           </div>
                       </div>
-                      <button onClick={() => setModalSeleccionTratamiento({abierto: false, cita: null, tratamientos: []})} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X size={20} className="md:w-[18px] md:h-[18px]"/></button>
+                      <button onClick={() => setModalSeleccionTratamiento({abierto: false, cita: null, tratamientos: []})} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X className="md:w-[18px] md:h-[18px]" size={20} /></button>
                     </div>
                     <div className="p-6 md:p-8 space-y-3 max-h-[60vh] overflow-y-auto custom-scrollbar">
                         <p className="text-sm md:text-xs font-bold text-slate-500 leading-relaxed">El paciente tiene varios planes de tratamiento. Por favor, selecciona cuál de ellos deseas enviar por WhatsApp.</p>
@@ -1589,7 +1589,7 @@ export default function AgendaPage() {
                               className="w-full p-5 rounded-2xl bg-slate-50 border border-slate-200 hover:border-[#C9A24B] hover:bg-[#C9A24B]/5 transition-all flex items-center justify-between group text-left"
                             >
                               <span className="font-black text-sm uppercase text-slate-800 group-hover:text-[#8A6D2F]">{t.nombre_tratamiento || 'Tratamiento sin nombre'}</span>
-                              <ChevronRightIcon size={20} className="text-slate-300 group-hover:text-[#C9A24B] group-hover:translate-x-1 transition-transform" />
+                              <ChevronRightIcon className="text-slate-300 group-hover:text-[#C9A24B] group-hover:translate-x-1 transition-transform" size={20} />
                             </button>
                         ))}
                     </div>
@@ -1610,7 +1610,7 @@ export default function AgendaPage() {
                             <p className="text-[10px] md:text-[9px] font-bold uppercase tracking-widest mt-1" style={{ color: GOLD }}>Bloquea turnos a pacientes</p>
                           </div>
                        </div>
-                       <button onClick={() => setModalBloqueo(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X size={20} className="md:w-[18px] md:h-[18px]"/></button>
+                       <button onClick={() => setModalBloqueo(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X className="md:w-[18px] md:h-[18px]" size={20} /></button>
                     </div>
                     <div className="p-6 md:p-8 space-y-6 overflow-y-auto">
                         <p className="text-sm md:text-xs font-bold text-slate-600 leading-relaxed">Se bloqueará la agenda para el <span className="font-black text-red-500">{selectedDate.toLocaleDateString('es-CL')}</span>.</p>
@@ -1650,7 +1650,7 @@ export default function AgendaPage() {
                     </div>
                     <div className="p-6 md:p-8 border-t border-slate-100 bg-white shrink-0 text-left sticky bottom-0 z-20">
                        <button onClick={handleGuardarBloqueoRapido} disabled={cargandoAccion || !motivoBloqueo.trim() || !profesionalBloqueo || (!bloqueoTodoElDia && (!horaInicioBloqueo || !horaFinBloqueo))} className="w-full py-4 bg-red-500 text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-md hover:bg-red-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                          {cargandoAccion ? <Loader2 className="animate-spin" size={16}/> : <Ban size={18} className="md:w-[16px] md:h-[16px]"/>} Confirmar Bloqueo
+                          {cargandoAccion ? <Loader2 className="animate-spin" size={16}/> : <Ban className="md:w-[16px] md:h-[16px]" size={18} />} Confirmar Bloqueo
                        </button>
                     </div>
                  </motion.div>
@@ -1670,7 +1670,7 @@ export default function AgendaPage() {
                             <p className="text-[11px] md:text-[10px] font-bold uppercase tracking-widest mt-1" style={{ color: GOLD }}>Paciente: {pacientePago?.nombre} {pacientePago?.apellido}</p>
                           </div>
                        </div>
-                       <button onClick={() => setModalPagoAbierto(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X size={24} className="md:w-[20px] md:h-[20px]"/></button>
+                       <button onClick={() => setModalPagoAbierto(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X className="md:w-[20px] md:h-[20px]" size={24} /></button>
                     </div>
 
                     <div className="p-6 md:p-8 bg-slate-50 flex-1 overflow-y-auto custom-scrollbar text-left text-slate-900">
@@ -1678,7 +1678,7 @@ export default function AgendaPage() {
                             <div className="py-12 flex justify-center"><Loader2 className="animate-spin text-slate-400" size={40}/></div>
                         ) : deudasPaciente.length === 0 ? (
                             <div className="py-12 text-center text-slate-400">
-                               <CheckCircle2 size={60} className="mx-auto text-emerald-400 mb-4 opacity-50"/>
+                               <CheckCircle2 className="mx-auto text-emerald-400 mb-4 opacity-50" size={60} />
                                <p className="text-base md:text-sm font-black uppercase tracking-widest text-slate-600">Al día</p>
                                <p className="text-sm md:text-xs mt-1">El paciente no tiene tratamientos aprobados con deuda pendiente.</p>
                             </div>
@@ -1760,7 +1760,7 @@ export default function AgendaPage() {
                           className="w-full py-5 md:py-5 rounded-[1.5rem] font-black text-sm md:text-xs uppercase tracking-widest shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 hover:brightness-110"
                           style={{ background: NAVY, color: GOLD_LIGHT }}
                        >
-                          {cargandoAccion ? <Loader2 className="animate-spin" size={20}/> : <Coins size={20} className="md:w-[18px] md:h-[18px]"/>}
+                          {cargandoAccion ? <Loader2 className="animate-spin" size={20}/> : <Coins className="md:w-[18px] md:h-[18px]" size={20} />}
                           Registrar Pago Seguro
                        </button>
                     </div>
@@ -1775,13 +1775,13 @@ export default function AgendaPage() {
                 <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-4xl max-h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative text-slate-900 text-left">
                   <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left" style={{ background: `linear-gradient(135deg, ${NAVY}, #081420)` }}>
                     <div className="flex items-center gap-4 md:gap-5 text-left">
-                      <div className="p-3 rounded-2xl shadow-sm" style={{ backgroundColor: 'rgba(245,180,60,0.15)', border: '1px solid rgba(245,180,60,0.6)' }}><AlertTriangle size={24} className="text-amber-300" /></div>
+                      <div className="p-3 rounded-2xl shadow-sm" style={{ backgroundColor: 'rgba(245,180,60,0.15)', border: '1px solid rgba(245,180,60,0.6)' }}><AlertTriangle className="text-amber-300" size={24} /></div>
                       <div>
                         <h2 className="font-display text-lg md:text-xl tracking-tight text-white leading-none text-left">Citas Huérfanas</h2>
                         <p className="text-[11px] md:text-[10px] font-bold uppercase tracking-widest mt-1" style={{ color: GOLD }}>Requieren Reagendamiento</p>
                       </div>
                     </div>
-                    <button onClick={() => setModalHuerfanasAbierto(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-all text-left"><X size={24} className="md:w-[20px] md:h-[20px]"/></button>
+                    <button onClick={() => setModalHuerfanasAbierto(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-all text-left"><X className="md:w-[20px] md:h-[20px]" size={24} /></button>
                   </div>
                   
                   <div className="flex-1 p-4 md:p-8 overflow-y-auto bg-slate-50/50 custom-scrollbar">
@@ -1792,7 +1792,7 @@ export default function AgendaPage() {
                       </div>
                     ) : citasHuerfanas.length === 0 ? (
                       <div className="h-full py-12 flex flex-col items-center justify-center text-slate-400 gap-4 opacity-60">
-                        <CheckCircle2 size={60} className="text-emerald-500" />
+                        <CheckCircle2 className="text-emerald-500" size={60} />
                         <p className="text-base md:text-sm font-black uppercase tracking-widest text-slate-600">No hay citas huérfanas</p>
                       </div>
                     ) : (
@@ -1814,7 +1814,7 @@ export default function AgendaPage() {
                                         <h4 className="font-black text-base md:text-sm text-slate-800 uppercase leading-none">{cita.pacientes?.nombre} {cita.pacientes?.apellido}</h4>
                                         <div className="flex flex-wrap items-center gap-2 mt-2">
                                         <span className="text-[10px] md:text-[9px] font-bold text-slate-500 tracking-widest bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">
-                                            <CalendarDays size={12} className="inline mr-1 md:w-[10px] md:h-[10px]"/> {fechaFormat}
+                                            <CalendarDays className="inline mr-1 md:w-[10px] md:h-[10px]" size={12} /> {fechaFormat}
                                         </span>
                                         </div>
                                     </div>
@@ -1832,10 +1832,10 @@ export default function AgendaPage() {
                                         setNuevoEspecialista(cita.profesional_id || profesionales[0]?.user_id || '');
                                         setSemanaInicioEdicion(getLunes(new Date()));
                                         }} className="flex-1 md:flex-none justify-center px-4 py-3 md:py-2 bg-amber-50 text-amber-600 text-xs md:text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white rounded-xl transition-all flex items-center gap-2 shadow-sm">
-                                        <CalendarClock size={16} className="md:w-[14px] md:h-[14px]" /> Reagendar
+                                        <CalendarClock className="md:w-[14px] md:h-[14px]" size={16} /> Reagendar
                                         </button>
                                         <button onClick={() => anularCitaDirecta(cita.id)} className="p-3 md:p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm">
-                                            <Ban size={18} className="md:w-[16px] md:h-[16px]" />
+                                            <Ban className="md:w-[16px] md:h-[16px]" size={18} />
                                         </button>
                                     </div>
                                     )}
@@ -1848,7 +1848,7 @@ export default function AgendaPage() {
                                         
                                         <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
                                             <div className="space-y-2 flex-1 w-full">
-                                            <label className="text-[11px] md:text-[9px] font-black uppercase ml-2 flex items-center gap-1" style={{ color: GOLD }}><UserCheck size={14} className="md:w-[12px] md:h-[12px]"/> Especialista a derivar</label>
+                                            <label className="text-[11px] md:text-[9px] font-black uppercase ml-2 flex items-center gap-1" style={{ color: GOLD }}><UserCheck className="md:w-[12px] md:h-[12px]" size={14} /> Especialista a derivar</label>
                                             <select className="w-full p-4 bg-white border border-[#C9A24B]/40 rounded-xl font-bold text-base md:text-xs outline-none text-slate-700" value={nuevoEspecialista} onChange={(e) => setNuevoEspecialista(e.target.value)}>
                                                 {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
                                             </select>
@@ -1860,17 +1860,17 @@ export default function AgendaPage() {
 
                                         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col">
                                             <div className="flex items-center justify-between mb-4 bg-white p-2 rounded-xl shadow-sm border border-slate-100">
-                                            <button onClick={prevWeekEdicion} className="p-3 md:p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronLeft size={20} className="md:w-[18px] md:h-[18px]"/></button>
+                                            <button onClick={prevWeekEdicion} className="p-3 md:p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronLeft className="md:w-[18px] md:h-[18px]" size={20} /></button>
                                             <span className="text-[11px] md:text-[10px] font-black text-slate-700 uppercase tracking-widest text-center px-2">
                                                 Semana del {semanaInicioEdicion.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}
                                             </span>
-                                            <button onClick={nextWeekEdicion} className="p-3 md:p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronRight size={20} className="md:w-[18px] md:h-[18px]"/></button>
+                                            <button onClick={nextWeekEdicion} className="p-3 md:p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-all"><ChevronRight className="md:w-[18px] md:h-[18px]" size={20} /></button>
                                             </div>
 
                                             <div className="flex gap-3 md:gap-2 overflow-x-auto pb-4 custom-scrollbar snap-x">
                                             {cargandoSlotsEdicion ? (
                                                 <div className="w-full py-10 flex flex-col items-center justify-center text-slate-400 gap-2">
-                                                <Loader2 className="animate-spin" size={28} className="md:w-[24px] md:h-[24px]"/>
+                                                <Loader2 className="animate-spin md:w-[24px] md:h-[24px]" size={28} />
                                                 </div>
                                             ) : (
                                                 dispoSemanaEdicion.map((dia, idx) => {
@@ -1918,7 +1918,7 @@ export default function AgendaPage() {
                                             <div className="flex flex-col sm:flex-row items-center gap-3 w-full md:w-auto">
                                                 <button onClick={() => setCitaEnEdicion(null)} className="w-full sm:w-auto px-6 py-4 md:py-3 text-[11px] md:text-[10px] font-black text-slate-400 uppercase hover:text-slate-700 transition-all border border-slate-200 sm:border-transparent rounded-xl">Cancelar</button>
                                                 <button onClick={() => reagendarCitaHuérfanaDirecta(cita.id)} disabled={cargandoAccion || !nuevaHora} className={`w-full sm:w-auto px-8 py-4 md:py-3 text-white text-[11px] md:text-[10px] font-black uppercase tracking-widest rounded-xl shadow-md flex items-center justify-center gap-2 transition-all ${nuevaHora ? 'bg-emerald-500 hover:bg-emerald-600 active:scale-95' : 'bg-slate-300 cursor-not-allowed'}`}>
-                                                {cargandoAccion ? <Loader2 className="animate-spin" size={16} className="md:w-[14px] md:h-[14px]"/> : <Save size={16} className="md:w-[14px] md:h-[14px]"/>} Confirmar
+                                                {cargandoAccion ? <Loader2 className="animate-spin md:w-[14px] md:h-[14px]" size={16} /> : <Save className="md:w-[14px] md:h-[14px]" size={16} />} Confirmar
                                                 </button>
                                             </div>
                                             </div>
@@ -1945,7 +1945,7 @@ export default function AgendaPage() {
                 <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-7xl h-full sm:max-h-[85vh] sm:rounded-[2.5rem] rounded-t-3xl shadow-2xl flex flex-col overflow-hidden relative text-slate-900 text-left">
                   <div className="p-5 md:p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left" style={{ background: `linear-gradient(135deg, ${NAVY}, #081420)` }}>
                     <div className="flex items-center gap-4 md:gap-5 text-left"><div className="p-2 md:p-3 rounded-2xl" style={{ backgroundColor: citaEnReprogramacion ? 'rgba(168,85,247,0.15)' : 'rgba(201,162,75,0.15)', border: citaEnReprogramacion ? '1px solid rgba(168,85,247,0.5)' : `1px solid ${GOLD}` }}><CalendarDays size={20} className={citaEnReprogramacion ? 'text-purple-300' : ''} style={!citaEnReprogramacion ? { color: GOLD_LIGHT } : undefined} /></div><h2 className="font-display text-lg md:text-xl tracking-tight text-white leading-none text-left">{citaEnReprogramacion ? 'Reagendar Cita' : 'Nueva Reserva'} • Paso {paso}</h2></div>
-                    <button onClick={() => { setModalAbierto(false); setCitaEnReprogramacion(null); }} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-all text-left"><X size={24} className="md:w-[20px] md:h-[20px]"/></button>
+                    <button onClick={() => { setModalAbierto(false); setCitaEnReprogramacion(null); }} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-all text-left"><X className="md:w-[20px] md:h-[20px]" size={24} /></button>
                   </div>
                   <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
                     {paso === 1 ? (
@@ -2034,9 +2034,9 @@ export default function AgendaPage() {
                           </div>
 
                           <div className="flex justify-between items-center mb-6 bg-white p-4 md:p-3 rounded-xl border border-slate-200 shadow-sm text-left">
-                            <button onClick={() => navegarSemana('atras')} className="flex items-center gap-1.5 px-4 md:px-3 py-2 md:py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg font-black text-xs md:text-[10px] uppercase text-slate-500 transition-all text-left"><ChevronLeft size={18} className="md:w-[14px] md:h-[14px]"/> <span className="hidden sm:inline">Ant.</span></button>
+                            <button onClick={() => navegarSemana('atras')} className="flex items-center gap-1.5 px-4 md:px-3 py-2 md:py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg font-black text-xs md:text-[10px] uppercase text-slate-500 transition-all text-left"><ChevronLeft className="md:w-[14px] md:h-[14px]" size={18} /> <span className="hidden sm:inline">Ant.</span></button>
                             <span className="font-black text-sm md:text-xs uppercase tracking-widest text-slate-600 text-center">Disponibilidad</span>
-                            <button onClick={() => navegarSemana('adelante')} className="flex items-center gap-1.5 px-4 md:px-3 py-2 md:py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg font-black text-xs md:text-[10px] uppercase text-slate-700 transition-all text-left"><span className="hidden sm:inline">Sig.</span> <ChevronRight size={18} className="md:w-[14px] md:h-[14px]"/></button>
+                            <button onClick={() => navegarSemana('adelante')} className="flex items-center gap-1.5 px-4 md:px-3 py-2 md:py-1.5 hover:bg-slate-50 border border-transparent hover:border-slate-200 rounded-lg font-black text-xs md:text-[10px] uppercase text-slate-700 transition-all text-left"><span className="hidden sm:inline">Sig.</span> <ChevronRight className="md:w-[14px] md:h-[14px]" size={18} /></button>
                           </div>
 
                           <div className="flex-1 overflow-x-auto overflow-y-auto w-full custom-scrollbar pb-12">
@@ -2094,7 +2094,7 @@ export default function AgendaPage() {
                     ) : (
                       <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white text-slate-900 text-left">
                         <div className="w-full md:w-1/2 border-r border-slate-200 p-6 md:p-12 bg-slate-50 overflow-y-auto space-y-6 text-left text-slate-900 custom-scrollbar">
-                            <h3 className="text-base md:text-sm font-black uppercase text-slate-700 flex items-center gap-2 text-left"><Timer size={18} className="md:w-[16px] md:h-[16px]"/> Ajustar Tiempos</h3>
+                            <h3 className="text-base md:text-sm font-black uppercase text-slate-700 flex items-center gap-2 text-left"><Timer className="md:w-[16px] md:h-[16px]" size={18} /> Ajustar Tiempos</h3>
                             {horasSeleccionadas.map((s, idx) => (
                               <div key={idx} className="bg-white p-5 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm text-left text-slate-900 group">
                                 <div>
@@ -2127,7 +2127,7 @@ export default function AgendaPage() {
                                     {duracionesDisponibles.map(d => <option key={d} value={d} className="text-slate-900">{d} min</option>)}
                                   </select>
                                   <button onClick={() => toggleHora(s.fecha, s.hora)} className="p-4 md:p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl md:rounded-full transition-all sm:opacity-0 sm:group-hover:opacity-100 bg-slate-50 sm:bg-transparent" title="Eliminar bloque">
-                                    <Trash2 size={20} className="md:w-[16px] md:h-[16px]" />
+                                    <Trash2 className="md:w-[16px] md:h-[16px]" size={20} />
                                   </button>
                                 </div>
                               </div>
@@ -2197,17 +2197,17 @@ export default function AgendaPage() {
                               ) : (
                                 <div className="text-left space-y-4 text-slate-900">
                                   <div className="relative group text-left">
-                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} className="md:w-[18px] md:h-[18px]"/>
+                                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 md:w-[18px] md:h-[18px]" size={20} />
                                     <input placeholder="Buscar por Nombre o RUT..." className="w-full p-4 md:p-4 pl-12 md:pl-12 bg-white border border-slate-200 rounded-2xl font-bold text-base md:text-xs outline-none focus:border-[#C9A24B] shadow-sm text-slate-900" value={busqueda} onChange={e => {setBusqueda(e.target.value); buscarPacientes(e.target.value);}} />
                                   </div>
-                                  {pacientesEncontrados.map(p => ( <button key={p.id} onClick={() => seleccionarPacienteExistente(p)} className="w-full p-5 rounded-2xl bg-white border border-slate-200 hover:border-[#C9A24B] shadow-sm transition-all flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="font-black text-base md:text-sm uppercase text-left">{p.nombre} {p.apellido}</p><p className="text-xs md:text-[10px] font-bold text-slate-400 text-left mt-1">{p.rut}</p></div><ChevronRightIcon size={20} className="text-slate-300 md:w-[16px] md:h-[16px]"/></button> ))}
-                                  {pacienteSeleccionado && pacientesEncontrados.length === 0 && ( <div className="p-5 rounded-2xl border border-[#C9A24B] bg-[#C9A24B]/5 flex items-center justify-between text-left text-slate-900"><p className="font-black text-base md:text-sm uppercase text-left" style={{ color: '#8A6D2F' }}>{pacienteSeleccionado.nombre} {pacienteSeleccionado.apellido}</p><CheckCircle2 style={{ color: '#C9A24B' }} size={24} className="md:w-[24px] md:h-[24px]"/></div> )}
+                                  {pacientesEncontrados.map(p => ( <button key={p.id} onClick={() => seleccionarPacienteExistente(p)} className="w-full p-5 rounded-2xl bg-white border border-slate-200 hover:border-[#C9A24B] shadow-sm transition-all flex items-center justify-between text-left"><div className="text-left text-slate-900"><p className="font-black text-base md:text-sm uppercase text-left">{p.nombre} {p.apellido}</p><p className="text-xs md:text-[10px] font-bold text-slate-400 text-left mt-1">{p.rut}</p></div><ChevronRightIcon className="text-slate-300 md:w-[16px] md:h-[16px]" size={20} /></button> ))}
+                                  {pacienteSeleccionado && pacientesEncontrados.length === 0 && ( <div className="p-5 rounded-2xl border border-[#C9A24B] bg-[#C9A24B]/5 flex items-center justify-between text-left text-slate-900"><p className="font-black text-base md:text-sm uppercase text-left" style={{ color: '#8A6D2F' }}>{pacienteSeleccionado.nombre} {pacienteSeleccionado.apellido}</p><CheckCircle2 className="md:w-[24px] md:h-[24px]" style={{ color: '#C9A24B' }} size={24} /></div> )}
                                 </div>
                               )}
                             </div>
                           )}
                             </div>
-                            {(pacienteSeleccionado || modoNuevoPaciente) && ( <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 md:p-6 bg-slate-900 rounded-2xl text-white shadow-xl text-left"><h4 className="text-[11px] md:text-[10px] font-black uppercase text-slate-400 mb-4 flex items-center gap-2 tracking-widest text-left"><Briefcase size={16} className="md:w-[14px] md:h-[14px]"/> Tratamiento</h4>{!modoNuevoPaciente && tratamientosPaciente.length > 0 ? ( <div className="space-y-3 text-left"><label className="text-[10px] md:text-[9px] font-bold text-slate-400 uppercase pl-1 text-left">Plan activo</label><select className="w-full p-4 bg-white/10 rounded-xl font-bold text-base md:text-xs outline-none border border-transparent focus:border-[#C9A24B] text-white appearance-none cursor-pointer" value={tratamientoSeleccionadoId || ''} onChange={(e) => { const val = e.target.value; setTratamientoSeleccionadoId(val); if (val !== 'MANUAL') { const t = tratamientosPaciente.find(x => x.id === val); setNuevoTratamientoNombre(t?.nombre_tratamiento || ''); } else setNuevoTratamientoNombre(''); }}>{tratamientosPaciente.map(t => <option key={t.id} value={t.id} className="text-slate-900">{t.nombre_tratamiento.toUpperCase()}</option>)}<option value="MANUAL" className="text-slate-900 italic">+ OTRO MOTIVO</option></select>{(tratamientoSeleccionadoId === 'MANUAL' || !tratamientoSeleccionadoId) && ( <input placeholder="Especifique motivo..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-base md:text-xs outline-none border border-transparent focus:border-[#C9A24B] text-white uppercase mt-4 md:mt-2 shadow-inner" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</div> ) : ( <input placeholder="Ej: Evaluación General, Urgencia..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-base md:text-xs outline-none border border-transparent focus:border-[#C9A24B] text-white uppercase" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</motion.div> )}
+                            {(pacienteSeleccionado || modoNuevoPaciente) && ( <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 md:p-6 bg-slate-900 rounded-2xl text-white shadow-xl text-left"><h4 className="text-[11px] md:text-[10px] font-black uppercase text-slate-400 mb-4 flex items-center gap-2 tracking-widest text-left"><Briefcase className="md:w-[14px] md:h-[14px]" size={16} /> Tratamiento</h4>{!modoNuevoPaciente && tratamientosPaciente.length > 0 ? ( <div className="space-y-3 text-left"><label className="text-[10px] md:text-[9px] font-bold text-slate-400 uppercase pl-1 text-left">Plan activo</label><select className="w-full p-4 bg-white/10 rounded-xl font-bold text-base md:text-xs outline-none border border-transparent focus:border-[#C9A24B] text-white appearance-none cursor-pointer" value={tratamientoSeleccionadoId || ''} onChange={(e) => { const val = e.target.value; setTratamientoSeleccionadoId(val); if (val !== 'MANUAL') { const t = tratamientosPaciente.find(x => x.id === val); setNuevoTratamientoNombre(t?.nombre_tratamiento || ''); } else setNuevoTratamientoNombre(''); }}>{tratamientosPaciente.map(t => <option key={t.id} value={t.id} className="text-slate-900">{t.nombre_tratamiento.toUpperCase()}</option>)}<option value="MANUAL" className="text-slate-900 italic">+ OTRO MOTIVO</option></select>{(tratamientoSeleccionadoId === 'MANUAL' || !tratamientoSeleccionadoId) && ( <input placeholder="Especifique motivo..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-base md:text-xs outline-none border border-transparent focus:border-[#C9A24B] text-white uppercase mt-4 md:mt-2 shadow-inner" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</div> ) : ( <input placeholder="Ej: Evaluación General, Urgencia..." className="w-full p-4 bg-white/10 rounded-xl font-bold text-base md:text-xs outline-none border border-transparent focus:border-[#C9A24B] text-white uppercase" value={nuevoTratamientoNombre} onChange={(e) => setNuevoTratamientoNombre(e.target.value)} /> )}</motion.div> )}
                         </div>
                       </div>
                     )}
@@ -2221,7 +2221,7 @@ export default function AgendaPage() {
                         <button onClick={() => { setModoNuevoPaciente(!modoNuevoPaciente); setPacienteSeleccionado(null); setBusqueda(''); setEsOtroDocumento(false); }} className="text-xs md:text-[10px] py-2 md:py-0 font-black text-[#C9A24B] uppercase underline sm:mr-4 text-center sm:text-left whitespace-nowrap w-full sm:w-auto">{paso === 2 && !citaEnReprogramacion && (modoNuevoPaciente ? 'Buscar Existente' : '+ Registrar Nuevo')}</button>
                         {paso === 2 && <button onClick={() => setPaso(1)} className="px-6 py-4 md:py-3.5 bg-white border border-slate-200 rounded-xl font-black text-xs md:text-[10px] uppercase text-slate-600 hover:bg-slate-100 shadow-sm transition-all text-center sm:text-left w-full sm:w-auto">Atrás</button>}
                         <button disabled={cargandoAccion || horasSeleccionadas.length === 0 || (paso === 2 && !modoNuevoPaciente && !pacienteSeleccionado)} onClick={() => { if(paso === 1) { setPaso(2); } else { handleGuardar(); } }} className={`px-10 py-4 md:py-3.5 rounded-xl font-black text-sm md:text-[10px] uppercase shadow-md transition-all active:scale-95 whitespace-nowrap w-full sm:w-auto ${citaEnReprogramacion ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'hover:brightness-110'}`} style={!citaEnReprogramacion ? { background: `linear-gradient(120deg, ${GOLD_LIGHT}, ${GOLD})`, color: INK } : undefined}>
-                            {cargandoAccion ? <Loader2 className="animate-spin inline-block" size={18} className="md:w-[16px] md:h-[16px]" /> : (paso === 1 ? 'Continuar' : citaEnReprogramacion ? 'Confirmar Cambio' : 'Agendar Cita')}
+                            {cargandoAccion ? <Loader2 className="animate-spin inline-block md:w-[16px] md:h-[16px]" size={18} /> : (paso === 1 ? 'Continuar' : citaEnReprogramacion ? 'Confirmar Cambio' : 'Agendar Cita')}
                         </button>
                      </div>
                   </div>
@@ -2235,7 +2235,7 @@ export default function AgendaPage() {
               <div className="fixed inset-0 z-[1000000] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
                 <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm">
                   <div className="bg-white rounded-[3rem] shadow-2xl p-8 md:p-10 text-center space-y-8">
-                    <CheckCircle2 className="mx-auto text-emerald-500" size={80} className="md:w-[64px] md:h-[64px]" />
+                    <CheckCircle2 className="mx-auto text-emerald-500 md:w-[64px] md:h-[64px]" size={80} />
                     <h2 className="text-3xl font-black uppercase tracking-tighter text-slate-800">¡Cita Lista!</h2>
                     <div className="text-left bg-slate-50 p-6 rounded-3xl border border-slate-100 space-y-4">
                       <div>
@@ -2269,7 +2269,7 @@ export default function AgendaPage() {
                         }}
                         className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-xs md:text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
                       >
-                        <MessageCircle size={18} className="md:w-[14px] md:h-[14px]" /> Finalizar y Enviar WhatsApp
+                        <MessageCircle className="md:w-[14px] md:h-[14px]" size={18} /> Finalizar y Enviar WhatsApp
                       </button>
                       <button
                         onClick={() => {
