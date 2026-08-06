@@ -39,6 +39,13 @@ const tToMins = (t: string) => {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
 }
+
+const minsToT = (m: number) => {
+  const h = Math.floor(m / 60).toString().padStart(2, '0');
+  const min = (m % 60).toString().padStart(2, '0');
+  return `${h}:${min}`;
+}
+
 const getMinsFromDateStr = (dtString: string) => {
   if (!dtString) return 0;
   const timePart = dtString.includes('T') ? dtString.split('T')[1] : dtString.split(' ')[1];
@@ -424,7 +431,7 @@ export default function VistaDiariaPage() {
         <header className="bg-white/90 backdrop-blur-md p-5 md:p-8 rounded-[2rem] md:rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-5 md:gap-6 text-left">
           <div className="flex items-center gap-4 md:gap-5 text-left w-full md:w-auto">
             <div className="bg-[#0A111F] w-14 h-14 md:w-16 md:h-16 rounded-full flex items-center justify-center text-[#C9A24B] shadow-lg shrink-0">
-              <LayoutGrid size={24} className="md:w-[28px] md:h-[28px]" />
+              <LayoutGrid className="md:w-[28px] md:h-[28px]" size={24} />
             </div>
             <div className="text-left">
               <h1 className="text-xl md:text-3xl font-black text-[#0A111F] uppercase italic leading-none tracking-tight text-left">
@@ -440,7 +447,7 @@ export default function VistaDiariaPage() {
             {/* Control de Fechas */}
             <div className="bg-slate-50 border border-slate-100 rounded-xl md:rounded-[2rem] p-1 md:p-2 flex items-center justify-between gap-4 shadow-inner">
               <button onClick={() => navegarDia(-1)} className="p-2 md:p-3 hover:bg-white hover:shadow-sm rounded-lg md:rounded-2xl transition-all text-slate-500">
-                <ChevronLeft size={18} className="md:w-[20px] md:h-[20px]" />
+                <ChevronLeft className="md:w-[20px] md:h-[20px]" size={18} />
               </button>
               
               <div className="relative flex items-center justify-center cursor-pointer group" onClick={() => dateInputRef.current?.showPicker()}>
@@ -451,12 +458,12 @@ export default function VistaDiariaPage() {
               </div>
 
               <button onClick={() => navegarDia(1)} className="p-2 md:p-3 hover:bg-white hover:shadow-sm rounded-lg md:rounded-2xl transition-all text-slate-500">
-                <ChevronRight size={18} className="md:w-[20px] md:h-[20px]" />
+                <ChevronRight className="md:w-[20px] md:h-[20px]" size={18} />
               </button>
             </div>
 
             <Link href="/agenda" className="justify-center bg-[#0A111F] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-[2rem] text-[10px] md:text-xs font-black uppercase tracking-widest shadow-xl hover:bg-[#1a2538] transition-all flex items-center gap-2 shrink-0">
-              <CalendarDays size={16} className="md:w-[18px] md:h-[18px]" /> Volver a Agenda
+              <CalendarDays className="md:w-[18px] md:h-[18px]" size={16} /> Volver a Agenda
             </Link>
           </div>
         </header>
@@ -471,7 +478,7 @@ export default function VistaDiariaPage() {
           <div className="bg-white/95 backdrop-blur-sm rounded-2xl md:rounded-[3rem] shadow-sm border border-slate-100 overflow-hidden flex flex-col h-[75vh]">
             {profesionalesDelDia.length === 0 ? (
               <div className="flex-1 flex flex-col justify-center items-center py-20 opacity-60">
-                 <Users size={64} className="text-slate-300 mb-4" />
+                 <Users className="text-slate-300 mb-4" size={64} />
                  <h3 className="text-lg font-black uppercase tracking-widest text-[#0A111F]">Sin doctores hoy</h3>
                  <p className="text-xs font-bold text-slate-400 mt-2">Nadie atiende en la fecha seleccionada.</p>
               </div>
@@ -481,7 +488,7 @@ export default function VistaDiariaPage() {
                 {/* Columna Fija Izquierda (Horas) */}
                 <div className="w-14 md:w-20 border-r border-slate-100 bg-slate-50/80 shrink-0 z-20 flex flex-col sticky left-0 shadow-[2px_0_10px_rgba(0,0,0,0.02)]">
                   <div className="h-[60px] md:h-[80px] border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-center shrink-0">
-                    <Clock size={16} className="text-slate-400 md:w-[20px] md:h-[20px]" />
+                    <Clock className="text-slate-400 md:w-[20px] md:h-[20px]" size={16} />
                   </div>
                   <div className="flex-1 overflow-hidden relative [--slot-h:2rem] md:[--slot-h:2.5rem]">
                     <div className="absolute w-full">
@@ -507,7 +514,7 @@ export default function VistaDiariaPage() {
                           {/* Header Doctor Sticky Top */}
                           <div className="h-[60px] md:h-[80px] border-b border-slate-200 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center shrink-0 sticky top-0 z-30 p-2 text-center shadow-sm">
                              <div className="w-6 h-6 md:w-8 md:h-8 bg-[#C9A24B]/10 text-[#C9A24B] rounded-full flex items-center justify-center mb-1">
-                                <User size={12} className="md:w-[14px] md:h-[14px]" />
+                                <User className="md:w-[14px] md:h-[14px]" size={12} />
                              </div>
                              <p className="text-[10px] md:text-[11px] font-black uppercase tracking-tight text-[#0A111F] truncate w-full leading-none">
                                {p.nombre.split(' ')[0]} {p.apellido.split(' ')[0]}
@@ -626,7 +633,7 @@ export default function VistaDiariaPage() {
                 >
                   <div className={`bg-[#0A111F] p-6 md:p-8 flex items-center justify-between shrink-0 shadow-sm relative z-10 transition-colors`}>
                     <div className="flex items-center gap-4 text-white">
-                      <Users size={28} className="md:w-[36px] md:h-[36px] text-[#C9A24B]" />
+                      <Users className="md:w-[36px] md:h-[36px] text-[#C9A24B]" size={28} />
                       <div>
                         <h2 className="text-xl md:text-2xl font-black uppercase italic leading-none tracking-tighter text-[#C9A24B]">Pacientes Pendientes</h2>
                         <p className={`text-white/80 text-[9px] md:text-[10px] font-black uppercase tracking-[0.3em] mt-1.5`}>
@@ -642,7 +649,7 @@ export default function VistaDiariaPage() {
                   <div className="p-4 md:p-8 overflow-y-auto bg-[#FBF8F2] flex-1 space-y-4 custom-scrollbar">
                     {citasConflictivas.length === 0 ? (
                       <div className="py-12 flex flex-col items-center justify-center text-center opacity-70">
-                        <CheckCircle2 size={48} className="text-emerald-500 mb-4" />
+                        <CheckCircle2 className="text-emerald-500 mb-4" size={48} />
                         <p className="text-sm font-black text-slate-800 uppercase">Agenda Limpia</p>
                         <p className="text-[10px] text-slate-500 font-bold uppercase mt-1">No hay pacientes afectados por este bloqueo.</p>
                       </div>
@@ -660,13 +667,13 @@ export default function VistaDiariaPage() {
                               <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 md:gap-4">
                                 <div className="flex items-center gap-3 md:gap-5">
                                   <div className="w-12 h-12 md:w-14 md:h-14 rounded-xl md:rounded-2xl bg-slate-50 text-slate-600 flex flex-col items-center justify-center border border-slate-100 shrink-0">
-                                    <Clock size={12} className="mb-0.5 md:mb-1 opacity-50 md:w-[14px] md:h-[14px] text-[#C9A24B]" />
+                                    <Clock className="mb-0.5 md:mb-1 opacity-50 md:w-[14px] md:h-[14px] text-[#C9A24B]" size={12} />
                                     <span className="text-[9px] md:text-[10px] font-black">{horaFomateada}</span>
                                   </div>
                                   <div>
                                     <h4 className="font-black text-xs md:text-sm text-[#0A111F] uppercase leading-none">{cita.pacientes?.nombre} {cita.pacientes?.apellido}</h4>
                                     <div className="flex flex-wrap items-center gap-2 mt-2">
-                                      <span className="text-[8px] md:text-[9px] font-bold text-slate-500 tracking-widest bg-slate-50 px-2 py-1 rounded-md border border-slate-100 flex items-center gap-1 uppercase"><Clock size={10} className="text-[#C9A24B]"/> {durationStr}</span>
+                                      <span className="text-[8px] md:text-[9px] font-bold text-slate-500 tracking-widest bg-slate-50 px-2 py-1 rounded-md border border-slate-100 flex items-center gap-1 uppercase"><Clock className="text-[#C9A24B]" size={10} /> {durationStr}</span>
                                       <span className="text-[8px] md:text-[9px] font-bold text-slate-500 tracking-widest bg-slate-50 px-2 py-1 rounded-md border border-slate-100 uppercase">RUT: {cita.pacientes?.rut || 'S/R'}</span>
                                     </div>
                                   </div>
@@ -709,9 +716,9 @@ export default function VistaDiariaPage() {
 
                                       <div className="bg-slate-50 p-3 md:p-4 rounded-xl md:rounded-2xl border border-slate-200 flex flex-col shadow-inner">
                                         <div className="flex items-center justify-between mb-3 md:mb-4 bg-white p-1.5 md:p-2 rounded-lg md:rounded-xl shadow-sm border border-slate-100">
-                                          <button onClick={() => setSemanaReagenda(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d; })} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-[#0A111F] transition-all border border-transparent hover:border-slate-200"><ChevronLeft size={16} className="md:w-[18px] md:h-[18px]"/></button>
+                                          <button onClick={() => setSemanaReagenda(prev => { const d = new Date(prev); d.setDate(d.getDate() - 7); return d; })} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-[#0A111F] transition-all border border-transparent hover:border-slate-200"><ChevronLeft className="md:w-[18px] md:h-[18px]" size={16} /></button>
                                           <span className="text-[9px] md:text-[10px] font-black text-[#0A111F] uppercase tracking-widest">Sem. {semanaReagenda.toLocaleDateString('es-CL', { day: 'numeric', month: 'short' })}</span>
-                                          <button onClick={() => setSemanaReagenda(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d; })} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-[#0A111F] transition-all border border-transparent hover:border-slate-200"><ChevronRight size={16} className="md:w-[18px] md:h-[18px]"/></button>
+                                          <button onClick={() => setSemanaReagenda(prev => { const d = new Date(prev); d.setDate(d.getDate() + 7); return d; })} className="p-2 hover:bg-slate-50 rounded-lg text-slate-400 hover:text-[#0A111F] transition-all border border-transparent hover:border-slate-200"><ChevronRight className="md:w-[18px] md:h-[18px]" size={16} /></button>
                                         </div>
 
                                         <div className="flex gap-2 overflow-x-auto pb-4 custom-scrollbar">
@@ -807,7 +814,7 @@ export default function VistaDiariaPage() {
                     {paso === 1 ? (
                       <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-white text-slate-900 text-left">
                         <div className="w-full md:w-1/2 border-r border-slate-100 p-6 md:p-12 bg-slate-50 overflow-y-auto space-y-4 md:space-y-6 custom-scrollbar text-left flex-1">
-                          <h3 className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-2 md:mb-6 flex items-center gap-2 md:gap-3"><Timer size={16} className="md:w-[18px] md:h-[18px] text-[#C9A24B]"/> Ajuste de Tiempos</h3>
+                          <h3 className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-2 md:mb-6 flex items-center gap-2 md:gap-3"><Timer className="md:w-[18px] md:h-[18px] text-[#C9A24B]" size={16} /> Ajuste de Tiempos</h3>
                           
                           <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
                               <div>
@@ -837,9 +844,9 @@ export default function VistaDiariaPage() {
                         </div>
                         
                         <div className="w-full md:w-1/2 p-6 md:p-12 overflow-y-auto bg-white flex flex-col items-center justify-center text-center opacity-50 hidden md:flex">
-                           <CalendarClock size={64} className="text-slate-300 mb-4" />
+                           <CalendarClock className="text-slate-300 mb-4" size={64} />
                            <p className="font-black uppercase tracking-widest text-slate-400">Paso 1 Completado</p>
-                           <p className="text-xs font-bold text-slate-400 mt-2 max-w-xs">Haz clic en continuar para asignar el paciente y motivo de la cita en este horario.</p>
+                           <p className="text-xs font-bold text-slate-400 mt-2 max-w-xs mx-auto">Haz clic en continuar para asignar el paciente y motivo de la cita en este horario.</p>
                         </div>
                       </div>
                     ) : (
@@ -847,14 +854,14 @@ export default function VistaDiariaPage() {
                         {/* LÓGICA DE PACIENTE */}
                         <div className="w-full md:w-1/2 border-r border-slate-100 p-5 md:p-12 overflow-y-auto space-y-6 md:space-y-10 custom-scrollbar text-left bg-slate-50/50">
                             <div className="space-y-4 md:space-y-6">
-                              <h3 className="text-[11px] md:text-xs font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2"><User size={16} className="text-[#C9A24B]"/> Paciente</h3>
+                              <h3 className="text-[11px] md:text-xs font-black uppercase tracking-[0.2em] text-slate-500 flex items-center gap-2"><User className="text-[#C9A24B]" size={16} /> Paciente</h3>
                               {citaEnReprogramacion ? (
                                 <div className="p-5 md:p-6 rounded-2xl md:rounded-[2rem] bg-[#C9A24B]/10 border border-[#C9A24B]/30 flex items-center justify-between shadow-sm">
                                   <div>
                                     <p className="text-base md:text-lg font-black uppercase text-[#8A6D2F] tracking-tighter leading-tight">{citaEnReprogramacion.pacientes?.nombre} {citaEnReprogramacion.pacientes?.apellido}</p>
                                     <p className="text-[9px] md:text-xs font-bold text-[#C9A24B] tracking-widest mt-1">RUT: {citaEnReprogramacion.pacientes?.rut}</p>
                                   </div>
-                                  <RefreshCcw className="text-[#C9A24B] shrink-0" size={20} className="md:w-[24px] md:h-[24px]" />
+                                  <RefreshCcw className="text-[#C9A24B] shrink-0 md:w-[24px] md:h-[24px]" size={20} />
                                 </div>
                               ) : (
                                 <div className="space-y-4 md:space-y-5">
@@ -917,7 +924,7 @@ export default function VistaDiariaPage() {
                                   ) : (
                                     <div className="space-y-3 md:space-y-4">
                                       <div className="relative group">
-                                        <Search className="absolute left-4 md:left-5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#C9A24B]" size={18} className="md:w-[20px] md:h-[20px]" />
+                                        <Search className="absolute left-4 md:left-5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#C9A24B] md:w-[20px] md:h-[20px]" size={18} />
                                         <input
                                           placeholder="Buscar Nombre o RUT..."
                                           className="w-full pl-10 md:pl-12 pr-4 md:pr-5 py-3 md:py-4 bg-white border border-slate-200 rounded-xl md:rounded-[2rem] text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] shadow-sm transition-all placeholder:normal-case"
@@ -941,7 +948,7 @@ export default function VistaDiariaPage() {
                                       {pacienteSeleccionado && pacientesEncontrados.length === 0 && (
                                         <div className="p-4 md:p-6 rounded-xl md:rounded-[2rem] border border-[#C9A24B]/30 bg-[#C9A24B]/10 flex items-center justify-between shadow-sm">
                                           <p className="font-black text-sm md:text-lg uppercase text-[#8A6D2F] tracking-tighter leading-tight">{pacienteSeleccionado.nombre} {pacienteSeleccionado.apellido}</p>
-                                          <CheckCircle2 size={20} className="text-[#C9A24B] shrink-0 md:w-[24px] md:h-[24px]" />
+                                          <CheckCircle2 className="text-[#C9A24B] shrink-0 md:w-[24px] md:h-[24px]" size={20} />
                                         </div>
                                       )}
                                     </div>
@@ -954,7 +961,7 @@ export default function VistaDiariaPage() {
                         <div className="w-full md:w-1/2 p-5 md:p-12 overflow-y-auto bg-white flex flex-col justify-center">
                             {(pacienteSeleccionado || modoNuevoPaciente) ? (
                               <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="p-6 md:p-8 bg-[#0A111F] rounded-2xl md:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden mt-4 md:mt-0">
-                                <div className="absolute top-0 right-0 p-4 md:p-6 opacity-[0.03] pointer-events-none"><Briefcase size={80} className="md:w-[120px] md:h-[120px]" /></div>
+                                <div className="absolute top-0 right-0 p-4 md:p-6 opacity-[0.03] pointer-events-none"><Briefcase className="md:w-[120px] md:h-[120px]" size={80} /></div>
                                 <h4 className="text-[9px] md:text-[10px] font-black uppercase text-[#C9A24B] mb-4 md:mb-6 tracking-[0.2em] relative z-10 flex items-center gap-2"><Briefcase size={14}/> Motivo / Tratamiento</h4>
                                 {!modoNuevoPaciente && tratamientosPaciente.length > 0 ? (
                                   <div className="space-y-3 md:space-y-4 relative z-10">
@@ -990,7 +997,7 @@ export default function VistaDiariaPage() {
                               </motion.div>
                             ) : (
                               <div className="text-center opacity-40 py-10 hidden md:block">
-                                 <User size={64} className="text-slate-300 mx-auto mb-4" />
+                                 <User className="text-slate-300 mx-auto mb-4" size={64} />
                                  <p className="font-black uppercase tracking-widest text-slate-400">Paso 2</p>
                                  <p className="text-xs font-bold text-slate-400 mt-2 max-w-xs mx-auto">Selecciona o registra un paciente para continuar.</p>
                               </div>
@@ -1042,7 +1049,7 @@ export default function VistaDiariaPage() {
                 <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="relative w-full max-w-sm">
                   <div className="bg-white rounded-[2.5rem] md:rounded-[3rem] shadow-2xl p-8 md:p-10 text-center space-y-6 md:space-y-8 border border-[#C9A24B]/20">
                     <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mx-auto border border-emerald-100 shadow-inner">
-                      <CheckCircle2 className="text-emerald-500 w-[40px] h-[40px] md:w-[48px] md:h-[48px]" />
+                      <CheckCircle2 className="text-emerald-500 w-[40px] h-[40px] md:w-[48px] md:h-[48px]" size={40} />
                     </div>
                     <h2 className="text-2xl md:text-3xl font-black uppercase tracking-tighter text-[#0A111F] italic">¡Cita Lista!</h2>
                     <div className="text-left bg-[#FBF8F2] p-5 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 space-y-4 shadow-sm">
@@ -1074,7 +1081,7 @@ export default function VistaDiariaPage() {
                         }}
                         className="w-full py-4 bg-[#0A111F] rounded-xl md:rounded-2xl font-black text-[10px] md:text-[10px] uppercase tracking-widest text-[#C9A24B] shadow-xl shadow-[#0A111F]/20 hover:bg-[#1a2538] transition-all flex items-center justify-center gap-2"
                       >
-                        <MessageCircle className="w-[14px] h-[14px] md:w-[14px] md:h-[14px]"/> Enviar Confirmación (WSP)
+                        <MessageCircle className="w-[14px] h-[14px] md:w-[14px] md:h-[14px]" size={14} /> Enviar Confirmación (WSP)
                       </button>
                       <button onClick={() => { setMostrarTicket(false); setModalAbierto(false); resetEstados(); fetchDatosDia(); }} className="w-full py-3.5 md:py-3 bg-white text-slate-500 border border-slate-200 rounded-xl md:rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">Finalizar</button>
                     </div>
