@@ -443,7 +443,7 @@ export default function VistaDiariaPage() {
             </div>
           </div>
 
-          <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4 w-full xl:w-auto">
+          <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-3 md:gap-4 w-full xl:w-auto">
             {/* Control de Fechas */}
             <div className="bg-slate-50 border border-slate-100 rounded-xl md:rounded-[2rem] p-1 md:p-2 flex items-center justify-between gap-4 shadow-inner">
               <button onClick={() => navegarDia(-1)} className="p-2 md:p-3 hover:bg-white hover:shadow-sm rounded-lg md:rounded-2xl transition-all text-slate-500">
@@ -462,9 +462,14 @@ export default function VistaDiariaPage() {
               </button>
             </div>
 
-            <Link href="/agenda" className="justify-center bg-[#0A111F] text-white px-6 md:px-8 py-3 md:py-4 rounded-xl md:rounded-[2rem] text-[10px] md:text-xs font-black uppercase tracking-widest shadow-xl hover:bg-[#1a2538] transition-all flex items-center gap-2 shrink-0">
-              <CalendarDays className="md:w-[18px] md:h-[18px]" size={16} /> Volver a Agenda
-            </Link>
+            <div className="flex flex-row gap-2 w-full md:w-auto">
+              <Link href="/semana" className="flex-1 md:flex-none justify-center bg-[#C9A24B] text-white px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-[2rem] text-[10px] md:text-xs font-black uppercase tracking-widest shadow-xl hover:bg-[#a7853b] transition-all flex items-center gap-2">
+                <CalendarDays className="md:w-[18px] md:h-[18px]" size={16} /> <span className="hidden sm:inline">Vista</span> Semanal
+              </Link>
+              <Link href="/agenda" className="flex-1 md:flex-none justify-center bg-[#0A111F] text-white px-4 md:px-6 py-3 md:py-4 rounded-xl md:rounded-[2rem] text-[10px] md:text-xs font-black uppercase tracking-widest shadow-xl hover:bg-[#1a2538] transition-all flex items-center gap-2">
+                <LayoutGrid className="md:w-[18px] md:h-[18px]" size={16} /> Agenda
+              </Link>
+            </div>
           </div>
         </header>
 
@@ -486,11 +491,11 @@ export default function VistaDiariaPage() {
               <div className="flex flex-1 overflow-hidden relative">
                 
                 {/* Columna Fija Izquierda (Horas) */}
-                <div className="w-14 md:w-20 border-r border-slate-100 bg-slate-50/80 shrink-0 z-20 flex flex-col sticky left-0 shadow-[2px_0_10px_rgba(0,0,0,0.02)]">
-                  <div className="h-[60px] md:h-[80px] border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-center shrink-0">
+                <div className="w-12 md:w-20 border-r border-slate-100 bg-slate-50/80 shrink-0 z-20 flex flex-col sticky left-0 shadow-[2px_0_10px_rgba(0,0,0,0.02)]">
+                  <div className="h-[50px] md:h-[80px] border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-center shrink-0">
                     <Clock className="text-slate-400 md:w-[20px] md:h-[20px]" size={16} />
                   </div>
-                  <div className="flex-1 overflow-hidden relative [--slot-h:2rem] md:[--slot-h:2.5rem]">
+                  <div className="flex-1 overflow-hidden relative [--slot-h:1.5rem] md:[--slot-h:2.5rem]">
                     <div className="absolute w-full">
                       {slotsHorarios.map(hora => (
                         <div key={hora} className="h-[var(--slot-h)] border-b border-slate-200/50 flex items-center justify-center text-[9px] md:text-[10px] font-black text-slate-400">
@@ -509,20 +514,20 @@ export default function VistaDiariaPage() {
                       const bloqueosDiaCompletos = bloqueos.some(b => b.profesional_id === p.user_id && b.fecha === fechaStr && (!b.hora_inicio || !b.hora_fin));
 
                       return (
-                        <div key={p.user_id} className="min-w-[140px] md:min-w-[200px] border-r border-slate-100 flex flex-col relative">
+                        <div key={p.user_id} className="min-w-[110px] md:min-w-[200px] border-r border-slate-100 flex flex-col relative">
                           
                           {/* Header Doctor Sticky Top */}
-                          <div className="h-[60px] md:h-[80px] border-b border-slate-200 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center shrink-0 sticky top-0 z-30 p-2 text-center shadow-sm">
-                             <div className="w-6 h-6 md:w-8 md:h-8 bg-[#C9A24B]/10 text-[#C9A24B] rounded-full flex items-center justify-center mb-1">
-                                <User className="md:w-[14px] md:h-[14px]" size={12} />
+                          <div className="h-[50px] md:h-[80px] border-b border-slate-200 bg-white/90 backdrop-blur-md flex flex-col items-center justify-center shrink-0 sticky top-0 z-30 p-1 md:p-2 text-center shadow-sm">
+                             <div className="w-5 h-5 md:w-8 md:h-8 bg-[#C9A24B]/10 text-[#C9A24B] rounded-full flex items-center justify-center mb-0.5 md:mb-1">
+                                <User className="md:w-[14px] md:h-[14px]" size={10} />
                              </div>
-                             <p className="text-[10px] md:text-[11px] font-black uppercase tracking-tight text-[#0A111F] truncate w-full leading-none">
+                             <p className="text-[9px] md:text-[11px] font-black uppercase tracking-tight text-[#0A111F] truncate w-full leading-none">
                                {p.nombre.split(' ')[0]} {p.apellido.split(' ')[0]}
                              </p>
                           </div>
 
                           {/* Grilla Slots */}
-                          <div className="relative min-h-[500px] md:min-h-[600px] [--slot-h:2rem] md:[--slot-h:2.5rem] bg-white/50">
+                          <div className="relative min-h-[400px] md:min-h-[600px] [--slot-h:1.5rem] md:[--slot-h:2.5rem] bg-white/50">
                               {mostrarLineaTiempo && (
                                 <div className="absolute left-0 w-full z-20 flex items-center pointer-events-none" style={{ top: `calc(${(minutosDesdeLas8 / 15)} * var(--slot-h))`, transform: 'translateY(-50%)' }}>
                                   <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.6)] z-10 -ml-0.5"></div>
@@ -548,19 +553,19 @@ export default function VistaDiariaPage() {
                                 return (
                                   <div key={hora} className="w-full h-[var(--slot-h)] border-b border-r border-slate-100/50 p-0.5 md:p-1 relative">
                                     {bloqueosDiaCompletos || esBloqueado ? (
-                                      <div className="h-full w-full rounded-md md:rounded-lg bg-rose-50/50 border border-rose-200 border-dashed flex items-center justify-center" title="Horario Bloqueado">
-                                        <Ban className="text-rose-300 w-[12px] h-[12px] md:w-[16px] md:h-[16px]" />
+                                      <div className="h-full w-full rounded-[4px] md:rounded-lg bg-rose-50/50 border border-rose-200 border-dashed flex items-center justify-center" title="Horario Bloqueado">
+                                        <Ban className="text-rose-300 w-[10px] h-[10px] md:w-[16px] md:h-[16px]" />
                                       </div>
                                     ) : esDisponible ? (
                                       <div 
                                         onClick={() => agendarDesdeSlot(p.user_id, hora)} 
-                                        className="h-full w-full rounded-md md:rounded-lg bg-emerald-100/80 border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-200 cursor-pointer transition-all flex items-center justify-center" 
+                                        className="h-full w-full rounded-[4px] md:rounded-lg bg-emerald-100/80 border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-200 cursor-pointer transition-all flex items-center justify-center" 
                                         title="Agendar cita"
                                       >
-                                        <Plus className="text-emerald-500 w-[12px] h-[12px] md:w-[16px] md:h-[16px]" />
+                                        <Plus className="text-emerald-500 w-[10px] h-[10px] md:w-[16px] md:h-[16px]" />
                                       </div>
                                     ) : (
-                                      <div className="h-full w-full rounded-md md:rounded-lg bg-slate-50/40" />
+                                      <div className="h-full w-full rounded-[4px] md:rounded-lg bg-slate-50/40" />
                                     )}
                                   </div>
                                 );
@@ -583,7 +588,7 @@ export default function VistaDiariaPage() {
                                     initial={{ opacity: 0, scale: 0.9 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     onClick={() => iniciarReprogramacion(cita)}
-                                    className={`absolute z-10 w-[calc(100%-4px)] md:w-[calc(100%-8px)] left-[2px] md:left-1 ${estadoStyle.bg} border ${estadoStyle.bg.replace('bg-', 'border-')} rounded-md md:rounded-lg p-1.5 md:p-2 cursor-pointer hover:shadow-lg transition-all duration-200 flex flex-col justify-center overflow-hidden group`}
+                                    className={`absolute z-10 w-[calc(100%-4px)] md:w-[calc(100%-8px)] left-[2px] md:left-1 ${estadoStyle.bg} border ${estadoStyle.bg.replace('bg-', 'border-')} rounded-[4px] md:rounded-lg p-1 md:p-2 cursor-pointer hover:shadow-lg transition-all duration-200 flex flex-col justify-center overflow-hidden group`}
                                     style={{ 
                                       top: `calc(${top} * var(--slot-h))`, 
                                       height: `calc(${height} * var(--slot-h))` 
@@ -591,17 +596,17 @@ export default function VistaDiariaPage() {
                                   >
                                     <div className="flex items-center justify-between mb-0.5 md:mb-1">
                                       <div className="flex items-center gap-1 md:gap-1.5 overflow-hidden">
-                                        <div className="w-4 h-4 md:w-5 md:h-5 rounded-full bg-white/90 flex items-center justify-center text-[8px] md:text-[9px] font-black text-slate-700 shadow-sm border border-slate-100/50 shrink-0">
+                                        <div className="w-3 h-3 md:w-5 md:h-5 rounded-full bg-white/90 flex items-center justify-center text-[7px] md:text-[9px] font-black text-slate-700 shadow-sm border border-slate-100/50 shrink-0">
                                           {iniciales}
                                         </div>
-                                        <span className="text-[9px] md:text-[11px] font-black text-[#0A111F] truncate uppercase">
+                                        <span className="text-[8px] md:text-[11px] font-black text-[#0A111F] truncate uppercase">
                                           {cita.pacientes?.nombre?.split(' ')[0]} {cita.pacientes?.apellido?.split(' ')[0]}
                                         </span>
                                       </div>
                                     </div>
                                     <div className="flex items-center gap-1 md:gap-1.5 mt-0 md:mt-1">
-                                      <span className={`w-1.5 h-1.5 md:w-2 md:h-2 rounded-full ${estadoStyle.dot}`}></span>
-                                      <span className={`text-[7px] md:text-[8px] font-bold uppercase tracking-widest truncate ${estadoStyle.text}`}>{hFormat}</span>
+                                      <span className={`w-1 h-1 md:w-2 md:h-2 rounded-full ${estadoStyle.dot}`}></span>
+                                      <span className={`text-[6.5px] md:text-[8px] font-bold uppercase tracking-widest truncate ${estadoStyle.text}`}>{hFormat}</span>
                                     </div>
                                   </motion.div>
                                 );
