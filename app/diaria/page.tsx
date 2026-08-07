@@ -824,32 +824,67 @@ export default function VistaDiariaPage() {
                         <div className="w-full md:w-1/2 border-r border-slate-100 p-6 md:p-12 bg-slate-50 overflow-y-auto space-y-4 md:space-y-6 custom-scrollbar text-left flex-1">
                           <h3 className="text-[10px] md:text-xs font-black uppercase tracking-[0.2em] text-slate-500 mb-2 md:mb-6 flex items-center gap-2 md:gap-3"><Timer className="md:w-[18px] md:h-[18px] text-[#C9A24B]" size={16} /> Ajuste de Tiempos</h3>
                           
-                          <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
-                              <div>
-                                <p className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest">{horasSeleccionadas[0]?.fecha}</p>
-                                <p className="text-xl md:text-2xl font-black text-[#0A111F] tracking-tighter mt-0.5 md:mt-1 leading-none">{horasSeleccionadas[0]?.hora} <span className="text-[10px] text-slate-400 font-bold">hrs</span></p>
-                              </div>
-                              <div className="flex items-center gap-2 w-full sm:w-auto">
-                                <select
-                                  className="flex-1 sm:flex-none p-4 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all cursor-pointer text-slate-700 appearance-none shadow-sm"
-                                  value={horasSeleccionadas[0]?.duracion || 15}
-                                  onChange={(e) => {
-                                    const newDur = Number(e.target.value);
-                                    const fecha = horasSeleccionadas[0].fecha;
-                                    const hora = horasSeleccionadas[0].hora;
-                                    if (!esHorarioLaboral(filtro.profesional_id, fecha, hora, newDur)) return toast.error(`La duración excede el horario del médico.`);
-                                    if (esCitaOcupada(filtro.profesional_id, fecha, hora, newDur)) return toast.error(`La nueva duración choca con otra cita.`);
-                                    
-                                    const nuevas = [{ fecha, hora, duracion: newDur }]; 
-                                    setHorasSeleccionadas(nuevas);
-                                    setFiltro(prev => ({...prev, duracionDefault: newDur}));
-                                  }}
-                                >
-                                  {duracionesDisponibles.map(d => <option key={d} value={d}>{d} mins</option>)}
-                                </select>
+                          <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 flex flex-col sm:flex-row sm:items-end justify-between gap-4 shadow-sm">
+                              {citaEnReprogramacion ? (
+                                  <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto flex-1">
+                                      <div className="flex-1">
+                                          <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Día</label>
+                                          <input 
+                                              type="date" 
+                                              className="w-full mt-1 p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs font-bold text-[#0A111F] outline-none focus:border-[#C9A24B] transition-all"
+                                              value={horasSeleccionadas[0]?.fecha || ''}
+                                              onChange={(e) => {
+                                                  const h = horasSeleccionadas[0];
+                                                  setHorasSeleccionadas([{ ...h, fecha: e.target.value }]);
+                                              }}
+                                          />
+                                      </div>
+                                      <div className="flex-1">
+                                          <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Hora</label>
+                                          <select 
+                                              className="w-full mt-1 p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs font-bold text-[#0A111F] outline-none focus:border-[#C9A24B] transition-all appearance-none cursor-pointer"
+                                              value={horasSeleccionadas[0]?.hora || ''}
+                                              onChange={(e) => {
+                                                  const h = horasSeleccionadas[0];
+                                                  setHorasSeleccionadas([{ ...h, hora: e.target.value }]);
+                                              }}
+                                          >
+                                              {slotsHorarios.map(h => <option key={h} value={h}>{h} hrs</option>)}
+                                          </select>
+                                      </div>
+                                  </div>
+                              ) : (
+                                  <div className="mb-1 sm:mb-0">
+                                    <p className="text-[9px] md:text-[10px] font-black uppercase text-slate-400 tracking-widest">{horasSeleccionadas[0]?.fecha}</p>
+                                    <p className="text-xl md:text-2xl font-black text-[#0A111F] tracking-tighter mt-0.5 md:mt-1 leading-none">{horasSeleccionadas[0]?.hora} <span className="text-[10px] text-slate-400 font-bold">hrs</span></p>
+                                  </div>
+                              )}
+                              
+                              <div className="flex flex-col w-full sm:w-auto">
+                                  {citaEnReprogramacion && <label className="text-[9px] font-black uppercase text-slate-400 ml-1">Duración</label>}
+                                  <select
+                                    className={`w-full p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all cursor-pointer text-slate-700 appearance-none shadow-sm ${citaEnReprogramacion ? 'mt-1' : ''}`}
+                                    value={horasSeleccionadas[0]?.duracion || 15}
+                                    onChange={(e) => {
+                                      const newDur = Number(e.target.value);
+                                      const fecha = horasSeleccionadas[0].fecha;
+                                      const hora = horasSeleccionadas[0].hora;
+                                      
+                                      // Solo validar conflictos en tiempo real si es una cita nueva en la vista de hoy
+                                      if (!citaEnReprogramacion) {
+                                          if (!esHorarioLaboral(filtro.profesional_id, fecha, hora, newDur)) return toast.error(`La duración excede el horario del médico.`);
+                                          if (esCitaOcupada(filtro.profesional_id, fecha, hora, newDur)) return toast.error(`La nueva duración choca con otra cita.`);
+                                      }
+                                      
+                                      const nuevas = [{ fecha, hora, duracion: newDur }]; 
+                                      setHorasSeleccionadas(nuevas);
+                                      setFiltro(prev => ({...prev, duracionDefault: newDur}));
+                                    }}
+                                  >
+                                    {duracionesDisponibles.map(d => <option key={d} value={d}>{d} mins</option>)}
+                                  </select>
                               </div>
                           </div>
-                        </div>
                         
                         <div className="w-full md:w-1/2 p-6 md:p-12 overflow-y-auto bg-white flex flex-col items-center justify-center text-center opacity-50 hidden md:flex">
                            <CalendarClock className="text-slate-300 mb-4" size={64} />
