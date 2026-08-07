@@ -60,7 +60,7 @@ interface NuevoPaciente {
 }
 
 export default function VistaDiariaPage() {
-  const [portalNode, setPortalNode] = useState<HTMLElement null |>(null);
+  const [portalNode, setPortalNode] = useState<HTMLElement | null>(null);
   
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [profesionales, setProfesionales] = useState<any[]>([]);
