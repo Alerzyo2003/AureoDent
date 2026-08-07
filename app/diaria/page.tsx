@@ -507,7 +507,7 @@ export default function VistaDiariaPage() {
                     ))}
                   </div>
                 </div>
-                </div>
+                
 
                 {/* Contenedor Horizontal Scrolleable de Doctores */}
 <div className="flex-1 flex relative bg-slate-50/20">
