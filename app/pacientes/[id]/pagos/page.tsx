@@ -632,7 +632,7 @@ export default function PagosPacientePage() {
                               if (Object.keys(pagosSeleccionados).length === deudas.length) {
                                   setPagosSeleccionados({});
                               } else {
-                                  const todos = {};
+                                  const todos: Record<string, number> = {};
                                   deudas.forEach(d => { todos[d.id] = d.deuda; });
                                   setPagosSeleccionados(todos);
                               }
