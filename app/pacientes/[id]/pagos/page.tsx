@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import {  
   Loader2, Coins, ReceiptText, CheckCircle2, AlertCircle,
   CreditCard, Banknote, Landmark, History, Ban, EyeOff, ChevronUp,
-  ChevronDown, Printer, Trash2, FileText, Wallet, Plus, User, X, ClipboardList
+  ChevronDown, Printer, Trash2, FileText, Wallet, Plus, User, X, ClipboardList, CheckSquare
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -31,8 +31,8 @@ export default function PagosPacientePage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [cajaActivaId, setCajaActivaId] = useState<string | null>(null);
 
-  // Estados para el pago (Recaudación de deuda)
-  const [montoIngresado, setMontoIngresado] = useState<number | ''>('')
+  // 🔥 NUEVOS ESTADOS PARA PAGO SELECTIVO 🔥
+  const [pagosSeleccionados, setPagosSeleccionados] = useState<Record<string, number>>({})
   const [metodoPago, setMetodoPago] = useState('Transferencia')
   const [numeroOperacion, setNumeroOperacion] = useState('')
 
@@ -152,6 +152,28 @@ export default function PagosPacientePage() {
     }
   }
 
+  // 🔥 FUNCIONES PAGO SELECTIVO 🔥
+  const toggleSeleccionPago = (itemId: string, deudaMaxima: number) => {
+    setPagosSeleccionados(prev => {
+        const nuevos = { ...prev };
+        if (nuevos[itemId] !== undefined) {
+            delete nuevos[itemId]; // Deseleccionar
+        } else {
+            nuevos[itemId] = deudaMaxima; // Seleccionar pagando el total por defecto
+        }
+        return nuevos;
+    });
+  }
+
+  const handleMontoParcialChange = (itemId: string, monto: number, deudaMaxima: number) => {
+    setPagosSeleccionados(prev => ({
+        ...prev,
+        [itemId]: Math.min(Math.max(0, monto), deudaMaxima) // Evitar que paguen más de la deuda o valores negativos
+    }));
+  }
+
+  const montoTotalAPagar = Object.values(pagosSeleccionados).reduce((a, b) => a + b, 0);
+
   const procesarAbonoLibre = async () => {
     if (!cajaActivaId) {
       return toast.error("No se puede procesar el abono: No hay caja abierta.");
@@ -209,13 +231,14 @@ export default function PagosPacientePage() {
     }
   }
 
+  // 🔥 LÓGICA DE PAGO SELECTIVO ACTUALIZADA 🔥
   const procesarPagoCaja = async () => {
     if (!cajaActivaId) {
       return toast.error("No se puede procesar el pago: No hay caja abierta.");
     }
 
-    if (!montoIngresado || Number(montoIngresado) <= 0) {
-        return toast.error("Ingrese un monto válido a recaudar");
+    if (montoTotalAPagar <= 0) {
+        return toast.error("Seleccione al menos un tratamiento para pagar e ingrese un monto válido.");
     }
 
     if ((metodoPago === 'Transferencia' || metodoPago === 'Tarjeta' || metodoPago === 'Efectivo') && !numeroOperacion.trim()) {
@@ -223,27 +246,30 @@ export default function PagosPacientePage() {
     }
 
     const saldoActual = Number(pacienteInfo?.saldo_a_favor || 0);
-    const pago = Number(montoIngresado);
 
     if (metodoPago === 'Saldo a Favor') {
-        if (pago > saldoActual) return toast.error("Fondos insuficientes en Billetera Virtual");
+        if (montoTotalAPagar > saldoActual) return toast.error("Fondos insuficientes en Billetera Virtual");
     }
 
     setCargandoAccion(true);
-    let montoRestante = pago;
     let detallesDelPago: any[] = []; 
     
     try {
-        for (const item of deudas) {
-            if (montoRestante <= 0) break;
-            const aAbonar = Math.min(item.deuda, montoRestante);
+        const itemIdsAPagar = Object.keys(pagosSeleccionados);
+
+        for (const itemId of itemIdsAPagar) {
+            const aAbonar = pagosSeleccionados[itemId];
+            if (aAbonar <= 0) continue;
+
+            const itemInfo = deudas.find(d => d.id === itemId);
+            if (!itemInfo) continue;
             
             const detalleItem = {
-                id: item.id,
-                prestacion: item.nombreDisplay,
-                diente: item.diente_id,
-                precio: item.precio_pactado,
-                doctor: item.doctor,
+                id: itemInfo.id,
+                prestacion: itemInfo.nombreDisplay,
+                diente: itemInfo.diente_id,
+                precio: itemInfo.precio_pactado,
+                doctor: itemInfo.doctor,
                 abonado_ahora: aAbonar
             };
             detallesDelPago.push(detalleItem);
@@ -253,53 +279,28 @@ export default function PagosPacientePage() {
                 monto: aAbonar,
                 metodo_pago: metodoPago,
                 numero_boleta: numeroOperacion.trim() || 'S/N', 
-                profesional_id: item.profesional_id,
-                item_id: item.id,
+                profesional_id: itemInfo.profesional_id,
+                item_id: itemInfo.id,
                 fecha_pago: new Date().toISOString(),
                 comentario: JSON.stringify([detalleItem]),
                 caja_id: cajaActivaId
             }]);
 
-            await supabase.from('presupuesto_items').update({ abonado: Number(item.abonado) + aAbonar }).eq('id', item.id);
-            montoRestante -= aAbonar;
+            await supabase.from('presupuesto_items').update({ abonado: Number(itemInfo.abonado) + aAbonar }).eq('id', itemInfo.id);
         }
 
         let nuevoSaldoAFavor = saldoActual;
 
         if (metodoPago === 'Saldo a Favor') {
-            nuevoSaldoAFavor = saldoActual - pago;
+            nuevoSaldoAFavor = saldoActual - montoTotalAPagar;
             await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldoAFavor }).eq('id', paciente_id);
-            toast.success(`Pago procesado. Se descontaron $${pago.toLocaleString('es-CL')} de su saldo a favor.`);
+            toast.success(`Pago procesado. Se descontaron $${montoTotalAPagar.toLocaleString('es-CL')} de su saldo a favor.`);
+            setPacienteInfo((prev: any) => ({ ...prev, saldo_a_favor: nuevoSaldoAFavor }));
         } else {
-            if (montoRestante > 0) {
-                const detalleSobrante = {
-                    prestacion: "Saldo a Favor (Abono extra/Vuelto)",
-                    diente: null,
-                    precio: montoRestante,
-                    doctor: "-",
-                    abonado_ahora: montoRestante
-                };
-                detallesDelPago.push(detalleSobrante);
-
-                await supabase.from('pagos').insert([{
-                    paciente_id: paciente_id,
-                    monto: montoRestante,
-                    metodo_pago: metodoPago,
-                    numero_boleta: numeroOperacion.trim() || 'S/N', 
-                    fecha_pago: new Date().toISOString(),
-                    comentario: JSON.stringify([detalleSobrante]),
-                    caja_id: cajaActivaId
-                }]);
-
-                nuevoSaldoAFavor = saldoActual + montoRestante;
-                await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldoAFavor }).eq('id', paciente_id);
-                toast.info(`Quedó un vuelto de $${montoRestante.toLocaleString('es-CL')} a favor del paciente.`);
-            } else {
-                toast.success(`Pago procesado con éxito.`);
-            }
+            toast.success(`Pago de tratamientos procesado con éxito.`);
         }
 
-        const detalleAuditoriaPago = `Registró un pago de $${pago.toLocaleString('es-CL')} para ${pacienteInfo?.nombre} ${pacienteInfo?.apellido}. Método: ${metodoPago}. Deuda cubierta: ${detallesDelPago.filter(d => d.id).length} item(s). ${montoRestante > 0 ? `Sobrante a billetera: $${montoRestante.toLocaleString('es-CL')}` : ''}`;
+        const detalleAuditoriaPago = `Registró un pago selectivo de $${montoTotalAPagar.toLocaleString('es-CL')} para ${pacienteInfo?.nombre} ${pacienteInfo?.apellido}. Método: ${metodoPago}. Deuda cubierta en ${detallesDelPago.length} item(s).`;
         
         await supabase.from('auditoria_clinica').insert([{
             usuario_id: usuarioLogueado?.id,
@@ -308,15 +309,13 @@ export default function PagosPacientePage() {
             detalles: detalleAuditoriaPago.trim()
         }]);
 
-        setPacienteInfo((prev: any) => ({ ...prev, saldo_a_favor: nuevoSaldoAFavor }));
-
-        setMontoIngresado('');
+        setPagosSeleccionados({});
         setNumeroOperacion('');
         
         await cargarDatosFinancieros();
         
         const pagoConsolidadoParaImprimir = {
-            monto: pago,
+            monto: montoTotalAPagar,
             metodo_pago: metodoPago,
             numero_boleta: numeroOperacion.trim() || 'S/N',
             fecha_pago: new Date().toISOString(),
@@ -621,31 +620,77 @@ export default function PagosPacientePage() {
               </div>
             </div>
 
-            {/* DETALLE DE LO QUE SE DEBE */}
+            {/* DETALLE DE LO QUE SE DEBE - SELECCIONABLE 🔥 */}
             {deudas.length > 0 && (
               <div className="bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] border border-white/60 shadow-xl">
-                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                      <ClipboardList size={14} /> Detalle de Tratamientos Impagos
-                   </h4>
+                   <div className="flex justify-between items-center mb-6">
+                       <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                          <CheckSquare size={14} /> Selecciona tratamientos a pagar
+                       </h4>
+                       <button 
+                          onClick={() => {
+                              if (Object.keys(pagosSeleccionados).length === deudas.length) {
+                                  setPagosSeleccionados({});
+                              } else {
+                                  const todos = {};
+                                  deudas.forEach(d => { todos[d.id] = d.deuda; });
+                                  setPagosSeleccionados(todos);
+                              }
+                          }}
+                          className="text-[9px] font-black uppercase text-emerald-600 hover:text-emerald-800 transition-colors"
+                       >
+                          {Object.keys(pagosSeleccionados).length === deudas.length ? 'Deseleccionar Todos' : 'Seleccionar Todos'}
+                       </button>
+                   </div>
+                   
                    <div className="space-y-3">
-                    {deudas.map(d => (
-                        <div key={d.id} className="flex justify-between items-center bg-slate-50/80 p-4 md:p-5 rounded-2xl border border-slate-200/60 text-left transition-colors hover:bg-white shadow-sm">
-                            <div className="text-left flex-1 pr-4">
-                               <div className="flex items-center gap-3 mb-1.5 flex-wrap">
-                                   <p className="text-xs font-black uppercase text-slate-800 leading-none">{d.nombreDisplay} {d.diente_id ? `(Pieza ${d.diente_id})` : ''}</p>
-                                   <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest leading-none ${d.estado === 'realizado' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>
-                                       {d.estado}
-                                   </span>
-                               </div>
-                               <p className="text-[9px] font-bold text-slate-400 tracking-widest">
-                                  {d.doctor} | Pactado: ${Number(d.precio_pactado).toLocaleString('es-CL')} | Pagado: <span className="text-slate-600">${Number(d.abonado).toLocaleString('es-CL')}</span>
-                               </p>
+                    {deudas.map(d => {
+                        const isSelected = pagosSeleccionados[d.id] !== undefined;
+                        const montoPagar = pagosSeleccionados[d.id] || 0;
+
+                        return (
+                            <div key={d.id} 
+                                className={`flex flex-col md:flex-row justify-between items-start md:items-center p-4 md:p-5 rounded-2xl border transition-colors shadow-sm ${isSelected ? 'bg-emerald-50/50 border-emerald-300' : 'bg-slate-50/80 border-slate-200/60 hover:bg-white cursor-pointer'}`}
+                                onClick={() => { if (!isSelected) toggleSeleccionPago(d.id, d.deuda) }}
+                            >
+                                <div className="flex items-start gap-3 flex-1 pr-4 mb-3 md:mb-0 w-full" onClick={(e) => { if (isSelected) { e.stopPropagation(); toggleSeleccionPago(d.id, d.deuda) } }}>
+                                    <div className="pt-1 shrink-0 cursor-pointer">
+                                        <input type="checkbox" className="w-4 h-4 accent-emerald-500 cursor-pointer" checked={isSelected} readOnly />
+                                    </div>
+                                    <div className="text-left w-full cursor-pointer">
+                                        <div className="flex items-center gap-3 mb-1.5 flex-wrap">
+                                            <p className={`text-xs font-black uppercase leading-none ${isSelected ? 'text-emerald-900' : 'text-slate-800'}`}>{d.nombreDisplay} {d.diente_id ? `(Pieza ${d.diente_id})` : ''}</p>
+                                            <span className={`px-2 py-0.5 rounded-md text-[8px] font-black uppercase tracking-widest leading-none ${d.estado === 'realizado' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>
+                                                {d.estado}
+                                            </span>
+                                        </div>
+                                        <p className={`text-[9px] font-bold tracking-widest ${isSelected ? 'text-emerald-700/60' : 'text-slate-400'}`}>
+                                            {d.doctor} | Pactado: ${Number(d.precio_pactado).toLocaleString('es-CL')} | Pagado: <span className={isSelected ? 'text-emerald-700' : 'text-slate-600'}>${Number(d.abonado).toLocaleString('es-CL')}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                
+                                <div className="text-right shrink-0 w-full md:w-auto flex flex-row md:flex-col justify-between items-center md:items-end gap-2 pl-7 md:pl-0 border-t border-slate-200 md:border-0 pt-3 md:pt-0">
+                                    <p className="text-sm font-black text-red-500">Deuda: ${d.deuda.toLocaleString('es-CL')}</p>
+                                    {isSelected && (
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-[9px] font-black text-emerald-600 uppercase">Abonar:</span>
+                                            <div className="relative">
+                                                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-emerald-600/50 font-black text-xs">$</span>
+                                                <input 
+                                                    type="number" 
+                                                    className="w-28 py-2 pl-6 pr-2 bg-white border border-emerald-300 rounded-lg text-sm font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500/20 text-right shadow-sm"
+                                                    value={montoPagar || ''}
+                                                    onChange={(e) => handleMontoParcialChange(d.id, Number(e.target.value), d.deuda)}
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
-                            <div className="text-right shrink-0">
-                               <p className="text-sm md:text-base font-black text-red-500">${d.deuda.toLocaleString('es-CL')}</p>
-                            </div>
-                        </div>
-                    ))}
+                        )
+                    })}
                    </div>
               </div>
             )}
@@ -653,7 +698,7 @@ export default function PagosPacientePage() {
             {deudaTotal > 0 ? (
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] border border-white/60 shadow-xl space-y-6">
                 <h3 className="text-sm font-black text-emerald-700 uppercase flex items-center gap-2">
-                  <Coins size={16} /> Pagar Tratamientos
+                  <Coins size={16} /> Procesar Pagos
                 </h3>
                 {!cajaActivaId && (
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-amber-700 text-xs font-bold flex items-center gap-3 shadow-sm">
@@ -671,7 +716,7 @@ export default function PagosPacientePage() {
                     <div className="relative">
                       <select 
                         disabled={!cajaActivaId}
-                        className="w-full p-4 pl-11 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 focus:border-emerald-500/50 rounded-2xl font-bold text-xs uppercase text-slate-700 outline-none focus:ring-4 focus:ring-emerald-500/10 appearance-none cursor-pointer shadow-sm" 
+                        className="w-full p-4 pl-11 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 focus:border-emerald-500/50 rounded-2xl font-bold text-xs uppercase text-slate-700 outline-none focus:ring-4 focus:ring-emerald-500/10 appearance-none cursor-pointer shadow-sm disabled:opacity-50" 
                         value={metodoPago} 
                         onChange={(e) => setMetodoPago(e.target.value)}
                       >
@@ -688,18 +733,15 @@ export default function PagosPacientePage() {
                       <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16}/>
                     </div>
                   </div>
+                  
+                  {/* 🔥 AHORA ESTE CAMPO ES AUTOMÁTICO SEGÚN LO SELECCIONADO 🔥 */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Monto a pagar</label>
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Monto Total a Pagar</label>
                     <div className="relative">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-black text-base">$</span>
-                      <input 
-                        type="number" 
-                        disabled={!cajaActivaId}
-                        placeholder="0" 
-                        className="w-full py-4 pl-10 pr-5 bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 focus:border-emerald-500/50 rounded-2xl font-black text-base text-slate-800 outline-none focus:ring-4 focus:ring-emerald-500/10 transition-all placeholder:text-slate-300 shadow-sm" 
-                        value={montoIngresado} 
-                        onChange={(e) => setMontoIngresado(Number(e.target.value))} 
-                      />
+                      <div className={`w-full py-4 pl-10 pr-5 border rounded-2xl font-black text-base transition-all shadow-sm ${montoTotalAPagar > 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-slate-50 border-slate-200 text-slate-400'}`}>
+                         {montoTotalAPagar.toLocaleString('es-CL')}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -732,11 +774,11 @@ export default function PagosPacientePage() {
 
                 <button 
                   onClick={procesarPagoCaja}
-                  disabled={cargandoAccion || !montoIngresado || Number(montoIngresado) <= 0 || !cajaActivaId}
+                  disabled={cargandoAccion || montoTotalAPagar <= 0 || !cajaActivaId}
                   className="w-full py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-emerald-500/25 hover:shadow-emerald-500/40 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 flex items-center justify-center gap-3 border border-emerald-400"
                 >
                   {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle2 size={18} strokeWidth={2.5}/>}
-                  Procesar Pago
+                  {montoTotalAPagar <= 0 ? 'Selecciona un tratamiento arriba' : `Pagar $${montoTotalAPagar.toLocaleString('es-CL')}`}
                 </button>
               </motion.div>
             ) : (
