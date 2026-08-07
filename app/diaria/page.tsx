@@ -872,8 +872,8 @@ export default function VistaDiariaPage() {
                                 <div className="space-y-4 md:space-y-5">
                                   {modoNuevoPaciente ? (
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 bg-white p-4 md:p-6 rounded-2xl md:rounded-[2rem] border border-slate-100 shadow-sm">
-                                      <input placeholder="Nombre" className="p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all" value={nuevoPaciente.nombre} onChange={e => setNuevoPaciente(prev => ({ ...prev, nombre: e.target.value }))} />
-                                      <input placeholder="Apellido" className="p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all" value={nuevoPaciente.apellido} onChange={e => setNuevoPaciente(prev => ({ ...prev, apellido: e.target.value }))} />
+                                      <input placeholder="Nombre" className="p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all placeholder:text-slate-500 text-slate-800" value={nuevoPaciente.nombre} onChange={e => setNuevoPaciente(prev => ({ ...prev, nombre: e.target.value }))} />
+                                      <input placeholder="Apellido" className="p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all placeholder:text-slate-500 text-slate-800" value={nuevoPaciente.apellido} onChange={e => setNuevoPaciente(prev => ({ ...prev, apellido: e.target.value }))} />
                                       
                                       <div className="md:col-span-2 flex items-center gap-2 mt-1 md:mt-2">
                                           <input 
@@ -893,14 +893,14 @@ export default function VistaDiariaPage() {
 
                                       <div className="md:col-span-2">
                                           <input 
-                                              placeholder={esOtroDocumento ? "N° de Pasaporte o Identificación (Opcional)" : "RUT (sin puntos, con guión)"} 
-                                              className="w-full p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all" 
-                                              value={nuevoPaciente.rut} 
-                                              onChange={e => setNuevoPaciente(prev => ({...prev, rut: e.target.value}))}
-                                          />
+    placeholder={esOtroDocumento ? "N° de Pasaporte o Identificación (Opcional)" : "RUT (sin puntos, con guión)"} 
+    className="w-full p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all placeholder:text-slate-500 text-slate-800" 
+    value={nuevoPaciente.rut} 
+    onChange={e => setNuevoPaciente(prev => ({...prev, rut: e.target.value}))}
+/>
                                       </div>
 
-                                      <input placeholder="Teléfono" className="p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all" value={nuevoPaciente.telefono} onChange={e => setNuevoPaciente(prev => ({ ...prev, telefono: e.target.value }))} />
+                                      <input placeholder="Teléfono" className="p-3 md:p-4 bg-slate-50 border border-slate-200 rounded-xl md:rounded-2xl text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] transition-all placeholder:text-slate-500 text-slate-800" value={nuevoPaciente.telefono} onChange={e => setNuevoPaciente(prev => ({ ...prev, telefono: e.target.value }))} />
                                       
                                       <div className="space-y-1">
                                           <label className="text-[9px] font-black text-slate-400 uppercase ml-2">Fecha Nac.</label>
@@ -931,11 +931,11 @@ export default function VistaDiariaPage() {
                                       <div className="relative group">
                                         <Search className="absolute left-4 md:left-5 top-1/2 -translate-y-1/2 text-slate-400 transition-colors group-focus-within:text-[#C9A24B] md:w-[20px] md:h-[20px]" size={18} />
                                         <input
-                                          placeholder="Buscar Nombre o RUT..."
-                                          className="w-full pl-10 md:pl-12 pr-4 md:pr-5 py-3 md:py-4 bg-white border border-slate-200 rounded-xl md:rounded-[2rem] text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] shadow-sm transition-all placeholder:normal-case"
-                                          value={busquedaPac}
-                                          onChange={e => { setBusquedaPac(e.target.value); buscarPacientes(e.target.value); }}
-                                        />
+  placeholder="Buscar Nombre o RUT..."
+  className="w-full pl-10 md:pl-12 pr-4 md:pr-5 py-3 md:py-4 bg-white border border-slate-200 rounded-xl md:rounded-[2rem] text-base md:text-xs font-bold uppercase outline-none focus:border-[#C9A24B] shadow-sm transition-all placeholder:normal-case placeholder:text-slate-500 text-slate-800"
+  value={busquedaPac}
+  onChange={e => { setBusquedaPac(e.target.value); buscarPacientes(e.target.value); }}
+/>
                                       </div>
                                       {pacientesEncontrados.map(p => (
                                         <button
