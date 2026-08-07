@@ -151,7 +151,7 @@ export default function VistaDiariaPage() {
 
       if (dentistas.length > 0) {
         const [citasRes, dispoRes, bloqueosRes] = await Promise.all([
-          supabase.from('citas').select('id, inicio, fin, estado, pacientes(nombre, apellido), profesional_id, motivo')
+          supabase.from('citas').select('id, inicio, fin, estado, pacientes(id, nombre, apellido, rut, telefono, activo, motivo_deshabilitado), profesional_id, motivo')
             .in('profesional_id', idsDentistas)
             .gte('inicio', `${fechaISO}T00:00:00`)
             .lte('inicio', `${fechaISO}T23:59:59`)
@@ -205,6 +205,10 @@ export default function VistaDiariaPage() {
     
     const chocaCita = citas.some(c => {
       if (c.profesional_id !== profId) return false;
+      
+      // 🔥 Evitar chocar con la cita que estamos editando actualmente 🔥
+      if (citaEnReprogramacion && c.id === citaEnReprogramacion.id) return false; 
+      
       const cInicio = new Date(c.inicio.replace(' ', 'T')).getTime();
       const cFin = new Date(c.fin.replace(' ', 'T')).getTime();
       return slotStart < cFin && slotEnd > cInicio;
@@ -488,26 +492,25 @@ export default function VistaDiariaPage() {
                  <p className="text-xs font-bold text-slate-400 mt-2">Nadie atiende en la fecha seleccionada.</p>
               </div>
             ) : (
-              <div className="flex flex-1 overflow-hidden relative">
+              <div className="flex flex-1 overflow-auto custom-scrollbar relative">
                 
                 {/* Columna Fija Izquierda (Horas) */}
-                <div className="w-12 md:w-20 border-r border-slate-100 bg-slate-50/80 shrink-0 z-20 flex flex-col sticky left-0 shadow-[2px_0_10px_rgba(0,0,0,0.02)]">
-                  <div className="h-[50px] md:h-[80px] border-b border-slate-200 bg-white/80 backdrop-blur-md flex items-center justify-center shrink-0">
+                <div className="w-12 md:w-20 border-r border-slate-100 bg-slate-50/80 shrink-0 z-40 flex flex-col sticky left-0 shadow-[2px_0_10px_rgba(0,0,0,0.02)]">
+                  <div className="h-[50px] md:h-[80px] border-b border-slate-200 bg-white/90 backdrop-blur-md flex items-center justify-center shrink-0 sticky top-0 z-50">
                     <Clock className="text-slate-400 md:w-[20px] md:h-[20px]" size={16} />
                   </div>
-                  <div className="flex-1 overflow-hidden relative [--slot-h:1.5rem] md:[--slot-h:2.5rem]">
-                    <div className="absolute w-full">
-                      {slotsHorarios.map(hora => (
-                        <div key={hora} className="h-[var(--slot-h)] border-b border-slate-200/50 flex items-center justify-center text-[9px] md:text-[10px] font-black text-slate-400">
-                          {hora}
-                        </div>
-                      ))}
-                    </div>
+                  <div className="relative [--slot-h:1.5rem] md:[--slot-h:2.5rem]">
+                    {slotsHorarios.map(hora => (
+                      <div key={hora} className="h-[var(--slot-h)] border-b border-slate-200/50 flex items-center justify-center text-[9px] md:text-[10px] font-black text-slate-400">
+                        {hora}
+                      </div>
+                    ))}
                   </div>
+                </div>
                 </div>
 
                 {/* Contenedor Horizontal Scrolleable de Doctores */}
-                <div className="flex-1 overflow-auto custom-scrollbar flex relative bg-slate-50/20">
+<div className="flex-1 flex relative bg-slate-50/20">
                    {profesionalesDelDia.map(p => {
                       const citasDoc = citas.filter(c => c.profesional_id === p.user_id);
                       const fechaStr = getLocalDateISO(selectedDate);
