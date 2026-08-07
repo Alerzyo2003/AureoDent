@@ -1049,7 +1049,7 @@ export default function VistaDiariaPage() {
 
                       </div>
                     )}
-                  </div>
+                  
 
                   {/* Pie del modal sticky */}
                   <div className="px-5 md:px-10 py-4 md:py-6 border-t border-slate-100 bg-white flex flex-col sm:flex-row justify-between items-center gap-3 md:gap-4 shrink-0 sticky bottom-0 z-20">
