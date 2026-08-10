@@ -91,7 +91,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
     }
   }
 
-  const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
+  const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'DENTISTA';
 
   // 🔥 ANIMACIÓN DE CARGA ELEGANTE Y ALINEADA A LA MARCA 🔥
   if (!paciente) return (
@@ -168,7 +168,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
 
   return (
     <div 
-      className="min-h-screen flex flex-col font-sans selection:bg-blue-100 text-left bg-fixed"
+       className="min-h-screen flex flex-col font-sans selection:bg-blue-100 text-left bg-fixed print:block print:min-h-0"
       style={{
         backgroundImage: "url('/fondo-pacientes.png')",
         backgroundSize: 'cover',
@@ -274,8 +274,8 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
       </header>
 
       {/* CONTENIDO PRINCIPAL */}
-      <div className="px-4 lg:px-6 py-6 lg:py-8 w-full max-w-[1200px] mx-auto flex-1 print:p-0 text-left">
-        <div className="flex flex-col gap-4 lg:gap-6 print:block print:w-full text-left h-full">
+      <div className="px-4 lg:px-6 py-6 lg:py-8 w-full max-w-[1200px] mx-auto flex-1 print:p-0 print:block print:max-w-none print:mx-0 text-left">
+        <div className="flex flex-col gap-4 lg:gap-6 print:block print:w-full print:h-auto text-left h-full">
           
           {/* SUB-MENÚ (Evoluciones, etc.) - Optimizado para celular sin ser sticky forzado */}
           {esFicha && (
@@ -294,7 +294,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
             </nav>
           )}
           
-          <div className="flex-1 print:block min-h-[600px] text-left relative z-10 w-full">
+          <div className="flex-1 print:block print:h-auto print:min-h-0 text-left relative z-10 w-full">
                {children}
           </div>
         </div>
