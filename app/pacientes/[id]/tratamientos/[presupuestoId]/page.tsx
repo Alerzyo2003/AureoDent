@@ -1422,24 +1422,50 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     <div className="flex flex-col lg:flex-row gap-6 w-full h-full relative p-6 bg-[#F8FAFC] min-h-screen font-sans" id="odontograma-container" onClick={() => setMenuContextual(null)}>
       
       {/* ESTILOS APLICADOS DURANTE LA EXPORTACIÓN PDF */}
+      {/* ESTILOS APLICADOS DURANTE LA EXPORTACIÓN PDF / IMPRESIÓN */}
       <style>{`
         @media print {
-          /* 🔥 Oculta TODO en la página (sidebar, odontograma, modales, layout raíz, etc.) */
-          body * { visibility: hidden; }
-
-          /* Muestra únicamente el documento de impresión */
-          #print-presupuesto, #print-presupuesto * { visibility: visible; }
-          #print-presupuesto {
-            display: block !important;
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            padding: 0;
-            margin: 0;
+          /* 1. Restablecer el body para evitar que el scroll afecte la paginación */
+          html, body {
+            height: auto !important;
+            overflow: visible !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
           }
 
-          @page { margin: 1.5cm; }
+          /* 2. Ocultar TODO dentro del contenedor principal, excepto el presupuesto y los estilos */
+          #odontograma-container > *:not(#print-presupuesto):not(style) {
+            display: none !important;
+          }
+
+          /* 3. Limpiar el contenedor principal para que no agregue márgenes ni padding ocultos */
+          #odontograma-container {
+            display: block !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: transparent !important;
+            height: auto !important;
+            min-height: auto !important;
+          }
+
+          /* 4. Mostrar el documento a imprimir en el flujo normal (NUNCA absolute para impresión multipágina) */
+          #print-presupuesto {
+            display: block !important;
+            position: static !important; /* Importante para que el navegador lo pagine correctamente */
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          /* 5. Asegurar que los elementos internos del presupuesto sean visibles */
+          #print-presupuesto * {
+            visibility: visible;
+          }
+
+          @page { 
+            margin: 1.5cm; 
+          }
         }
       `}</style>
 
