@@ -91,7 +91,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
     }
   }
 
-  const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'DENTISTA';
+  const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
 
   // 🔥 ANIMACIÓN DE CARGA ELEGANTE Y ALINEADA A LA MARCA 🔥
   if (!paciente) return (
