@@ -3,14 +3,20 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
-  Loader2, ChevronDown, Trash2, Save, Spline, LineChart, Plus
+  Loader2, ChevronDown, Trash2, Save, Spline, LineChart, Plus, Printer, ArrowRightLeft
 } from 'lucide-react'
-import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 
 const DIENTES_SUPERIORES = [18, 17, 16, 15, 14, 13, 12, 11, 21, 22, 23, 24, 25, 26, 27, 28];
 const DIENTES_INFERIORES = [48, 47, 46, 45, 44, 43, 42, 41, 31, 32, 33, 34, 35, 36, 37, 38];
 const ESTADOS_PIEZA = ['presente', 'ausente', 'implante'] as const;
+
+// Dimensiones Universales (Alineación Perfecta)
+const STICKY_WIDTH = 120;
+const TOOTH_WIDTH = 86;
+const CENTER_GAP = 20;
+const CONTENT_WIDTH = (16 * TOOTH_WIDTH) + CENTER_GAP; // 1396
+const TOTAL_WIDTH = STICKY_WIDTH + CONTENT_WIDTH; // 1516
 
 const getInitialPiezaData = () => ({
   estado: 'presente',
@@ -96,12 +102,9 @@ const generarCurvaSuave = (puntos: { x: number, y: number }[], esContinuacion: b
 
 const PeriodontogramaChart = ({ arcada, dientes, data }: { arcada: string, dientes: number[], data: any }) => {
   const isUpper = arcada === 'superior';
-  const TOOTH_WIDTH = 86;
   const CHART_HEIGHT = 160;
   const MM_TO_PX = 5;
   const UAC_Y = CHART_HEIGHT / 2;
-
-  const totalWidth = (dientes.length * TOOTH_WIDTH) + 20;
 
   const generatePath = (cara: 'vestibular' | 'palatino' | 'lingual', medida: 'margen' | 'profundidad') => {
     const segments: { x: number, y: number }[][] = [];
@@ -109,7 +112,7 @@ const PeriodontogramaChart = ({ arcada, dientes, data }: { arcada: string, dient
 
     dientes.forEach((pieza, idx) => {
       const piezaData = data[pieza];
-      const xBase = (idx * TOOTH_WIDTH) + (idx >= 8 ? 20 : 0);
+      const xBase = (idx * TOOTH_WIDTH) + (idx >= 8 ? CENTER_GAP : 0);
 
       if (piezaData?.estado === 'ausente') {
         if (currentSegment.length) { segments.push(currentSegment); currentSegment = []; }
@@ -151,7 +154,7 @@ const PeriodontogramaChart = ({ arcada, dientes, data }: { arcada: string, dient
 
       const margenData = piezaData?.[cara]?.margen || [null, null, null];
       const profData = piezaData?.[cara]?.profundidad || [null, null, null];
-      const xBase = (idx * TOOTH_WIDTH) + (idx >= 8 ? 20 : 0);
+      const xBase = (idx * TOOTH_WIDTH) + (idx >= 8 ? CENTER_GAP : 0);
 
       for (let pointIdx = 0; pointIdx < 3; pointIdx++) {
         const m = margenData[pointIdx];
@@ -185,16 +188,22 @@ const PeriodontogramaChart = ({ arcada, dientes, data }: { arcada: string, dient
   const pocketAreaL = generatePocketArea(caraLingual);
 
   return (
-    <div className="w-full my-6 overflow-x-auto custom-scrollbar">
-      <div className="relative" style={{ width: totalWidth, height: CHART_HEIGHT }}>
-        <svg width="100%" height="100%" className="absolute inset-0 z-0">
+    <div className={`w-[${TOTAL_WIDTH}px] min-w-[${TOTAL_WIDTH}px] flex relative bg-white border border-slate-200 rounded-2xl shadow-sm my-6 print-no-break print:shadow-none print:border-slate-300`}>
+      {/* Etiqueta Pegajosa (Sticky) */}
+      <div className={`sticky left-0 z-20 w-[${STICKY_WIDTH}px] min-w-[${STICKY_WIDTH}px] flex justify-center items-center bg-slate-50 border-r border-slate-200 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.08)] print:static print:shadow-none`}>
+        <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Tendencia</span>
+      </div>
+      
+      {/* Área del Gráfico */}
+      <div className="relative flex-1 bg-slate-50/30">
+        <svg width={CONTENT_WIDTH} height={CHART_HEIGHT} className="block">
           {Array.from({ length: 15 }).map((_, i) => {
             const y = UAC_Y - ((7 - i) * MM_TO_PX);
             const isZeroLine = (7 - i) === 0;
             return <line key={`h-${i}`} x1="0" y1={y} x2="100%" y2={y} stroke={isZeroLine ? '#ef4444' : '#e2e8f0'} strokeWidth={isZeroLine ? 1.5 : 1} />;
           })}
           {dientes.map((pieza, idx) => {
-            const x = (idx * TOOTH_WIDTH) + (idx >= 8 ? 20 : 0);
+            const x = (idx * TOOTH_WIDTH) + (idx >= 8 ? CENTER_GAP : 0);
             const ausente = data[pieza]?.estado === 'ausente';
             return (
               <React.Fragment key={`v-${idx}`}>
@@ -204,10 +213,8 @@ const PeriodontogramaChart = ({ arcada, dientes, data }: { arcada: string, dient
             );
           })}
           <line x1={8 * TOOTH_WIDTH} y1="0" x2={8 * TOOTH_WIDTH} y2="100%" stroke="#cbd5e1" strokeWidth="1" />
-          <line x1={8 * TOOTH_WIDTH + 20} y1="0" x2={8 * TOOTH_WIDTH + 20} y2="100%" stroke="#cbd5e1" strokeWidth="1" />
-        </svg>
-
-        <svg width="100%" height="100%" className="absolute inset-0 z-10">
+          <line x1={8 * TOOTH_WIDTH + CENTER_GAP} y1="0" x2={8 * TOOTH_WIDTH + CENTER_GAP} y2="100%" stroke="#cbd5e1" strokeWidth="1" />
+          
           <path d={pocketAreaV} fill="rgba(37, 99, 235, 0.15)" />
           <path d={margenPathV} stroke="#ef4444" strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
           <path d={profundidadPathV} stroke="#3b82f6" strokeWidth="2" fill="none" strokeLinejoin="round" strokeLinecap="round" />
@@ -298,7 +305,7 @@ const generarAreaBolsaFila = (
   dientes.forEach((pieza, idx) => {
     const piezaData = data[pieza];
     const estado = piezaData?.estado || 'presente';
-    const cx = offsetX + (idx * TOOTH_WIDTH) + (idx >= 8 ? 20 : 0) + TOOTH_WIDTH / 2;
+    const cx = offsetX + (idx * TOOTH_WIDTH) + (idx >= 8 ? CENTER_GAP : 0) + TOOTH_WIDTH / 2;
 
     if (estado === 'ausente') {
       if (currentSegment.length) { segments.push(currentSegment); currentSegment = []; }
@@ -340,123 +347,138 @@ const ESTILO_CARA: Record<'vestibular' | 'palatino' | 'lingual', {
   lingual: { etiqueta: 'Lingual', header: 'bg-amber-600', headerText: 'text-white', cardBorder: 'border-amber-100', rowTint: 'bg-amber-50/20' },
 };
 
-const RULER_WIDTH = 30;
-
 const FilaDientesAnatomicos = ({
   dientes, data, cara, dir
 }: {
   dientes: number[], data: any, cara: 'vestibular' | 'palatino' | 'lingual', dir: 1 | -1
 }) => {
-  const TOOTH_WIDTH = 86;
   const PANEL_HEIGHT = 220;
+  const HEADER_HEIGHT = 32;
   const MM_TO_PX = 6;
   const baselineY = dir === 1 ? 70 : PANEL_HEIGHT - 70;
-  const totalWidth = RULER_WIDTH + (dientes.length * TOOTH_WIDTH) + 20;
   const estilo = ESTILO_CARA[cara];
 
   const areaBolsaPath = useMemo(
-    () => generarAreaBolsaFila(dientes, data, cara, dir, baselineY, MM_TO_PX, TOOTH_WIDTH, RULER_WIDTH),
+    () => generarAreaBolsaFila(dientes, data, cara, dir, baselineY, MM_TO_PX, TOOTH_WIDTH, 0),
     [dientes, data, cara, dir, baselineY]
   );
 
   return (
-    <div className={`w-full rounded-2xl border ${estilo.cardBorder} overflow-hidden shadow-sm bg-white`}>
-      <div className={`${estilo.header} ${estilo.headerText} px-4 py-2 flex items-center justify-between`}>
-        <span className="text-[10px] font-black uppercase tracking-[0.15em]">{estilo.etiqueta}</span>
-        <span className="text-[8px] font-bold uppercase tracking-widest opacity-90">mm</span>
+    <div className={`w-[${TOTAL_WIDTH}px] min-w-[${TOTAL_WIDTH}px] flex flex-col relative bg-white border ${estilo.cardBorder} rounded-2xl shadow-sm print-no-break print:border-slate-300 print:shadow-none`}>
+      
+      {/* Barra de Título (Atraviesa todo) */}
+      <div className={`w-full h-[${HEADER_HEIGHT}px] ${estilo.header} rounded-t-2xl relative print:bg-slate-200 print:rounded-none`}>
+         {/* Etiqueta Pegajosa (Sticky) para el Título */}
+         <div className={`sticky left-0 z-30 h-full w-[${STICKY_WIDTH}px] flex items-center justify-between px-3 ${estilo.headerText} print:text-black print:static`}>
+            <span className="text-[10px] font-black uppercase tracking-[0.15em]">{estilo.etiqueta}</span>
+            <span className="text-[8px] font-bold uppercase tracking-widest opacity-90">mm</span>
+         </div>
       </div>
-      <div className={`overflow-x-auto custom-scrollbar ${estilo.rowTint}`}>
-        <svg width={totalWidth} height={PANEL_HEIGHT} className="block">
-          {Array.from({ length: 16 }).map((_, i) => {
-            const y = 16 + i * (MM_TO_PX * 2);
-            return <line key={`g-${i}`} x1={RULER_WIDTH} y1={y} x2={totalWidth} y2={y} stroke="rgba(100,116,139,0.08)" strokeWidth="1" />;
-          })}
-          <line x1={RULER_WIDTH + 8 * TOOTH_WIDTH} y1="0" x2={RULER_WIDTH + 8 * TOOTH_WIDTH} y2={PANEL_HEIGHT} stroke="rgba(100,116,139,0.2)" strokeWidth="1" />
-          <line x1={RULER_WIDTH + 8 * TOOTH_WIDTH + 20} y1="0" x2={RULER_WIDTH + 8 * TOOTH_WIDTH + 20} y2={PANEL_HEIGHT} stroke="rgba(100,116,139,0.2)" strokeWidth="1" />
-          <line x1={RULER_WIDTH} y1="0" x2={RULER_WIDTH} y2={PANEL_HEIGHT} stroke="rgba(100,116,139,0.25)" strokeWidth="1" />
-          
-          {[0, 3, 6, 9].map((mm) => {
-            const y = baselineY + dir * mm * MM_TO_PX;
-            return (
-              <g key={mm}>
-                <line x1={RULER_WIDTH - 5} y1={y} x2={RULER_WIDTH} y2={y} stroke="#64748b" strokeWidth="1" />
-                <text x={RULER_WIDTH - 8} y={y + 3} textAnchor="end" fontSize="8" fontWeight="700" fill="#64748b">{mm}</text>
-              </g>
-            );
-          })}
-          <line x1={RULER_WIDTH} y1={baselineY} x2={totalWidth} y2={baselineY} stroke="#ef4444" strokeWidth="1.5" />
 
-          {dientes.map((pieza, idx) => {
-            const cx = RULER_WIDTH + (idx * TOOTH_WIDTH) + (idx >= 8 ? 20 : 0) + TOOTH_WIDTH / 2;
-            const piezaData = data[pieza];
-            const estado = piezaData?.estado || 'presente';
-            const tipo = tipoDientePorFDI(pieza);
-
-            if (estado === 'ausente') {
-              const yA = baselineY - dir * 18;
+      {/* Cuerpo del Diagrama */}
+      <div className={`flex w-full relative h-[${PANEL_HEIGHT}px] ${estilo.rowTint} rounded-b-2xl print:bg-white`}>
+        
+        {/* Regla Pegajosa (Sticky Ruler) */}
+        <div className={`sticky left-0 z-20 w-[${STICKY_WIDTH}px] min-w-[${STICKY_WIDTH}px] h-full bg-white border-r border-slate-200 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.08)] print:static print:shadow-none`}>
+          <div className="relative w-full h-full">
+            {[0, 3, 6, 9].map((mm) => {
+              const y = baselineY + dir * mm * MM_TO_PX;
               return (
-                <ellipse
-                  key={pieza}
-                  cx={cx} cy={yA} rx={14} ry={12}
-                  fill="none" stroke="#94a3b8" strokeDasharray="3 2" strokeWidth="1.25" opacity={0.6}
-                />
+                <div key={mm} className="absolute w-full flex justify-end pr-2" style={{ top: y - 6 }}>
+                  <span className="text-[8px] font-bold text-slate-500">{mm}</span>
+                </div>
               );
-            }
+            })}
+            {/* Indicador de Línea 0 Pegajoso */}
+            <div className="absolute w-full h-[1.5px] bg-red-500" style={{ top: baselineY }}></div>
+          </div>
+        </div>
 
-            const { corona, raices } = generarDienteSVG(tipo, cx, baselineY, dir);
-            const relleno = estado === 'implante' ? '#eff6ff' : '#ffffff';
-            const trazo = estado === 'implante' ? '#3b82f6' : '#94a3b8';
+        {/* Zona SVG de los Dientes (Se desplaza libremente) */}
+        <div className="relative flex-1">
+          <svg width={CONTENT_WIDTH} height={PANEL_HEIGHT} className="block">
+            {Array.from({ length: 16 }).map((_, i) => {
+              const y = 16 + i * (MM_TO_PX * 2);
+              return <line key={`g-${i}`} x1="0" y1={y} x2="100%" y2={y} stroke="rgba(100,116,139,0.15)" strokeWidth="1" />;
+            })}
+            
+            <line x1="0" y1={baselineY} x2="100%" y2={baselineY} stroke="#ef4444" strokeWidth="1.5" />
+            
+            <line x1={8 * TOOTH_WIDTH} y1="0" x2={8 * TOOTH_WIDTH} y2={PANEL_HEIGHT} stroke="rgba(100,116,139,0.3)" strokeWidth="1" />
+            <line x1={8 * TOOTH_WIDTH + CENTER_GAP} y1="0" x2={8 * TOOTH_WIDTH + CENTER_GAP} y2={PANEL_HEIGHT} stroke="rgba(100,116,139,0.3)" strokeWidth="1" />
 
-            const caraData = piezaData?.[cara] || {};
-            const margenArr = caraData.margen || [null, null, null];
-            const profArr = caraData.profundidad || [null, null, null];
-            const sangradoArr = caraData.sangrado || [0, 0, 0];
+            {dientes.map((pieza, idx) => {
+              const cx = (idx * TOOTH_WIDTH) + (idx >= 8 ? CENTER_GAP : 0) + TOOTH_WIDTH / 2;
+              const piezaData = data[pieza];
+              const estado = piezaData?.estado || 'presente';
+              const tipo = tipoDientePorFDI(pieza);
 
-            return (
-              <g key={pieza}>
-                {estado === 'implante' ? (
-                  <g>
-                    <rect x={cx - 4.5} y={Math.min(baselineY, baselineY + dir * 40)} width={9} height={40} fill="#eff6ff" stroke="#3b82f6" strokeWidth="1.1" />
-                    {[10, 20, 30].map((offset, i) => {
-                      const y = baselineY + dir * offset;
-                      return <line key={i} x1={cx - 4.5} y1={y} x2={cx + 4.5} y2={y} stroke="#3b82f6" strokeWidth="0.75" />;
-                    })}
-                  </g>
-                ) : (
-                  raices.map((r, i) => <path key={i} d={r} fill={relleno} stroke={trazo} strokeWidth="1" />)
-                )}
-                <path d={corona} fill={relleno} stroke={trazo} strokeWidth="1.25" />
+              if (estado === 'ausente') {
+                const yA = baselineY - dir * 18;
+                return (
+                  <ellipse
+                    key={pieza}
+                    cx={cx} cy={yA} rx={14} ry={12}
+                    fill="none" stroke="#94a3b8" strokeDasharray="3 2" strokeWidth="1.25" opacity={0.6}
+                  />
+                );
+              }
 
-                {[0, 1, 2].map((i) => {
-                  const px = cx - (TOOTH_WIDTH * 0.28) + i * (TOOTH_WIDTH * 0.28);
-                  const m = margenArr[i];
-                  const p = profArr[i];
-                  const s = sangradoArr[i] || 0;
-                  const yM = typeof m === 'number' ? baselineY - dir * m * MM_TO_PX : baselineY;
-                  const yP = (typeof p === 'number' && typeof m === 'number') ? yM + dir * p * MM_TO_PX : null;
-                  const colorBolsa = colorSeveridadBolsa(p);
-                  const hayRecesionOHiperplasia = typeof m === 'number' && m !== 0;
+              const { corona, raices } = generarDienteSVG(tipo, cx, baselineY, dir);
+              const relleno = estado === 'implante' ? '#eff6ff' : '#ffffff';
+              const trazo = estado === 'implante' ? '#3b82f6' : '#94a3b8';
 
-                  return (
-                    <g key={i}>
-                      {yP !== null && colorBolsa && (
-                        <line x1={px} y1={yM} x2={px} y2={yP} stroke={colorBolsa} strokeWidth="2.5" strokeLinecap="round" />
-                      )}
-                      <circle cx={px} cy={yM} r="2.5" fill={hayRecesionOHiperplasia ? '#ef4444' : '#94a3b8'} />
-                      {s > 0 && (
-                        <circle cx={px} cy={yP !== null ? yP : yM} r="3.5" fill={s === 1 ? '#ef4444' : '#f59e0b'} stroke="white" strokeWidth="1" />
-                      )}
+              const caraData = piezaData?.[cara] || {};
+              const margenArr = caraData.margen || [null, null, null];
+              const profArr = caraData.profundidad || [null, null, null];
+              const sangradoArr = caraData.sangrado || [0, 0, 0];
+
+              return (
+                <g key={pieza}>
+                  {estado === 'implante' ? (
+                    <g>
+                      <rect x={cx - 4.5} y={Math.min(baselineY, baselineY + dir * 40)} width={9} height={40} fill="#eff6ff" stroke="#3b82f6" strokeWidth="1.1" />
+                      {[10, 20, 30].map((offset, i) => {
+                        const y = baselineY + dir * offset;
+                        return <line key={i} x1={cx - 4.5} y1={y} x2={cx + 4.5} y2={y} stroke="#3b82f6" strokeWidth="0.75" />;
+                      })}
                     </g>
-                  );
-                })}
-              </g>
-            );
-          })}
+                  ) : (
+                    raices.map((r, i) => <path key={i} d={r} fill={relleno} stroke={trazo} strokeWidth="1" />)
+                  )}
+                  <path d={corona} fill={relleno} stroke={trazo} strokeWidth="1.25" />
 
-          {areaBolsaPath && (
-            <path d={areaBolsaPath} fill="rgba(37, 99, 235, 0.22)" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.4" />
-          )}
-        </svg>
+                  {[0, 1, 2].map((i) => {
+                    const px = cx - (TOOTH_WIDTH * 0.28) + i * (TOOTH_WIDTH * 0.28);
+                    const m = margenArr[i];
+                    const p = profArr[i];
+                    const s = sangradoArr[i] || 0;
+                    const yM = typeof m === 'number' ? baselineY - dir * m * MM_TO_PX : baselineY;
+                    const yP = (typeof p === 'number' && typeof m === 'number') ? yM + dir * p * MM_TO_PX : null;
+                    const colorBolsa = colorSeveridadBolsa(p);
+                    const hayRecesionOHiperplasia = typeof m === 'number' && m !== 0;
+
+                    return (
+                      <g key={i}>
+                        {yP !== null && colorBolsa && (
+                          <line x1={px} y1={yM} x2={px} y2={yP} stroke={colorBolsa} strokeWidth="2.5" strokeLinecap="round" />
+                        )}
+                        <circle cx={px} cy={yM} r="2.5" fill={hayRecesionOHiperplasia ? '#ef4444' : '#94a3b8'} />
+                        {s > 0 && (
+                          <circle cx={px} cy={yP !== null ? yP : yM} r="3.5" fill={s === 1 ? '#ef4444' : '#f59e0b'} stroke="white" strokeWidth="1" />
+                        )}
+                      </g>
+                    );
+                  })}
+                </g>
+              );
+            })}
+
+            {areaBolsaPath && (
+              <path d={areaBolsaPath} fill="rgba(37, 99, 235, 0.22)" stroke="#2563eb" strokeWidth="1" strokeOpacity="0.4" />
+            )}
+          </svg>
+        </div>
       </div>
     </div>
   );
@@ -527,14 +549,26 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
   };
 
   const inputClass = "w-full h-8 text-center bg-transparent outline-none text-xs font-bold transition-colors";
+  
+  // Clase base para mantener la columna izquierda pegajosa y sincronizada
+  const stickyTdClasses = `sticky left-0 z-20 w-[${STICKY_WIDTH}px] min-w-[${STICKY_WIDTH}px] max-w-[${STICKY_WIDTH}px] border-r border-slate-200/80 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.08)] print:static print:shadow-none`;
 
   return (
-    <div className="overflow-x-auto w-full custom-scrollbar">
-      <table className="w-full border-collapse text-[10px] min-w-[1250px]">
+    <div className="overflow-x-auto w-full custom-scrollbar print-no-break print:overflow-visible relative" style={{ WebkitOverflowScrolling: 'touch' }}>
+      <table className="border-collapse text-[10px]" style={{ tableLayout: 'fixed', width: `${TOTAL_WIDTH}px` }}>
+        <colgroup>
+          <col style={{ width: `${STICKY_WIDTH}px` }} />
+          {/* Columnas para los primeros 8 dientes (24 inputs) */}
+          {Array.from({length: 24}).map((_, i) => <col key={`c1-${i}`} style={{ width: `${TOOTH_WIDTH / 3}px` }} />)}
+          {/* Columna separadora central */}
+          <col style={{ width: `${CENTER_GAP}px` }} />
+          {/* Columnas para los últimos 8 dientes (24 inputs) */}
+          {Array.from({length: 24}).map((_, i) => <col key={`c2-${i}`} style={{ width: `${TOOTH_WIDTH / 3}px` }} />)}
+        </colgroup>
         <tbody>
           <tr>
-            <td className="font-bold text-slate-500 p-2.5 border border-slate-200/80 bg-slate-50 text-left w-48 shadow-sm align-bottom uppercase text-[9px] tracking-widest">
-              # Pieza <span className="text-[8px] font-normal text-slate-400 lowercase ml-1">({caraLabel})</span>
+            <td className={`${stickyTdClasses} p-2.5 font-bold text-slate-500 bg-slate-50 text-left align-bottom uppercase text-[9px] tracking-widest border-y print:bg-slate-100`}>
+              # Pieza <span className="text-[8px] font-normal text-slate-400 lowercase ml-1 block md:inline">({caraLabel})</span>
             </td>
             {dientes.map((pieza: number, idx: number) => {
               const estado = data[pieza]?.estado || 'presente';
@@ -558,14 +592,14 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
                       {estado === 'ausente' && <span className="text-[6px] font-black text-slate-400 mt-0.5 tracking-tighter">AUS</span>}
                     </div>
                   </td>
-                  {idx === 7 && <td className="min-w-[15px] max-w-[15px] border-none bg-transparent" rowSpan={8}></td>}
+                  {idx === 7 && <td className="border-none bg-transparent" rowSpan={8}></td>}
                 </React.Fragment>
               );
             })}
           </tr>
 
           <tr>
-            <td className="font-bold text-blue-600 p-2.5 border border-slate-200/80 text-left bg-white">Profundidad Surco</td>
+            <td className={`${stickyTdClasses} p-2.5 font-bold text-blue-600 border-y text-left bg-white print:text-black`}>Profundidad Surco</td>
             {dientes.map((pieza: number) => {
               const ausente = data[pieza]?.estado === 'ausente';
               return (
@@ -574,12 +608,12 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
                     const val = data[pieza]?.[cara]?.profundidad?.[i];
                     const isPatologica = typeof val === 'number' && val >= 4;
                     return (
-                      <td key={`p-${pieza}-${i}`} className={`border border-slate-200/80 p-0 w-[28px] max-w-[28px] transition-colors ${ausente ? 'bg-slate-100' : 'bg-blue-50/20 hover:bg-blue-50/50'}`}>
+                      <td key={`p-${pieza}-${i}`} className={`border border-slate-200/80 p-0 transition-colors ${ausente ? 'bg-slate-100 print:bg-slate-100' : 'bg-blue-50/20 hover:bg-blue-50/50 print:bg-white'}`}>
                         <input
                           type="text" inputMode="numeric" disabled={ausente}
                           value={val !== null && val !== undefined ? val : ''}
                           onChange={(e) => handleTextChange(pieza, 'profundidad', i, e.target.value)}
-                          className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} ${isPatologica ? 'text-red-600 font-black' : 'text-blue-600'} focus:bg-blue-100/50 rounded-lg`}
+                          className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} ${isPatologica ? 'text-red-600 font-black' : 'text-blue-600 print:text-black'} focus:bg-blue-100/50 rounded-lg`}
                         />
                       </td>
                     )
@@ -590,7 +624,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
           </tr>
 
           <tr>
-            <td className="font-bold text-red-500 p-2.5 border border-slate-200/80 text-left bg-white">Margen Gingival</td>
+            <td className={`${stickyTdClasses} p-2.5 font-bold text-red-500 border-y text-left bg-white print:text-black`}>Margen Gingival</td>
             {dientes.map((pieza: number) => {
               const ausente = data[pieza]?.estado === 'ausente';
               return (
@@ -598,12 +632,12 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
                   {[0, 1, 2].map(i => {
                     const val = data[pieza]?.[cara]?.margen?.[i];
                     return (
-                      <td key={`m-${pieza}-${i}`} className={`border border-slate-200/80 p-0 transition-colors ${ausente ? 'bg-slate-100' : 'bg-red-50/20 hover:bg-red-50/50'}`}>
+                      <td key={`m-${pieza}-${i}`} className={`border border-slate-200/80 p-0 transition-colors ${ausente ? 'bg-slate-100' : 'bg-red-50/20 hover:bg-red-50/50 print:bg-white'}`}>
                         <input
                           type="text" inputMode="numeric" disabled={ausente}
                           value={val !== null && val !== undefined ? val : ''}
                           onChange={(e) => handleTextChange(pieza, 'margen', i, e.target.value)}
-                          className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} text-red-500 focus:bg-red-100/50 rounded-lg`}
+                          className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} text-red-500 print:text-black focus:bg-red-100/50 rounded-lg`}
                         />
                       </td>
                     )
@@ -614,7 +648,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
           </tr>
 
           <tr>
-            <td className="font-bold text-slate-700 p-2.5 border border-slate-200/80 text-left bg-slate-50/50">NIC (Inserción Clínica)</td>
+            <td className={`${stickyTdClasses} p-2.5 font-bold text-slate-700 border-y text-left bg-slate-50 print:bg-slate-50`}>NIC (Inserción)</td>
             {dientes.map((pieza: number) => (
               <React.Fragment key={`nic-${pieza}`}>
                 {[0, 1, 2].map(i => {
@@ -624,7 +658,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
                   if (typeof p === 'number' && typeof m === 'number') nicVal = p - m;
                   const isHigh = typeof nicVal === 'number' && nicVal >= 4;
                   return (
-                    <td key={`n-${pieza}-${i}`} className={`border border-slate-200/80 p-0 text-center align-middle font-bold bg-slate-50/30 h-8 text-xs ${isHigh ? 'text-red-600 font-black' : 'text-slate-600'}`}>
+                    <td key={`n-${pieza}-${i}`} className={`border border-slate-200/80 p-0 text-center align-middle font-bold bg-slate-50/30 print:bg-slate-50 h-8 text-xs ${isHigh ? 'text-red-600 font-black' : 'text-slate-600 print:text-black'}`}>
                       {nicVal}
                     </td>
                   )
@@ -634,7 +668,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
           </tr>
 
           <tr>
-            <td className="font-bold text-teal-700 p-2.5 border border-slate-200/80 text-left bg-teal-50/20">Anchura Encía Queratinizada</td>
+            <td className={`${stickyTdClasses} p-2.5 font-bold text-teal-700 border-y text-left bg-[#f4fafa] print:bg-white print:text-black`}>Ancho Encía Quer.</td>
             {dientes.map((pieza: number) => {
               const val = data[pieza]?.anchuraEncia;
               const ausente = data[pieza]?.estado === 'ausente';
@@ -645,7 +679,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
                     type="text" inputMode="numeric" disabled={ausente}
                     value={val !== null && val !== undefined ? val : ''}
                     onChange={e => handleAnchuraChange(pieza, e.target.value)}
-                    className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} ${isAbnormal ? 'text-red-600 font-black' : 'text-teal-700'} focus:bg-teal-100/50 rounded-lg`}
+                    className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} ${isAbnormal ? 'text-red-600 font-black' : 'text-teal-700 print:text-black'} focus:bg-teal-100/50 rounded-lg`}
                   />
                 </td>
               )
@@ -653,7 +687,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
           </tr>
 
           <tr>
-            <td className="font-bold text-slate-600 p-2.5 border border-slate-200/80 text-left bg-white">Furca</td>
+            <td className={`${stickyTdClasses} p-2.5 font-bold text-slate-600 border-y text-left bg-white print:text-black`}>Furca</td>
             {dientes.map((pieza: number) => {
               const val = data[pieza]?.furca;
               const ausente = data[pieza]?.estado === 'ausente';
@@ -663,7 +697,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
                     type="text" inputMode="numeric" disabled={ausente}
                     value={val !== null && val !== undefined ? val : ''}
                     onChange={e => handleFurcaChange(pieza, e.target.value)}
-                    className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} text-slate-600 focus:bg-slate-100 rounded-lg`}
+                    className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} text-slate-600 focus:bg-slate-100 rounded-lg print:text-black`}
                   />
                 </td>
               )
@@ -671,9 +705,9 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
           </tr>
 
           <tr>
-            <td className="font-bold text-slate-600 p-2.5 border border-slate-200/80 text-left bg-white">
-              Sangrado / Supuración
-              <div className="text-[7px] font-normal text-slate-400 normal-case mt-0.5">click: normal → sangrado → supuración</div>
+            <td className={`${stickyTdClasses} p-2.5 font-bold text-slate-600 border-y text-left bg-white print:text-black`}>
+              Sangrado / Sup.
+              <div className="text-[7px] font-normal text-slate-400 normal-case mt-0.5 print:hidden">click p/ cambiar</div>
             </td>
             {dientes.map((pieza: number) => {
               const ausente = data[pieza]?.estado === 'ausente';
@@ -686,7 +720,8 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
                       <td
                         key={`s-${pieza}-${i}`}
                         onClick={() => !ausente && handleSangradoChange(pieza, i)}
-                        className={`border border-slate-200/80 p-0 h-8 transition-colors ${ausente ? 'bg-slate-100 cursor-not-allowed opacity-40' : `cursor-pointer ${bgClass}`}`}
+                        className={`border border-slate-200/80 p-0 h-8 transition-colors ${ausente ? 'bg-slate-100 cursor-not-allowed opacity-40' : `cursor-pointer ${bgClass}`} print:opacity-100`}
+                        style={estadoSangrado === 1 ? { backgroundColor: '#ef4444' } : estadoSangrado === 2 ? { backgroundColor: '#fbbf24' } : {}}
                       />
                     )
                   })}
@@ -696,7 +731,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
           </tr>
 
           <tr>
-            <td className="font-bold text-slate-600 p-2.5 border border-slate-200/80 text-left bg-white">Movilidad</td>
+            <td className={`${stickyTdClasses} p-2.5 font-bold text-slate-600 border-y text-left bg-white print:text-black`}>Movilidad</td>
             {dientes.map((pieza: number) => {
               const val = data[pieza]?.movilidad;
               const ausente = data[pieza]?.estado === 'ausente';
@@ -706,7 +741,7 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
                     type="text" inputMode="numeric" disabled={ausente}
                     value={val !== null && val !== undefined ? val : ''}
                     onChange={e => handleMovilidadChange(pieza, e.target.value)}
-                    className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} text-slate-600 focus:bg-slate-100 rounded-lg`}
+                    className={`${inputClass} ${ausente ? 'cursor-not-allowed opacity-40' : 'cursor-text'} text-slate-600 focus:bg-slate-100 rounded-lg print:text-black`}
                   />
                 </td>
               )
@@ -722,6 +757,9 @@ export default function PeriodontogramaPage() {
   const params = useParams()
   const paciente_id = params.id as string
   
+  const [paciente, setPaciente] = useState<any>(null)
+  const [profesional, setProfesional] = useState<any>(null)
+
   const [historial, setHistorial] = useState<any[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [data, setData] = useState<Record<string, any>>({})
@@ -731,25 +769,23 @@ export default function PeriodontogramaPage() {
 
   useEffect(() => {
     if (paciente_id) {
-      fetchHistorial()
+      cargarContexto();
+      fetchHistorial();
     }
-  }, [paciente_id])
+  }, [paciente_id]);
 
-  useEffect(() => {
-    if (selectedId) {
-      const examenSeleccionado = historial.find(h => h.id === selectedId);
-      if (examenSeleccionado) {
-        setData(normalizarDatos(examenSeleccionado.datos || {}));
-      }
-    } else if (historial.length > 0) {
-      setSelectedId(historial[0].id);
-      setData(normalizarDatos(historial[0].datos || {}));
-    } else {
-      crearNuevoExamen();
+  const cargarContexto = async () => {
+    const { data: pac } = await supabase.from('pacientes').select('*').eq('id', paciente_id).single();
+    if (pac) setPaciente(pac);
+    
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const { data: prof } = await supabase.from('perfiles').select('nombre, apellido').eq('id', session.user.id).single();
+      if (prof) setProfesional(prof);
     }
-  }, [selectedId, historial]);
+  };
 
-  const fetchHistorial = async () => {
+  const fetchHistorial = async (idToSelect?: string) => {
     setCargando(true);
     const { data: examenes, error } = await supabase
       .from('periodontogramas')
@@ -760,19 +796,38 @@ export default function PeriodontogramaPage() {
     if (error) {
       toast.error("Error al cargar el historial.");
       console.error(error);
+    } else if (examenes && examenes.length > 0) {
+      setHistorial(examenes);
+      const targetId = idToSelect || examenes[0].id;
+      const targetExamen = examenes.find(e => e.id === targetId) || examenes[0];
+      setSelectedId(targetExamen.id);
+      setData(normalizarDatos(targetExamen.datos || {}));
     } else {
-      setHistorial(examenes || []);
+      crearNuevoExamenVacio([]);
     }
     setCargando(false);
   };
 
-  const crearNuevoExamen = () => {
+  const crearNuevoExamenVacio = (historialActual: any[]) => {
     const nuevoId = 'nuevo-examen';
     const fechaHoy = new Date().toISOString().split('T')[0];
     const nuevoExamen = { id: nuevoId, fecha_examen: fechaHoy, paciente_id: paciente_id, datos: {} };
-    setHistorial(prev => [nuevoExamen, ...prev.filter(h => h.id !== nuevoId)]);
+    
+    const nuevoHistorial = [nuevoExamen, ...historialActual.filter(h => h.id !== nuevoId)];
+    setHistorial(nuevoHistorial);
     setSelectedId(nuevoId);
-    setData({});
+    setData(normalizarDatos({}));
+  };
+
+  const handleNuevoExamen = () => {
+    crearNuevoExamenVacio(historial);
+  };
+
+  const handleSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const id = e.target.value;
+    setSelectedId(id);
+    const ex = historial.find(h => h.id === id);
+    if (ex) setData(normalizarDatos(ex.datos || {}));
   };
 
   const handleDataChange = (pieza: number, cara: string | null, medida: string, indice: number | null, valor: any) => {
@@ -818,8 +873,7 @@ export default function PeriodontogramaPage() {
       console.error(response.error);
     } else {
       toast.success("Guardado con éxito.");
-      await fetchHistorial();
-      if (response.data) setSelectedId(response.data.id);
+      await fetchHistorial(response.data.id);
     }
     setGuardando(false);
   };
@@ -833,9 +887,15 @@ export default function PeriodontogramaPage() {
       toast.error("Error al eliminar.");
     } else {
       toast.success("Eliminado.");
-      setSelectedId(null); 
-      fetchHistorial(); 
+      await fetchHistorial(); 
     }
+  };
+
+  const handleImprimir = () => {
+    toast.dismiss(); 
+    setTimeout(() => {
+      window.print();
+    }, 150); 
   };
 
   if (cargando) return (
@@ -846,37 +906,128 @@ export default function PeriodontogramaPage() {
   )
 
   return (
-    <div className="min-h-screen p-6 md:p-10 font-sans text-left pb-24" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
-      <div className="max-w-7xl mx-auto space-y-8">
+    <div className="min-h-screen p-4 md:p-10 font-sans text-left pb-24 print:p-0 print:m-0 print:bg-white print:overflow-visible" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
+      
+      {/* 
+        =========================================================================
+        SÚPER CSS DE IMPRESIÓN (SIN BARRAS DE SCROLL, SIN RECORTES)
+        ========================================================================== 
+      */}
+      <style dangerouslySetInnerHTML={{__html: `
+        @media print {
+          @page { size: landscape; margin: 8mm; }
+          
+          html, body, div#__next, main {
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: static !important;
+            background: white !important;
+          }
+
+          * {
+            background-image: none !important;
+          }
+          
+          [data-sonner-toaster], [data-sonner-toast], #sonner-toaster, header, nav, footer, button { 
+            display: none !important; 
+          }
+
+          /* Destruye barras de scroll en impresión para evitar el efecto visual molesto */
+          ::-webkit-scrollbar { display: none !important; }
+          * { scrollbar-width: none !important; }
+
+          /* ESCALA PRECISA PARA UN ANCHO DE 1540px */
+          .print-area {
+            width: 1540px !important; 
+            max-width: 1540px !important;
+            zoom: 0.65; /* Reduce visualmente el lienzo a un ancho compatible con A4 */
+            margin: 0 auto !important;
+            padding: 0 !important;
+            display: block !important;
+          }
+
+          /* Libera cualquier contenedor atascado en un ancho pequeño */
+          .overflow-x-auto, .custom-scrollbar {
+            overflow: visible !important;
+            overflow-x: visible !important;
+          }
+
+          /* PREVIENE CORTAR TABLAS Y GRÁFICOS A LA MITAD */
+          .print-no-break {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin-bottom: 20px !important;
+          }
+
+          /* FUERZA EL INICIO DEL MAXILAR INFERIOR A LA SIGUIENTE PÁGINA */
+          .print-page-break {
+            page-break-before: always !important;
+            break-before: page !important;
+            margin-top: 0 !important;
+            padding-top: 0 !important;
+          }
+        }
+      `}} />
+
+      <div className="max-w-7xl mx-auto space-y-6 md:space-y-8 print:space-y-6 print-area">
         
+        {/* ENCABEZADO EXCLUSIVO PARA IMPRESIÓN */}
+        <div className="hidden print:block print:mb-6 print:border-b print:border-slate-300 print:pb-4 text-black">
+          <div className="flex justify-between items-end mb-4">
+            <div>
+              <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-800">Periodontograma Clínico</h1>
+              <p className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Documento Clínico Oficial</p>
+            </div>
+            <div className="text-right">
+              <p className="text-sm font-bold uppercase text-slate-600">Fecha de Impresión: {new Date().toLocaleDateString('es-CL')}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4 text-sm mt-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
+            <div>
+              <p className="text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1">Datos del Paciente</p>
+              <p className="font-bold text-base">{paciente?.nombre} {paciente?.apellido}</p>
+              {paciente?.rut && <p className="text-xs text-slate-600 mt-1">RUT: {paciente.rut}</p>}
+            </div>
+            <div className="text-right">
+              <p className="text-[9px] text-slate-500 uppercase font-bold tracking-widest mb-1">Profesional Tratante</p>
+              <p className="font-bold text-base">{profesional?.nombre} {profesional?.apellido}</p>
+            </div>
+          </div>
+        </div>
+
         {/* HEADER / NAVEGACIÓN */}
-        <div className="flex justify-between items-center bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-white/60">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white/90 backdrop-blur-xl p-5 md:p-8 rounded-[2.5rem] shadow-xl border border-white/60 print:hidden">
           <div className="flex items-center gap-4">
-            <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-[1.5rem] text-white shadow-xl shadow-blue-600/20">
+            <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-3 md:p-4 rounded-[1.2rem] md:rounded-[1.5rem] text-white shadow-xl shadow-blue-600/20">
               <Spline size={24} strokeWidth={2.5} />
             </div>
             <div>
-              <h2 className="text-2xl font-black uppercase italic tracking-tighter text-slate-800 leading-none">Periodontograma</h2>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mt-1">Historial Clínico Periodontal del Paciente</p>
+              <h2 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter text-slate-800 leading-none">Periodontograma</h2>
+              <p className="text-slate-400 text-[9px] md:text-[10px] font-bold uppercase tracking-widest mt-1">Historial Clínico del Paciente</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <button onClick={handleGuardar} disabled={guardando} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:from-slate-900 hover:to-slate-900 transition-all flex items-center gap-2 disabled:opacity-50 border border-blue-500">
+          <div className="flex w-full md:w-auto items-center gap-2 md:gap-3">
+            <button onClick={handleImprimir} className="flex-1 md:flex-none justify-center bg-white/90 backdrop-blur-xl text-slate-600 border border-slate-200/80 px-4 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-slate-50 transition-all flex items-center gap-2">
+              <Printer size={16} strokeWidth={2.5} /> <span className="hidden md:inline">Imprimir</span>
+            </button>
+            <button onClick={handleGuardar} disabled={guardando} className="flex-1 md:flex-none justify-center bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 hover:from-slate-900 hover:to-slate-900 transition-all flex items-center gap-2 disabled:opacity-50 border border-blue-500">
               {guardando ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} strokeWidth={2.5} />} Guardar
             </button>
-            <button onClick={handleEliminar} disabled={!selectedId || selectedId === 'nuevo-examen'} className="bg-white/90 backdrop-blur-xl text-red-500 border border-white/80 px-4 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-red-50 transition-all flex items-center gap-2 disabled:opacity-50">
+            <button onClick={handleEliminar} disabled={!selectedId || selectedId === 'nuevo-examen'} className="flex-none bg-white/90 backdrop-blur-xl text-red-500 border border-white/80 px-4 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-red-50 transition-all flex items-center justify-center gap-2 disabled:opacity-50">
               <Trash2 size={16} />
             </button>
           </div>
         </div>
 
         {/* SELECTOR DE EXÁMENES Y ACCIONES */}
-        <div className="flex flex-wrap items-center gap-4 bg-white/90 backdrop-blur-xl p-6 rounded-[2.5rem] shadow-xl border border-white/60">
-          <div className="relative">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 md:gap-4 bg-white/90 backdrop-blur-xl p-5 md:p-6 rounded-[2.5rem] shadow-xl border border-white/60 print:hidden">
+          <div className="relative flex-1 md:flex-none">
             <select 
               value={selectedId || ''}
-              onChange={(e) => setSelectedId(e.target.value)}
-              className="appearance-none bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 rounded-2xl px-6 py-4 font-black text-xs uppercase text-slate-700 outline-none focus:border-blue-500 transition-all cursor-pointer pr-12 shadow-sm"
+              onChange={handleSelectChange}
+              className="w-full appearance-none bg-slate-50/80 hover:bg-white focus:bg-white border border-slate-200/60 rounded-2xl px-6 py-4 font-black text-xs uppercase text-slate-700 outline-none focus:border-blue-500 transition-all cursor-pointer pr-12 shadow-sm"
             >
               {historial.map(h => (
                 <option key={h.id} value={h.id}>
@@ -887,48 +1038,67 @@ export default function PeriodontogramaPage() {
             <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
 
-          <button onClick={crearNuevoExamen} className="bg-slate-50/80 hover:bg-white text-slate-600 border border-slate-200/60 px-6 py-4 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:border-blue-500 transition-all flex items-center justify-center gap-2">
-            <Plus size={16} strokeWidth={2.5} /> Nuevo Examen
-          </button>
+          <div className="flex gap-3">
+            <button onClick={handleNuevoExamen} className="flex-1 bg-slate-50/80 hover:bg-white text-slate-600 border border-slate-200/60 px-4 md:px-6 py-4 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:border-blue-500 transition-all flex items-center justify-center gap-2">
+              <Plus size={16} strokeWidth={2.5} /> Nuevo
+            </button>
 
-          <button onClick={() => setMostrarGrafico(!mostrarGrafico)} className={`border px-6 py-4 rounded-2xl font-black text-[10px] uppercase shadow-sm transition-all flex items-center justify-center gap-2 ${mostrarGrafico ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50/80 hover:bg-white text-slate-600 border-slate-200/60'}`}>
-            <LineChart size={16} strokeWidth={2.5} /> {mostrarGrafico ? 'Ocultar Tendencia' : 'Ver Tendencia'}
-          </button>
+            <button onClick={() => setMostrarGrafico(!mostrarGrafico)} className={`flex-1 border px-4 md:px-6 py-4 rounded-2xl font-black text-[10px] uppercase shadow-sm transition-all flex items-center justify-center gap-2 ${mostrarGrafico ? 'bg-slate-900 text-white border-slate-900' : 'bg-slate-50/80 hover:bg-white text-slate-600 border-slate-200/60'}`}>
+              <LineChart size={16} strokeWidth={2.5} /> {mostrarGrafico ? 'Ocultar' : 'Tendencia'}
+            </button>
+          </div>
         </div>
 
         {/* LEYENDA */}
-        <div className="flex flex-wrap items-center gap-4 bg-white/80 backdrop-blur-md px-6 py-4 rounded-2xl text-[9px] font-bold uppercase text-slate-600 shadow-sm border border-white/60">
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block shadow-sm"></span> Bolsa ≤3mm</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block shadow-sm"></span> Bolsa 4-5mm</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-600 inline-block shadow-sm"></span> Bolsa ≥6mm</span>
+        <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 md:gap-4 bg-white/80 backdrop-blur-md px-4 md:px-6 py-4 rounded-2xl text-[8px] md:text-[9px] font-bold uppercase text-slate-600 shadow-sm border border-white/60 print:border-slate-300 print:shadow-none print:bg-white print:text-black print:mb-6">
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block shadow-sm print:shadow-none print:border print:border-green-600" style={{WebkitPrintColorAdjust: 'exact', colorAdjust: 'exact'}}></span> Bolsa ≤3mm</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-yellow-500 inline-block shadow-sm print:shadow-none print:border print:border-yellow-600" style={{WebkitPrintColorAdjust: 'exact', colorAdjust: 'exact'}}></span> Bolsa 4-5mm</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-600 inline-block shadow-sm print:shadow-none print:border print:border-red-700" style={{WebkitPrintColorAdjust: 'exact', colorAdjust: 'exact'}}></span> Bolsa ≥6mm</span>
           <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block"></span> Margen</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500 inline-block shadow-sm"></span> Sangrado</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-400 inline-block shadow-sm"></span> Supuración</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-slate-300 inline-block shadow-sm"></span> Ausente</span>
-          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-100 border border-blue-400 inline-block shadow-sm"></span> Implante</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-red-500 inline-block shadow-sm print:shadow-none"></span> Sangrado</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-400 inline-block shadow-sm print:shadow-none"></span> Supuración</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-slate-300 inline-block shadow-sm print:shadow-none print:border print:border-slate-400"></span> Ausente</span>
+          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-100 border border-blue-400 inline-block shadow-sm print:shadow-none"></span> Implante</span>
+        </div>
+
+        {/* MENSAJE EXCLUSIVO PARA TELÉFONO (Oculto en print) */}
+        <div className="md:hidden flex items-center justify-center gap-3 mb-2 bg-blue-50/90 border border-blue-100 text-blue-600 py-3 px-4 rounded-xl text-[9px] font-black uppercase tracking-widest shadow-sm print:hidden">
+          <span className="text-sm animate-pulse"><ArrowRightLeft size={16} /></span>
+          <span className="text-center">Desliza el gráfico horizontalmente</span>
+          <span className="text-sm animate-pulse"><ArrowRightLeft size={16} /></span>
         </div>
 
         {/* CONTENEDORES DE MAXILARES */}
-        <div className="space-y-8">
-          <div className="bg-white/90 backdrop-blur-xl p-8 md:p-10 rounded-[3rem] shadow-2xl border border-white/60">
-            <h3 className="text-lg font-black text-slate-800 uppercase italic mb-6">Maxilar Superior</h3>
-            <div className="flex flex-col items-center gap-4">
-              <PeriodontogramaTable arcada="superior" cara="vestibular" dientes={DIENTES_SUPERIORES} data={data} onDataChange={handleDataChange} />
-              <PeriodontogramaAnatomico arcada="superior" dientes={DIENTES_SUPERIORES} data={data} />
-              <PeriodontogramaTable arcada="superior" cara="palatino" dientes={DIENTES_SUPERIORES} data={data} onDataChange={handleDataChange} />
-              {mostrarGrafico && <PeriodontogramaChart arcada="superior" dientes={DIENTES_SUPERIORES} data={data} />}
+        <div className="space-y-6 md:space-y-8 print:space-y-6">
+          
+          {/* Maxilar Superior */}
+          <div className="bg-white/90 backdrop-blur-xl pt-6 pb-2 px-0 md:px-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl border border-white/60 print:shadow-none print:border-none print:p-0 print:bg-transparent">
+            <h3 className="text-base md:text-lg font-black text-slate-800 uppercase italic mb-4 md:mb-6 px-4 md:px-0 print:text-black">Maxilar Superior</h3>
+            
+            <div className="w-full overflow-x-auto custom-scrollbar print:overflow-visible print:w-auto">
+               <div className="flex flex-col gap-2 min-w-max px-4 md:px-0 pb-4 print:min-w-fit print-w-auto">
+                 <PeriodontogramaTable arcada="superior" cara="vestibular" dientes={DIENTES_SUPERIORES} data={data} onDataChange={handleDataChange} />
+                 <PeriodontogramaAnatomico arcada="superior" dientes={DIENTES_SUPERIORES} data={data} />
+                 <PeriodontogramaTable arcada="superior" cara="palatino" dientes={DIENTES_SUPERIORES} data={data} onDataChange={handleDataChange} />
+                 {mostrarGrafico && <PeriodontogramaChart arcada="superior" dientes={DIENTES_SUPERIORES} data={data} />}
+               </div>
             </div>
           </div>
 
-          <div className="bg-white/90 backdrop-blur-xl p-8 md:p-10 rounded-[3rem] shadow-2xl border border-white/60">
-            <h3 className="text-lg font-black text-slate-800 uppercase italic mb-6">Maxilar Inferior</h3>
-            <div className="flex flex-col items-center gap-4">
-              <PeriodontogramaTable arcada="inferior" cara="vestibular" dientes={DIENTES_INFERIORES} data={data} onDataChange={handleDataChange} />
-              <PeriodontogramaAnatomico arcada="inferior" dientes={DIENTES_INFERIORES} data={data} />
-              <PeriodontogramaTable arcada="inferior" cara="lingual" dientes={DIENTES_INFERIORES} data={data} onDataChange={handleDataChange} />
-              {mostrarGrafico && <PeriodontogramaChart arcada="inferior" dientes={DIENTES_INFERIORES} data={data} />}
+          {/* Maxilar Inferior */}
+          <div className="bg-white/90 backdrop-blur-xl pt-6 pb-2 px-0 md:px-8 rounded-[2rem] md:rounded-[3rem] shadow-2xl border border-white/60 print-page-break print:shadow-none print:border-none print:p-0 print:bg-transparent">
+            <h3 className="text-base md:text-lg font-black text-slate-800 uppercase italic mb-4 md:mb-6 px-4 md:px-0 print:text-black">Maxilar Inferior</h3>
+            
+            <div className="w-full overflow-x-auto custom-scrollbar print:overflow-visible print:w-auto">
+               <div className="flex flex-col gap-2 min-w-max px-4 md:px-0 pb-4 print:min-w-fit print-w-auto">
+                 <PeriodontogramaTable arcada="inferior" cara="vestibular" dientes={DIENTES_INFERIORES} data={data} onDataChange={handleDataChange} />
+                 <PeriodontogramaAnatomico arcada="inferior" dientes={DIENTES_INFERIORES} data={data} />
+                 <PeriodontogramaTable arcada="inferior" cara="lingual" dientes={DIENTES_INFERIORES} data={data} onDataChange={handleDataChange} />
+                 {mostrarGrafico && <PeriodontogramaChart arcada="inferior" dientes={DIENTES_INFERIORES} data={data} />}
+               </div>
             </div>
           </div>
+
         </div>
       </div>
     </div>
