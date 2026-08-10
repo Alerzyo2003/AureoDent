@@ -72,7 +72,6 @@ const obtenerDientesPorZona = (zona: string, temporal: boolean): number[] => {
   return [];
 }
 
-// LISTA DE LABORATORIOS BASE
 const LABORATORIOS_BASE = [
   { id: 'lab_eco', nombre: 'Lab. Dental Económico', costo: 12000 },
   { id: 'lab_est', nombre: 'Lab. Estética Digital HD', costo: 35000 },
@@ -141,7 +140,6 @@ export default function DetalleTratamientoPage() {
   const [caraInput, setCaraInput] = useState<string>('') 
   const [zonaInput, setZonaInput] = useState<string>('')
 
-  // 🔥 ESTADOS NUEVOS PARA EVOLUCIÓN GRANULAR 🔥
   const [itemsAEvolucionar, setItemsAEvolucionar] = useState<string[]>([]);
   const [modalEvolucionAbierto, setModalEvolucionAbierto] = useState(false);
   const [avanceEvolucion, setAvanceEvolucion] = useState(0);
@@ -162,7 +160,7 @@ export default function DetalleTratamientoPage() {
 
   const [usuarioLogueado, setUsuarioLogueado] = useState<any>(null);
   const [perfil, setPerfil] = useState<any>(null);
-  const [mounted, setMounted] = useState(false); // 🔥 ESTADO PARA PORTAL 🔥
+  const [mounted, setMounted] = useState(false); 
 
   const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'DENTISTA';
   
@@ -198,7 +196,7 @@ export default function DetalleTratamientoPage() {
   }
   
   useEffect(() => {
-    setMounted(true); // Inicializamos el estado para el portal
+    setMounted(true); 
     if (idURL) { fetchDatosFinales(); fetchAuxiliares(); }
     const cerrarMenu = () => { setMenuContextual(null); setVistaMenu('principal'); };
     window.addEventListener('click', cerrarMenu);
@@ -227,7 +225,6 @@ export default function DetalleTratamientoPage() {
     const estadoPrevio = historialOdontograma[historialOdontograma.length - 1];
     const nuevoHistorial = historialOdontograma.slice(0, -1);
     
-    // UI Actualización inmediata
     setOdontogramaEstado(estadoPrevio);
     setHistorialOdontograma(nuevoHistorial);
 
@@ -304,16 +301,15 @@ export default function DetalleTratamientoPage() {
             setCitasRelacionadas(cits || []);
         }
 
-        // 🔥 CARGA LAS FASES/SECCIONES GUARDADAS EN EL PRESUPUESTO 🔥
         if (pres.secciones) {
             let seccionesGuardadas: string[] = [];
-            if (Array.isArray(pres.secciones)) { // Soporte para formato de array nativo (text[] o jsonb)
+            if (Array.isArray(pres.secciones)) { 
                 seccionesGuardadas = pres.secciones;
-            } else if (typeof pres.secciones === 'string') { // Soporte para formato de texto (JSON string)
+            } else if (typeof pres.secciones === 'string') { 
                 try {
                     const parsed = JSON.parse(pres.secciones);
                     if (Array.isArray(parsed)) seccionesGuardadas = parsed;
-                } catch (e) { /* Ignorar si no es un JSON válido */ }
+                } catch (e) { }
             }
             if (seccionesGuardadas.length > 0) {
                 setListaSecciones(prev => Array.from(new Set([...prev, ...seccionesGuardadas])));
@@ -526,7 +522,6 @@ export default function DetalleTratamientoPage() {
       const agrupado = allPrests.reduce((acc: any, curr: any) => {
         if (String(curr.Habilitado !== undefined ? curr.Habilitado : curr.habilitado || '').trim().toLowerCase() === 'no' || (curr.Habilitado !== undefined ? curr.Habilitado : curr.habilitado) === false) return acc; 
         
-        // 🔥 ASIGNAR REGLA DE REPARTO Y DOCTOR DUEÑO A LA PRESTACIÓN 🔥
         const catRegla = mapCategorias[curr["Nombre Categoria"]];
         curr.tipo_reparto_resuelto = curr.tipo_reparto || (catRegla ? catRegla.tipo : 'general');
         curr.prof_reparto_resuelto = catRegla ? catRegla.prof_id : null;
@@ -557,7 +552,6 @@ export default function DetalleTratamientoPage() {
       }));
     }
 
-    // 🔥 CARGA DE PLANTILLAS CON SECCIONES 🔥
     const { data: packsData } = await supabase.from('plantillas').select('*, plantilla_items(cantidad, prestacion_id, seccion)');
     
     if (packsData && allPrests.length > 0) {
@@ -584,7 +578,6 @@ export default function DetalleTratamientoPage() {
     
     const nuevaLista = Array.from(new Set([...listaSecciones, nombre]));
 
-    // Actualización optimista de la UI
     if(!listaSecciones.includes(nombre)) {
       setListaSecciones(nuevaLista);
     }
@@ -592,12 +585,11 @@ export default function DetalleTratamientoPage() {
     setModalNuevaSeccion(false); 
     setNuevaSeccionNombre('');
 
-    // Guardado en la base de datos (como string JSON para máxima compatibilidad con columnas de tipo 'text')
     const { error } = await supabase.from('presupuestos').update({ secciones: JSON.stringify(nuevaLista) }).eq('id', idURL);
 
     if (error) {
       toast.error("Error al guardar la nueva fase. Intenta de nuevo.");
-      setListaSecciones(listaSecciones); // Revertir si falla
+      setListaSecciones(listaSecciones); 
     } else {
       toast.success("Nueva fase clínica creada y guardada.");
     }
@@ -667,7 +659,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
   const procesarAplicacionHallazgo = async (dientesArreglo: number[], tipo: string, esMulti = false) => {
     guardarHistorial();
-    console.log(`[LOG] Procesando hallazgo múltiple/general: ${tipo}`, dientesArreglo);
 
     let nuevoEstado = { ...odontogramaEstado };
     const t = tipo.toLowerCase();
@@ -682,7 +673,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         nuevoEstado[dId] = { ...nuevoEstado[dId], hallazgos: actual };
     });
 
-    // Optimistic Update
     setOdontogramaEstado(nuevoEstado);
     setMenuContextual(null);
 
@@ -707,35 +697,26 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
       }
   };
 
-  // 🔥 LÓGICA OPTIMISTA Y LOGS PARA LESIONES EN CARAS 🔥
   const aplicarLesionCaraLocal = async (tipo: string) => {
     if (!menuContextual || !menuContextual.cara || menuContextual.diente === null) return;
     
-    console.log(`[LOG - MENU] Aplicando ${tipo} a la cara ${menuContextual.cara} del diente ${menuContextual.diente}`);
-
     guardarHistorial();
     const dId = menuContextual.diente.toString();
     const carasActuales = odontogramaEstado[dId]?.caras || {};
     
-    // Toggle (Si ya tiene esa lesión, se la quita. Si no, se la pone).
     const nuevaCara = carasActuales[menuContextual.cara] === tipo ? null : tipo;
     const nuevoEstado = { 
         ...odontogramaEstado, 
         [dId]: { ...odontogramaEstado[dId], caras: { ...carasActuales, [menuContextual.cara]: nuevaCara } } 
     };
     
-    console.log(`[LOG - STATE] Nuevo estado del diente ${dId}:`, nuevoEstado[dId]);
-
-    // Optimistic UI Update (Se pinta instantáneo en la pantalla)
     setOdontogramaEstado(nuevoEstado);
     setMenuContextual(null);
     
-    // Guardado en Base de Datos
     const { error } = await supabase.from('odontogramas').upsert({ paciente_id: pacienteId, dentadura: nuevoEstado }, { onConflict: 'paciente_id' });
     if (!error) { 
         toast.success(`Cara ${menuContextual.cara} actualizada a ${tipo}`); 
     } else {
-        console.error("[LOG - ERROR] Falla BD al guardar:", error);
         toast.error("Error al guardar en la BD");
     }
   }
@@ -755,14 +736,12 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
     setProcesandoId(item.id);
     try {
-        // 1. Marcar la prestación como 'cancelada'
         const { error: updateError } = await supabase
             .from('presupuesto_items')
             .update({ estado: 'cancelada' })
             .eq('id', item.id);
         if (updateError) throw updateError;
 
-        // 2. Si hay dinero abonado, buscar los pagos y anularlos, moviendo el dinero a saldo a favor.
         if (abonado > 0) {
             await supabase.from('pagos').update({ estado: 'Anulado', anulado_por: usuarioLogueado?.id, fecha_anulacion: new Date().toISOString() }).eq('item_id', item.id).not('estado', 'eq', 'Anulado');
             const { data: pacienteActual } = await supabase.from('pacientes').select('saldo_a_favor').eq('id', pacienteId).single();
@@ -771,7 +750,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacienteId);
         }
 
-        // 3. Registrar en auditoría
         await supabase.from('auditoria_clinica').insert([{
             usuario_id: usuarioLogueado?.id,
             accion: 'CANCEL / PRESTACIÓN',
@@ -799,7 +777,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     const item = acciones.find(a => a.id === id || a.tempId === tempId);
     if (!item) return;
 
-    // 🔥 REGLA: No se puede eliminar si ya tiene avance.
     if (item.avance > 0 || item.progreso > 0) {
       return toast.error("No se puede eliminar un tratamiento que ya ha sido iniciado.");
     }
@@ -809,13 +786,11 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     }
 
     if (id) {
-        // Solo eliminamos si es un item de un presupuesto local (no importado)
         if (item.presupuesto_id) {
             const { error } = await supabase.from('presupuesto_items').delete().eq('id', id);
             if (!error) { 
                 setAcciones(prev => prev.filter(a => a.id !== id)); 
                 
-                // Registro de auditoría
                 await supabase.from('auditoria_clinica').insert([{
                     usuario_id: usuarioLogueado?.id,
                     accion: 'DELETE / PRESTACIÓN',
@@ -952,12 +927,12 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         precio_pactado: prestacion["Precio"], 
         abonado: 0, 
         estado: 'pendiente', 
-        profesional_id: docFinal, // <- Se asigna al radiólogo/laboratorista si aplica
+        profesional_id: docFinal, 
         nombre_prestacion: observacionFinal, 
         observacion: observacionFinal,
         cara: caraInput || null,
         zona: zonaInput || null,
-        tipo_reparto: tipoRepartoFinal, // <- Guardamos la regla para liquidaciones
+        tipo_reparto: tipoRepartoFinal,
         costo_laboratorio: costoLabAuto,
         lab_pagado_por_dr: false
     };
@@ -1036,17 +1011,14 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     
     const { pack, configuraciones } = modalPack;
     
-    // 🔥 1. RECOPILAR TODAS LAS SECCIONES DEL PACK 🔥
     const seccionesAInsertar = new Set<string>();
     pack.items.forEach((pi: any) => {
         const nombreFase = (pi.seccion && pi.seccion.trim() !== '') ? pi.seccion.trim() : pack.nombre.trim();
         seccionesAInsertar.add(nombreFase);
     });
 
-    // 🔥 2. ACTUALIZAR LA LISTA GLOBAL DE FASES CLÍNICAS 🔥
     setListaSecciones(prev => {
         const nuevaLista = Array.from(new Set([...prev, ...Array.from(seccionesAInsertar)]));
-        // Guardamos las fases nuevas en la BD silenciosamente
         supabase.from('presupuestos').update({ secciones: JSON.stringify(nuevaLista) }).eq('id', idURL).then();
         return nuevaLista;
     });
@@ -1060,7 +1032,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
         const iconoFinal = prestacion.icono_tipo || pack.icono_tipo;
         
-        // 🔥 3. ASIGNAR LA FASE ESPECÍFICA DEL ÍTEM 🔥
         const faseDelItem = (pi.seccion && pi.seccion.trim() !== '') ? pi.seccion.trim() : pack.nombre.trim();
 
         const tipoRepartoFinal = prestacion.tipo_reparto_resuelto || 'general';
@@ -1081,12 +1052,12 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                 precio_pactado: precioConDcto, 
                 abonado: 0, 
                 estado: 'pendiente', 
-                profesional_id: docFinal, // <- Asigna al dueño de la categoría si aplica
+                profesional_id: docFinal, 
                 nombre_prestacion: observacionFinal, 
                 observacion: observacionFinal,
                 cara: caraInput || null,
                 zona: zonaInput || null,
-                tipo_reparto: tipoRepartoFinal, // <- Guardamos la regla para liquidaciones
+                tipo_reparto: tipoRepartoFinal,
                 costo_laboratorio: config.costoLab,
                 lab_pagado_por_dr: false
             };
@@ -1106,7 +1077,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             const pMatch = pack.items.find((pi:any) => pi.prestacion.id === d.prestacion_id)?.prestacion;
             const configDcto = configuraciones[d.prestacion_id]?.descuento || 0;
             
-            // 🔥 4. EXTRAER LA FASE DESDE EL TEXTO PARA LA VISTA LOCAL 🔥
             let faseExtraida = pack.nombre.trim();
             const faseMatch = d.observacion.match(/\|\s*Fase:\s*([^|]+)/);
             if (faseMatch) faseExtraida = faseMatch[1].trim();
@@ -1131,16 +1101,12 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     }
   }
 
-  // =======================================================
-  // 🔥 NUEVA LÓGICA DE EVOLUCIÓN 🔥
-  // =======================================================
   const abrirModalEvolucion = (itemIds: string[], avanceInicial: number) => {
     if (itemIds.length === 0) return;
 
     const item = acciones.find(a => itemIds.includes(a.id));
     if (!item) return;
 
-    // 🔥 REGLA MEJORADA: Si se intenta revertir un tratamiento finalizado, pedir confirmación.
     if (item.avance === 100 && avanceInicial < 100) {
         if (!window.confirm(`⚠️ Atención: Estás a punto de revertir un tratamiento que ya estaba finalizado. Esto puede afectar las liquidaciones ya pagadas. ¿Deseas continuar?`)) {
             return;
@@ -1151,7 +1117,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         return toast.error("No tienes permisos para evolucionar tratamientos.");
     }
 
-    // 🔥 ALERTA SI SE EVOLUCIONA TRABAJO DE OTRO DOCTOR 🔥
     if (perfil?.rol === 'DENTISTA') {
       const doctorLogueadoId = profesionalSeleccionado;
       const itemsAevaluar = acciones.filter(a => itemIds.includes(a.id));
@@ -1169,8 +1134,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
     setItemsAEvolucionar(itemIds);
     setAvanceEvolucion(avanceInicial);
-    // Si el usuario es admin, se resetea para que deba elegir.
-    // Si es dentista, se mantiene el ID del usuario logueado que se cargó al inicio.
     if (perfil?.rol === 'ADMIN') setProfesionalSeleccionado('');
     setModalEvolucionAbierto(true);
   }
@@ -1207,23 +1170,20 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         if (!item) continue;
 
         let nuevaObs = item.texto_db || item.display_nombre || '';
-        nuevaObs = nuevaObs.replace(/ \| Avance: [0-9]+/g, ''); // Limpiamos el avance del texto
+        nuevaObs = nuevaObs.replace(/ \| Avance: [0-9]+/g, ''); 
         
         const nuevoEstado = avance === 100 ? 'realizado' : item.estado;
 
-        // 🔥 NUEVA REGLA: Si el ítem es 100% de un doctor (ej. Radiólogo), 
-        // el pago se protege y mantiene para ese doctor, no para el que evoluciona.
         const doctorFinalParaPago = item.tipo_reparto === 'doctor' ? item.profesional_id : doctorId;
 
         if (item.presupuesto_id) {
           await supabase.from('presupuesto_items').update({ 
             observacion: nuevaObs,
             estado: nuevoEstado,
-            profesional_id: doctorFinalParaPago, // <--- Usamos el protegido
+            profesional_id: doctorFinalParaPago, 
             progreso: avance
           }).eq('id', itemId);
         } else if (item.id_dentalink) {
-          // La tabla de importación no tiene profesional_id, solo se actualiza el estado.
           await supabase.from('temp_items').update({ 
             nombre_prestacion: nuevaObs, 
             estado: nuevoEstado 
@@ -1241,7 +1201,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
           let nuevaObs = a.texto_db || a.display_nombre || '';
           nuevaObs = nuevaObs.replace(/ \| Avance: [0-9]+/g, ''); 
           
-          // Mantenemos la protección en la vista de la tabla
           const doctorFinalParaPago = a.tipo_reparto === 'doctor' ? a.profesional_id : doctorId;
 
           return { 
@@ -1250,7 +1209,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             avance: avance, 
             progreso: avance,
             texto_db: nuevaObs, 
-            profesional_id: doctorFinalParaPago // Actualiza el dueño visualmente sin romper la regla
+            profesional_id: doctorFinalParaPago 
           };
         }
         return a;
@@ -1369,56 +1328,86 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     else toast.success(iconoId ? "Logo global guardado" : "Logo restablecido");
   }
 
+  // 🔥 LÓGICA DE EXPORTACIÓN CON FIX PARA TAILWIND LAB() 🔥
+  const handleImprimirPresupuesto = () => {
+    window.print();
+  };
+
+  // 🔥 LÓGICA DE EXPORTACIÓN CON FIX PARA TAILWIND LAB() 🔥
   const procesarExportacion = async () => {
+    const modo = modalExportar.tipo; // 'imprimir' o 'descargar'
     setModalExportar({...modalExportar, abierto: false});
-    const modo = modalExportar.tipo;
-    
-    // Obtenemos el elemento antes de mostrar el toast
-    const element = document.getElementById('odontograma-container');
-    if (!element) {
-        return toast.error("No se pudo encontrar el documento para exportar.");
+
+    // 🔥 IMPRIMIR: usamos el motor nativo del navegador, sin html2canvas.
+    // Evita por completo el error de colores oklch()/lab() de Tailwind.
+    if (modo === 'imprimir') {
+      setTimeout(() => window.print(), 150);
+      return;
     }
 
-    const toastId = toast.loading(`Preparando documento...`);
-    
+    // A partir de aquí solo queda la rama de DESCARGAR PDF
+    const toastId = toast.loading("Procesando y numerando PDF...");
+
     try {
       const html2pdf = (await import('html2pdf.js')).default;
+      const element = document.getElementById('odontograma-container');
 
+      if (!element) {
+        toast.error("No se encontró el documento para imprimir", { id: toastId });
+        return;
+      }
+
+      // Ocultamos la interfaz de botones para que el PDF salga limpio
+      element.classList.add('modo-impresion');
+      await new Promise(r => setTimeout(r, 200));
+      
       const opt = {
-        margin:       [15, 15, 20, 15] as any, 
-        filename:     `Plan_Tratamiento_${pacienteId || 'General'}.pdf`,
-        image:        { type: 'jpeg' as const, quality: 1 },
-        html2canvas:  { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0 }, 
-        jsPDF:        { unit: 'mm' as const, format: 'letter' as const, orientation: 'portrait' as const },
-        pagebreak:    { mode: ['avoid-all', 'css', 'legacy'] }
+        margin: [15, 15, 20, 15] as [number, number, number, number],
+        filename: `Plan_Tratamiento_${pacienteInfo?.rut || 'Clinica'}.pdf`,
+        image: { type: 'jpeg', quality: 1 } as const,
+        html2canvas: { 
+          scale: 2, 
+          useCORS: true, 
+          letterRendering: true, 
+          backgroundColor: '#ffffff', 
+          scrollY: 0,
+          onclone: (clonedDoc: any) => {
+            const style = clonedDoc.createElement('style');
+            style.innerHTML = '* { box-shadow: none !important; filter: none !important; text-shadow: none !important; backdrop-filter: none !important; }';
+            clonedDoc.head.appendChild(style);
+          }
+        },
+        jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' } as const,
+        pagebreak: { mode: ['css', 'legacy'] as const }
       };
 
-      const pdf = await html2pdf().set(opt).from(element).toPdf().get('pdf');
-      const totalPages = pdf.internal.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
+      await (html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
+        const totalPages = pdf.internal.getNumberOfPages();
+        for (let i = 1; i <= totalPages; i++) {
           pdf.setPage(i);
           pdf.setFontSize(9);
-          pdf.setTextColor(120, 120, 120); 
+          pdf.setTextColor(120, 120, 120);
           pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 35, pdf.internal.pageSize.getHeight() - 8);
-      }
-        
-      if(modo === 'imprimir') window.open(pdf.output('bloburl'), '_blank');
-      else pdf.save();
-      
-      toast.success("Documento generado con éxito", { id: toastId });
-    } catch (error) { 
-      toast.error("Error al procesar la exportación", { id: toastId }); 
+        }
+      }) as any).save();
+      toast.success("PDF descargado con éxito", { id: toastId });
+
+    } catch (error) {
+      console.error(error);
+      toast.error("Error al generar el PDF", { id: toastId });
+    } finally {
+      // Restauramos la interfaz a la normalidad
+      const element = document.getElementById('odontograma-container');
+      if(element) element.classList.remove('modo-impresion');
     }
-  }
+  };
 
   const totalPlan = acciones.reduce((acc, curr) => acc + curr.display_pactado, 0) || Number(presupuestoData?.total || 0);
   const abonadoPlan = acciones.reduce((acc, curr) => acc + curr.display_abonado, 0) || Number(presupuestoData?.total_abonado || 0);
 
-  // 🔥 CÁLCULO DEL PORCENTAJE DE DESCUENTO GLOBAL 🔥
   const totalBasePlan = acciones.reduce((acc, curr) => acc + (Number(curr.precio_base) || Number(curr.display_pactado)), 0);
   const porcentajeDctoGlobal = totalBasePlan > 0 ? Math.round(((totalBasePlan - totalPlan) / totalBasePlan) * 100) : 0;
 
-  // 🔥 CÁLCULO DE LA DEUDA REALIZADA (TRABAJO EVOLUCIONADO) 🔥
   const deudaRealizada = acciones
     .filter(a => (a.estado === 'realizado' || (a.progreso && a.progreso > 0)))
     .reduce((acc, curr) => acc + curr.display_saldo, 0);
@@ -1432,11 +1421,165 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
   return (
     <div className="flex flex-col lg:flex-row gap-6 w-full h-full relative p-6 bg-[#F8FAFC] min-h-screen font-sans" id="odontograma-container" onClick={() => setMenuContextual(null)}>
       
-      {/* ======================================================= */}
-      {/* PANEL LATERAL FINANCIERO (CLARO Y MODERNO) */}
-      {/* ======================================================= */}
+      {/* ESTILOS APLICADOS DURANTE LA EXPORTACIÓN PDF */}
+      <style>{`
+        @media print {
+          /* 🔥 Oculta TODO en la página (sidebar, odontograma, modales, layout raíz, etc.) */
+          body * { visibility: hidden; }
+
+          /* Muestra únicamente el documento de impresión */
+          #print-presupuesto, #print-presupuesto * { visibility: visible; }
+          #print-presupuesto {
+            display: block !important;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 0;
+            margin: 0;
+          }
+
+          @page { margin: 1.5cm; }
+        }
+      `}</style>
+
+      {/* 📄 DOCUMENTO IMPRIMIBLE: presupuesto en formato factura, con logo y firmas */}
+      <div id="print-presupuesto" style={{ display: 'none', fontFamily: 'Georgia, "Times New Roman", serif', color: '#1e293b' }}>
+
+        {/* Encabezado con logo */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: 16, marginBottom: 20, borderBottom: '3px solid #0f172a' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <img
+              src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg"
+              alt="Logo Clínica"
+              style={{ width: 64, height: 64, objectFit: 'contain', borderRadius: 10, border: '1px solid #e2e8f0', padding: 4, background: '#fff' }}
+            />
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: 0.5 }}>Centro Médico y Dental Dignidad SpA</p>
+              <p style={{ fontSize: 10, fontWeight: 400, color: '#64748b', margin: '2px 0 0', fontStyle: 'italic' }}>Odontología integral y estética</p>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 2, color: '#2563eb', margin: 0 }}>Presupuesto de Tratamiento</p>
+            <p style={{ fontSize: 10, color: '#64748b', margin: '4px 0 0' }}>
+              Plan N° {idURL.substring(0, 8).toUpperCase()} &nbsp;·&nbsp; {new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+          </div>
+        </div>
+
+        {/* Datos paciente / profesional */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #cbd5e1', borderRadius: 10, overflow: 'hidden', marginBottom: 24 }}>
+          <div style={{ padding: '14px 18px', borderRight: '1px solid #cbd5e1' }}>
+            <p style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px' }}>Paciente</p>
+            <p style={{ fontSize: 14, fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>{pacienteInfo?.nombre} {pacienteInfo?.apellido}</p>
+            <p style={{ fontSize: 10, color: '#64748b', margin: '4px 0 0' }}>RUT: {pacienteInfo?.rut || '-'}</p>
+          </div>
+          <div style={{ padding: '14px 18px' }}>
+            <p style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px' }}>Profesional a cargo</p>
+            <p style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>Dr(a). {presupuestoData?.profesionales?.nombre || ''} {presupuestoData?.profesionales?.apellido || ''}</p>
+            <p style={{ fontSize: 10, color: '#64748b', margin: '4px 0 0' }}>{presupuestoData?.nombre_tratamiento || 'Tratamiento Integral'}</p>
+          </div>
+        </div>
+
+        {/* Secciones / fases */}
+        {seccionesVisibles.map((seccion) => {
+          const itemsSeccion = acciones.filter(a => a.seccion_nombre === seccion && !a.es_oculto);
+          if (itemsSeccion.length === 0) return null;
+          return (
+            <div key={`print-${seccion}`} style={{ marginBottom: 22, breakInside: 'avoid' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '2px solid #0f172a', marginBottom: 6 }}>
+                <div style={{ width: 6, height: 16, background: '#2563eb', borderRadius: 3 }} />
+                <h3 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, margin: 0 }}>{seccion}</h3>
+              </div>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10.5 }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Pieza</th>
+                    <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Prestación</th>
+                    {puedeVerFinanzas && (
+                      <>
+                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Precio Base</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Dcto.</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Pactado</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Abonado</th>
+                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Saldo</th>
+                      </>
+                    )}
+                    <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {itemsSeccion.map((item, idx) => (
+                    <tr key={`print-item-${idx}`} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
+                      <td style={{ padding: '7px 8px', fontWeight: 600 }}>{item.zona ? item.zona : (item.diente_id || '-')}{item.cara ? ` (${item.cara})` : ''}</td>
+                      <td style={{ padding: '7px 8px', fontWeight: 600 }}>{item.display_nombre}</td>
+                      {puedeVerFinanzas && (
+                        <>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', color: '#94a3b8', textDecoration: item.descuento > 0 ? 'line-through' : 'none' }}>${Number(item.precio_base || item.display_pactado).toLocaleString('es-CL')}</td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', color: item.descuento > 0 ? '#2563eb' : '#cbd5e1', fontWeight: 700 }}>{item.descuento > 0 ? `-${item.descuento}%` : '—'}</td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700 }}>${Number(item.display_pactado).toLocaleString('es-CL')}</td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', color: '#059669' }}>${Number(item.display_abonado).toLocaleString('es-CL')}</td>
+                          <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700 }}>${Number(item.display_saldo).toLocaleString('es-CL')}</td>
+                        </>
+                      )}
+                      <td style={{ padding: '7px 8px', textAlign: 'center', fontSize: 8.5, textTransform: 'uppercase', fontWeight: 700, color: item.estado === 'realizado' ? '#059669' : item.estado === 'cancelada' ? '#dc2626' : '#2563eb' }}>
+                        {item.estado === 'cancelada' ? 'Cancelado' : (item.estado === 'realizado' ? 'Realizado' : 'Pendiente')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {puedeVerFinanzas && (
+                <p style={{ textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#475569', margin: '6px 8px 0', paddingTop: 4, borderTop: '1px solid #e2e8f0' }}>
+                  Subtotal fase: ${totalPorSeccion(seccion).toLocaleString('es-CL')}
+                </p>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Resumen financiero */}
+        {puedeVerFinanzas && (
+          <div style={{ marginTop: 8, marginLeft: 'auto', width: 280, border: '1px solid #0f172a', borderRadius: 10, overflow: 'hidden', breakInside: 'avoid' }}>
+            <div style={{ background: '#0f172a', color: '#fff', padding: '8px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Resumen Financiero</div>
+            <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span style={{ color: '#64748b' }}>Total Plan</span>
+                <span style={{ fontWeight: 700 }}>${totalPlan.toLocaleString('es-CL')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span style={{ color: '#64748b' }}>Descuento Global</span>
+                <span style={{ fontWeight: 700, color: '#2563eb' }}>{porcentajeDctoGlobal}%</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
+                <span style={{ color: '#64748b' }}>Total Abonado</span>
+                <span style={{ fontWeight: 700, color: '#059669' }}>${abonadoPlan.toLocaleString('es-CL')}</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderTop: '1px solid #e2e8f0', paddingTop: 6, marginTop: 2 }}>
+                <span style={{ fontWeight: 700 }}>Saldo Pendiente</span>
+                <span style={{ fontWeight: 900 }}>${(totalPlan - abonadoPlan).toLocaleString('es-CL')}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Firmas */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 60, breakInside: 'avoid' }}>
+          <div style={{ width: '40%', textAlign: 'center' }}>
+            
+          </div>
+          <div style={{ width: '40%', textAlign: 'center' }}>
+            
+          </div>
+        </div>
+
+        <p style={{ textAlign: 'center', fontSize: 8, color: '#94a3b8', marginTop: 30 }}>
+          Documento generado automáticamente · Centro Médico y Dental Dignidad SpA
+        </p>
+      </div>
+
       <aside className={`shrink-0 flex flex-col gap-4 print:hidden transition-all duration-300 ease-in-out ${panelColapsado ? 'w-0 opacity-0 overflow-hidden hidden lg:flex' : 'lg:w-[280px] opacity-100'}`}>
-  <div className="w-[280px] bg-white border border-slate-200 rounded-[1.5rem] shadow-sm overflow-hidden flex flex-col">
+        <div className="w-[280px] bg-white border border-slate-200 rounded-[1.5rem] shadow-sm overflow-hidden flex flex-col">
            <div className="bg-[#e0f2fe] border-b border-[#bae6fd] p-5 flex justify-between items-start">
               <div className="flex items-center gap-2">
                  <FileText size={16} className="text-blue-600" />
@@ -1533,12 +1676,53 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         </div>
       </aside>
 
-      {/* ======================================================= */}
-      {/* CONTENIDO PRINCIPAL (ODONTOGRAMA Y TABLAS) */}
-      {/* ======================================================= */}
       <div className="flex-1 flex flex-col gap-6 max-w-full min-w-0">
         
-        <div className="flex justify-between items-center print:hidden px-2">
+        {/* ENCABEZADO EXCLUSIVO PARA IMPRESIÓN PDF */}
+        <div id="print-header" className="hidden flex-col w-full mb-4 border-b-2 border-slate-900 pb-6">
+           <div className="flex justify-between items-start mb-6">
+              <div>
+                 <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Presupuesto Dental</h1>
+                 <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-1">Plan #{idURL.substring(0, 8)}</p>
+              </div>
+              <div className="text-right">
+                 <h2 className="text-xl font-black text-blue-600">Centro Dental</h2>
+                 <p className="text-xs font-bold text-slate-500 mt-1">{new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+              </div>
+           </div>
+           
+           <div className="grid grid-cols-2 gap-4 border border-slate-200 rounded-xl p-5 bg-slate-50">
+              <div>
+                 <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Datos del Paciente</p>
+                 <p className="text-base font-black text-slate-800 uppercase">{pacienteInfo?.nombre} {pacienteInfo?.apellido}</p>
+                 <p className="text-xs font-bold text-slate-500 mt-1">RUT: {pacienteInfo?.rut}</p>
+              </div>
+              <div className="text-right border-l border-slate-200 pl-4">
+                 <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Profesional a Cargo</p>
+                 <p className="text-sm font-bold text-slate-800 uppercase">Dr(a). {presupuestoData?.profesionales?.nombre || ''} {presupuestoData?.profesionales?.apellido || ''}</p>
+                 <p className="text-xs font-bold text-slate-500 mt-1">Tratamiento: {presupuestoData?.nombre_tratamiento}</p>
+              </div>
+           </div>
+           
+           {exportarOpciones.finanzas && puedeVerFinanzas && (
+               <div className="flex justify-between mt-4 border border-slate-200 rounded-xl p-5 bg-white shadow-sm">
+                  <div className="text-center flex-1">
+                     <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Costo Total del Plan</p>
+                     <p className="text-xl font-black text-slate-800">${totalPlan.toLocaleString('es-CL')}</p>
+                  </div>
+                  <div className="text-center flex-1 border-l border-slate-200">
+                     <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Descuento Global</p>
+                     <p className="text-xl font-black text-blue-600">{porcentajeDctoGlobal}%</p>
+                  </div>
+                  <div className="text-center flex-1 border-l border-slate-200">
+                     <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Abonado</p>
+                     <p className="text-xl font-black text-emerald-600">${abonadoPlan.toLocaleString('es-CL')}</p>
+                  </div>
+               </div>
+           )}
+        </div>
+
+        <div className="flex justify-between items-center print:hidden px-2 esconder-impresion" data-html2canvas-ignore="true">
           <div className="flex items-center gap-2">
             <button 
               onClick={(e) => { e.stopPropagation(); setPanelColapsado(!panelColapsado); }}
@@ -1558,7 +1742,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
           </div>
             
             <div className="flex gap-2">
-                <button onClick={() => setModalExportar({abierto: true, tipo: 'imprimir'})} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm">
+                <button onClick={handleImprimirPresupuesto} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm">
                     <Printer size={16}/> Imprimir
                 </button>
             </div>
@@ -1566,7 +1750,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
         <section id="seccion-odontograma" data-html2canvas-ignore={!exportarOpciones.odontograma ? "true" : undefined} className="bg-white p-5 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-200 relative overflow-visible flex flex-col items-center">
           
-          <div className="w-full flex justify-between items-center mb-8 px-4" data-html2canvas-ignore="true">
+          <div className="w-full flex justify-between items-center mb-8 px-4 esconder-impresion" data-html2canvas-ignore="true">
               <button onClick={handleDeshacer} className="p-3 bg-slate-50 border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-100 hover:text-slate-800 transition-all shadow-sm flex items-center gap-2" title="Deshacer (Ctrl + Z)">
                   <Undo2 size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Deshacer</span>
               </button>
@@ -1584,7 +1768,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             <div className="flex flex-col items-center gap-6 min-w-max">
                 {/* ARCADA SUPERIOR */}
                 <div className="flex gap-2">
-  <div className="flex gap-0.5 border-r-2 border-slate-100 pr-2">
+                  <div className="flex gap-0.5 border-r-2 border-slate-100 pr-2">
                     {(!vistaTemporal ? c1 : t1).map(id => (
                       <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
                     ))}
@@ -1612,7 +1796,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
               </div>
           </div>
 
-          <div className="mt-12 flex flex-col md:flex-row gap-10 justify-center items-center w-full max-w-4xl">
+          <div className="mt-12 flex flex-col md:flex-row gap-10 justify-center items-center w-full max-w-4xl esconder-impresion" data-html2canvas-ignore="true">
             <div className="flex flex-col gap-2">
                <h4 className="text-[9px] font-black text-slate-300 uppercase tracking-widest text-center">Sextantes</h4>
                <div className="flex flex-col gap-1.5">
@@ -1648,11 +1832,11 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             </div>
           </div>
           
-          <div className="w-full flex items-center justify-center mt-12 mb-8 opacity-20" data-html2canvas-ignore="true">
+          <div className="w-full flex items-center justify-center mt-12 mb-8 opacity-20 esconder-impresion" data-html2canvas-ignore="true">
              <div className="h-[3px] w-[60%] bg-slate-900 rounded-full"></div>
           </div>
 
-          <div className="flex justify-center gap-4 w-full max-w-2xl" data-html2canvas-ignore="true">
+          <div className="flex justify-center gap-4 w-full max-w-2xl esconder-impresion" data-html2canvas-ignore="true">
              <button onClick={() => setModalNuevaSeccion(true)} className="flex-1 bg-white border-2 border-slate-200 text-slate-600 px-6 py-4 rounded-[1.2rem] font-black text-[11px] uppercase shadow-sm hover:border-blue-500 hover:text-blue-600 transition-all flex items-center justify-center gap-2">
                <Layers size={16} /> Crear Fase Clínica
              </button>
@@ -1661,7 +1845,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
              </button>
           </div>
 
-          {/* MENÚ CONTEXTUAL ABSOLUTO */}
           <AnimatePresence>
             {menuContextual && (
               <div style={{ position: 'absolute', top: menuContextual.y + 10, left: menuContextual.lado === 'derecha' ? menuContextual.x + 20 : menuContextual.x - 220, zIndex: 100 }}>
@@ -1719,9 +1902,8 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
         </section>
 
-        {/* SOLO LOS QUE PUEDEN VER FINANZAS PUEDEN FORZAR LA APROBACIÓN MANUAL (Cobros) */}
         {!presupuestoData?.isAprobado && puedeVerFinanzas && (
-          <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-4 flex justify-center mb-6" data-html2canvas-ignore="true">
+          <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-4 flex justify-center mb-6 esconder-impresion" data-html2canvas-ignore="true">
             <button onClick={aprobarPlanManualmente} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-600 transition-colors flex items-center gap-2">
               <CheckCircle2 size={16}/> Forzar Aprobación Manual (Sin Pago)
             </button>
@@ -1762,7 +1944,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                     <table className="w-full text-left">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50/50">
-                            <th className="px-4 py-4 text-center">
+                            <th className="px-4 py-4 text-center esconder-impresion" data-html2canvas-ignore="true">
                               <input 
                                 type="checkbox" 
                                 className="w-5 h-5 accent-blue-600" 
@@ -1790,14 +1972,14 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           
                           {puedeVerFinanzas && (
                               <>
-                                  <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Pactado</th>
-                                  <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Abonado</th>
-                                  <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Saldo</th>
+                                  <th data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Pactado</th>
+                                  <th data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Abonado</th>
+                                  <th data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Saldo</th>
                               </>
                           )}
                           
                           <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center">Estado</th>
-                          <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center w-20" data-html2canvas-ignore="true">Acciones</th>
+                          <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center w-20 esconder-impresion" data-html2canvas-ignore="true">Acciones</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -1808,7 +1990,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                             onDragStart={(e) => handleDragStart(e, item.tempId)}
                             className="hover:bg-blue-50/40 transition-all group cursor-grab active:cursor-grabbing"
                           >
-                              <td className="px-4 py-5 text-center">
+                              <td className="px-4 py-5 text-center esconder-impresion" data-html2canvas-ignore="true">
                                 <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={itemsAEvolucionar.includes(item.id)} onChange={() => setItemsAEvolucionar(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id])} />
                               </td>
                             <td className="px-6 py-5 text-center">
@@ -1850,9 +2032,9 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
                             {puedeVerFinanzas && (
                                 <>
-                                    <td className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]">${Number(item.display_pactado).toLocaleString('es-CL')}</td>
-                                    <td className="px-6 py-5 text-right font-bold text-emerald-600 text-[11px]">${Number(item.display_abonado).toLocaleString('es-CL')}</td>
-                                    <td className="px-6 py-5 text-right font-black text-slate-900 text-[11px]">${Number(item.display_saldo).toLocaleString('es-CL')}</td>
+                                    <td data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]">${Number(item.display_pactado).toLocaleString('es-CL')}</td>
+                                    <td data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-5 text-right font-bold text-emerald-600 text-[11px]">${Number(item.display_abonado).toLocaleString('es-CL')}</td>
+                                    <td data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-5 text-right font-black text-slate-900 text-[11px]">${Number(item.display_saldo).toLocaleString('es-CL')}</td>
                                 </>
                             )}
 
@@ -1867,7 +2049,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                 </span>
                               )}
                             </td>
-                            <td className="px-6 py-5 text-center" data-html2canvas-ignore="true">
+                            <td className="px-6 py-5 text-center esconder-impresion" data-html2canvas-ignore="true">
                               <div className="flex items-center justify-center gap-1">
                                 {procesandoId === item.id ? (
                                   <Loader2 size={16} className="animate-spin text-slate-400" />
@@ -1884,8 +2066,8 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                       </button>
                                     )}
                                     <button onClick={() => eliminarPrestacionLocal(item.id, item.tempId)} disabled={item.avance > 0} className="text-red-400 hover:text-red-600 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm disabled:text-slate-300 disabled:cursor-not-allowed disabled:hover:bg-white" title={item.avance > 0 ? "No se puede eliminar un tratamiento iniciado" : "Eliminar Prestación"}>
-                                    <Trash2 size={14}/>
-                                  </button>
+                                      <Trash2 size={14}/>
+                                    </button>
                                   </>
                                 )}
                               </div>
@@ -1903,12 +2085,40 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* 🔥 INICIO DEL PORTAL GLOBAL PARA MODALES, PANELES Y BARRAS FLOTANTES 🔥  */}
-      {/* ========================================================================= */}
       {mounted && typeof document !== 'undefined' && createPortal(
         <>
-          {/* 🔥 BARRA FLOTANTE DE SELECCIÓN DE DIENTES 🔥 */}
+          {/* 🔥 MODAL DE EXPORTACIÓN 🔥 */}
+          <AnimatePresence>
+            {modalExportar.abierto && (
+              <div className="fixed inset-0 z-[1100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+                 <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
+                    <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-3">
+                        <Printer size={20} />
+                        <h3 className="text-xl font-black uppercase italic tracking-tighter">Exportar Presupuesto</h3>
+                      </div>
+                      <button onClick={() => setModalExportar({abierto: false, tipo: null})} className="hover:text-red-400 transition-colors"><X size={20}/></button>
+                    </div>
+
+                    <div className="p-8 space-y-4">
+                       <p className="text-sm font-bold text-slate-600">Configura los elementos que deseas incluir en el documento PDF.</p>
+                       
+                          <div className="space-y-3 mt-4">
+                          <label className="flex items-center justify-between p-4 border border-slate-200 rounded-xl cursor-pointer hover:bg-slate-50 transition-colors">
+                             <span className="text-xs font-black uppercase text-slate-700">Incluir Detalle Financiero</span>
+                             <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={exportarOpciones.finanzas} onChange={e => setExportarOpciones({...exportarOpciones, finanzas: e.target.checked})} />
+                          </label>
+                       </div>
+
+                       <button onClick={procesarExportacion} className="w-full bg-blue-600 text-white py-5 mt-4 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3">
+                         <Download size={18} /> Generar Documento
+                       </button>
+                    </div>
+                 </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
           <AnimatePresence>
               {(dientesSeleccionados.length > 1 || (dientesSeleccionados.length === 1 && !panelAgregarAbierto)) && (
                   <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 p-3 rounded-3xl shadow-2xl z-[900] flex items-center gap-4" data-html2canvas-ignore="true">
@@ -1931,7 +2141,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
               )}
           </AnimatePresence>
 
-          {/* 🔥 BARRA FLOTANTE PARA EVOLUCIÓN MÚLTIPLE 🔥 */}
           <AnimatePresence>
             {itemsAEvolucionar.length > 0 && (
               <motion.div initial={{ y: 50, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 50, opacity: 0 }} className="fixed bottom-10 left-1/2 -translate-x-1/2 bg-slate-900 p-3 rounded-[2rem] shadow-2xl z-[900] flex items-center gap-4" data-html2canvas-ignore="true">
@@ -1958,7 +2167,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             )}
           </AnimatePresence>
 
-          {/* 🔥 MODAL DE AJUSTES CLÍNICOS (Descuento y Laboratorio) 🔥 */}
           <AnimatePresence>
             {modalEditarItem.abierto && (
               <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1974,7 +2182,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                            <p className="text-sm font-bold text-slate-800 leading-tight">{modalEditarItem.item?.display_nombre}</p>
                        </div>
                        
-                       {/* SECCIÓN DESCUENTOS */}
                        <div className="space-y-2 p-5 bg-slate-50 border border-slate-100 rounded-2xl">
                           <label className="text-[10px] font-black uppercase text-slate-500">Descuento al Paciente (%)</label>
                           <select value={dctoInput} onChange={(e) => setDctoInput(parseInt(e.target.value))} className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm">
@@ -2002,7 +2209,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                               else if (e.target.value === '') setDctoInput(0);
                             }}
                             placeholder="0-100"
-                            className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
+                            className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm mt-2"
                           />
                           
                           <div className="pt-2 flex justify-between items-center border-t border-slate-200 mt-4">
@@ -2011,7 +2218,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           </div>
                        </div>
 
-                       {/* SECCIÓN LABORATORIO E INSUMOS */}
                        <div className="space-y-4 p-5 bg-purple-50 border border-purple-100 rounded-2xl">
                           <div>
                               <label className="text-[10px] font-black uppercase text-purple-600">Costo de Insumo / Laboratorio ($)</label>
@@ -2050,7 +2256,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             )}
           </AnimatePresence>
 
-          {/* 🔥 MODAL PARA AJUSTES MÚLTIPLES 🔥 */}
           <AnimatePresence>
             {modalAjustesMulti && (
               <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2093,7 +2298,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                               else if (e.target.value === '') setDctoMulti(0);
                             }}
                             placeholder="0-100"
-                            className="w-full p-4 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
+                            className="w-full p-4 mt-2 rounded-xl bg-white font-black text-xs uppercase border border-slate-200 outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
                           />
                        </div>
 
@@ -2129,7 +2334,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             )}
           </AnimatePresence>
 
-          {/* PANEL UNIVERSAL AGREGAR PRESTACIÓN Y PACKS */}
           <AnimatePresence>
             {panelAgregarAbierto && (
               <motion.aside initial={{ x: -550, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: -550, opacity: 0 }} className="fixed top-0 left-0 h-screen w-[500px] bg-white shadow-[20px_0_50px_rgba(0,0,0,0.1)] z-[1000] flex flex-col border-r border-slate-100 overflow-hidden text-left">
@@ -2190,7 +2394,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                       </div>
                     </div>
 
-                    {/* 🔥 PESTAÑAS: PRESTACIONES VS PACKS 🔥 */}
                     <div className="flex p-1 bg-slate-100 rounded-xl mt-4">
                        <button onClick={() => setTabPanel('prestaciones')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase transition-all ${tabPanel === 'prestaciones' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                           Individuales
@@ -2220,7 +2423,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                 </div>
                 
                 <div className="flex-1 overflow-y-auto px-6 py-4 bg-slate-50 space-y-3 custom-scrollbar">
-                    {/* VISTA PRESTACIONES */}
                     {tabPanel === 'prestaciones' && Object.keys(seccionesPrests).sort((a,b)=>a.localeCompare(b)).map(cat => {
                         const filtradas = seccionesPrests[cat].filter((p:any) => 
                             (p.display_nombre || '').toUpperCase().includes(busqueda.toUpperCase()) || 
@@ -2268,7 +2470,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                         )
                     })}
 
-                    {/* VISTA PACKS Y PLANTILLAS */}
                     {tabPanel === 'packs' && (
                        <div className="space-y-1">
                           {Object.keys(packsAgrupados).sort((a,b)=>a.localeCompare(b)).map(cat => {
@@ -2341,7 +2542,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             )}
           </AnimatePresence>
 
-          {/* MODAL PARA CONFIRMAR SECCIÓN DE PRESTACIÓN */}
           <AnimatePresence>
             {modalConfirmarPrestacion.abierto && (
               <div className="fixed inset-0 z-[1010] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2384,7 +2584,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             )}
           </AnimatePresence>
 
-          {/* 🔥 MODAL PARA APLICAR EL PACK (CON DESCUENTOS Y LAB INDIVIDUAL) 🔥 */}
           <AnimatePresence>
              {modalPack.abierto && modalPack.pack && (
                 <div className="fixed inset-0 z-[1010] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2428,14 +2627,12 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                        </div>
 
                                        <div className="flex flex-wrap items-center gap-3">
-                                          {/* Cantidad */}
                                           <div className="flex items-center gap-3 bg-slate-50 p-1.5 rounded-xl border border-slate-200">
                                              <button onClick={() => updatePackItemConfig(pi.prestacion.id, 'cantidad', Math.max(1, config.cantidad - 1))} className="w-6 h-6 rounded-md bg-white flex items-center justify-center text-slate-600 hover:bg-slate-200 border border-slate-200 shadow-sm"><Minus size={12}/></button>
                                              <span className="font-black text-xs w-4 text-center">{config.cantidad}</span>
                                              <button onClick={() => updatePackItemConfig(pi.prestacion.id, 'cantidad', config.cantidad + 1)} className="w-6 h-6 rounded-md bg-slate-900 text-white flex items-center justify-center hover:bg-blue-600 shadow-sm"><Plus size={12}/></button>
                                           </div>
 
-                                          {/* Descuento Individual */}
                                           <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 flex-1 min-w-[150px]">
                                              <Tag size={12} className="text-blue-500 shrink-0" />
                                              <select value={config.descuento} onChange={(e) => updatePackItemConfig(pi.prestacion.id, 'descuento', parseInt(e.target.value))} className="bg-transparent w-full text-xs font-black text-slate-700 outline-none cursor-pointer">
@@ -2452,7 +2649,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                              </select>
                                           </div>
 
-                                          {/* Laboratorio Inteligente (Solo si aplica) */}
                                           {config.labsDisponibles.length > 0 && (
                                              <div className="flex items-center gap-2 bg-purple-50 px-3 py-1.5 rounded-xl border border-purple-200 flex-1 min-w-[200px]">
                                                 <Activity size={12} className="text-purple-600 shrink-0" />
@@ -2491,7 +2687,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
              )}
           </AnimatePresence>
 
-          {/* MODAL DE EVOLUCIÓN */}
           <AnimatePresence>
             {modalEvolucionAbierto && (
               <div className="fixed inset-0 z-[1000] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2501,7 +2696,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                         <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center"><FileSignature size={24}/></div>
                         <div>
                           <h2 className="text-2xl font-black uppercase italic tracking-tighter leading-none">Evolución Clínica</h2>
-                          <p className="text-[10px] font-bold text-blue-300 uppercase tracking-widest mt-1">Firma electrónica de procedimientos</p>
+                          
                         </div>
                       </div>
                       <button onClick={() => setModalEvolucionAbierto(false)} className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center hover:bg-red-500 transition-all"><X size={20}/></button>
@@ -2582,7 +2777,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             )}
           </AnimatePresence>
 
-          {/* MODAL PARA CREAR NUEVA SECCIÓN/FASE */}
           <AnimatePresence>
             {modalNuevaSeccion && (
               <div className="fixed inset-0 z-[1010] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2616,7 +2810,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             )}
           </AnimatePresence>
 
-          {/* PANEL DE INFORMACIÓN DEL DIENTE/ZONA (MODAL LATERAL DERECHO) */}
           <AnimatePresence>
             {verInfoElemento && (
               <motion.aside initial={{ x: 450, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ x: 450, opacity: 0 }} className="fixed top-0 right-0 h-screen w-[380px] bg-white shadow-2xl z-[1000] border-l border-slate-100 flex flex-col overflow-hidden">
@@ -2744,7 +2937,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             )}
           </AnimatePresence>
 
-          {/* MODAL PARA CAMBIAR ICONO DE PRESTACIÓN */}
           <AnimatePresence>
             {modalIcono.abierto && (
               <div className="fixed inset-0 z-[1020] bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 pt-32">
@@ -2787,7 +2979,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
               </div>
             )}
           </AnimatePresence>
-          {/* 🔥 MODAL DE LEYENDA (SIMBOLOGÍA) 🔥 */}
           <AnimatePresence>
             {mostrarLeyenda && (
               <div className="fixed inset-0 z-[1050] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2801,7 +2992,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar">
-                        {/* 1. Colores de Estado */}
                         <div>
                           <h4 className="text-xs font-black uppercase text-slate-800 border-b border-slate-100 pb-2 mb-4 tracking-widest">1. Colores de Estado</h4>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2836,7 +3026,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           </div>
                         </div>
 
-                        {/* 2. Iconos Comunes */}
                         <div>
                           <h4 className="text-xs font-black uppercase text-slate-800 border-b border-slate-100 pb-2 mb-4 tracking-widest">2. Iconografía de Tratamientos</h4>
                           <div className="grid grid-cols-3 sm:grid-cols-5 gap-3">
@@ -2851,7 +3040,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           </div>
                         </div>
 
-                        {/* 3. Lesiones Específicas */}
                         <div>
                           <h4 className="text-xs font-black uppercase text-slate-800 border-b border-slate-100 pb-2 mb-4 tracking-widest">3. Hallazgos y Lesiones</h4>
                           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -2889,48 +3077,40 @@ function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFace
       const faceRight = screenLeft ? 'M' : 'D';
 
   const getFill = (c: string) => {
-    // 1. PRIMERA PRIORIDAD: Lesión específica en esta cara
     const valCara = estado?.caras?.[c];
     if (valCara) {
         const low = valCara.toLowerCase();
-        // 🔥 AQUÍ ESTÁ EL CAMBIO: SOLO ESTAS 4 LESIONES SE PONEN EN NEGRO 🔥
         if (low.includes('caries') || low.includes('erosi') || low.includes('atrici') || low.includes('abfrac')) {
-            return "#0f172a"; // Negro / Gris Oscuro
+            return "#0f172a"; 
         }
-        // Si es cualquier otro hallazgo en la cara (ej. fractura, sellante), se pone azul
         return "#3b82f6"; 
     }
 
-    // 2. SEGUNDA PRIORIDAD: Lesión General aplicada a todo el diente
     const hallazgosGenerales = estado?.hallazgos || [];
     const tieneLesionGeneralNegra = hallazgosGenerales.some((h: string) => {
         const low = h.toLowerCase();
-        // 🔥 LO MISMO AQUÍ: SOLO ESTAS 4 PINTAN TODAS LAS CARAS DE NEGRO 🔥
         return low.includes('caries') || low.includes('erosi') || low.includes('atrici') || low.includes('abfrac');
     });
 
     if (tieneLesionGeneralNegra) {
-        return "#0f172a"; // Negro
+        return "#0f172a"; 
     }
 
-    // 3. TERCERA PRIORIDAD: Tratamientos en curso o realizados
     try {
         if (itemsDiente && itemsDiente.length > 0) {
             const realiz = itemsDiente.some((i:any) => i.cara && typeof i.cara === 'string' && i.cara.includes(c) && i.estado === 'realizado');
-            if (realiz) return "#10b981"; // Verde
+            if (realiz) return "#10b981"; 
             
             const pend = itemsDiente.some((i:any) => i.cara && typeof i.cara === 'string' && i.cara.includes(c) && i.estado !== 'realizado');
-            if (pend) return "#ef4444"; // Rojo
+            if (pend) return "#ef4444"; 
         }
     } catch (error) {
         console.error(`[CARAS] Error al evaluar color en diente ${id}:`, error);
     }
 
-    // 4. Si no hay nada, está sano -> BLANCO
     return "white"; 
   }
 
-  // Rutas redondas originales
   const paths = { 
       V: "M 16 16 A 48 48 0 0 1 84 16 L 64 36 A 20 20 0 0 0 36 36 Z", 
       L: "M 84 84 A 48 48 0 0 1 16 84 L 36 64 A 20 20 0 0 0 64 64 Z", 
@@ -2962,7 +3142,6 @@ function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFace
 function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, invert = false, itemsDiente = [], estadoDiente, abrirPanelAgregar }: any) {
   const hallazgos = estadoDiente?.hallazgos || [];
   
-  // Determinamos si todo en esta pieza dental está finalizado (y hay al menos 1 tratamiento)
   const tratamientosEnPieza = itemsDiente.filter((i:any) => !i.zona);
   const todosRealizados = tratamientosEnPieza.length > 0 && tratamientosEnPieza.every((i:any) => i.estado === 'realizado');
   const tienePendientes = tratamientosEnPieza.some((i:any) => i.estado !== 'realizado');
@@ -2996,20 +3175,16 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
       }
   });
 
-  // 🔥 LÓGICA DE COLORES DE LA RAÍZ DEL DIENTE 🔥
   let start = "#ffffff", end = "#f1f5f9", stroke = "#cbd5e1";
   
   if (isAusente) { 
       start = "#f8fafc"; end = "#f1f5f9"; stroke = "#e2e8f0"; 
   } else if (elementosRaiz.length > 0 || tienePendientes || todosRealizados) { 
       if (todosRealizados && !isAusente) { 
-          // Si todos los tratamientos en la pieza están terminados, pintar verde.
           start = "#ecfdf5"; end = "#d1fae5"; stroke = "#10b981"; 
       } else if (tienePendientes || hallazgos.some((h:string) => LESIONES_LISTA.includes(h))) { 
-          // Si hay tratamientos pendientes o lesiones manuales, pintar rojo.
           start = "#fef2f2"; end = "#fecaca"; stroke = "#f87171"; 
       } else { 
-          // Estado de tratamiento genérico o en curso sin definir
           start = "#eff6ff"; end = "#dbeafe"; stroke = "#93c5fd"; 
       }
   } 
@@ -3057,9 +3232,6 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
   )
 }
 
-// ============================================================================
-// COMPONENTE DE RENDERIZADO DE ICONOS (Odontograma)
-// ============================================================================
 function LogoRender({ hallazgo, iconoKey, colorOverride, isRealizado, isPendiente }: { hallazgo?: string, iconoKey?: string, colorOverride?: string, isRealizado?: boolean, isPendiente?: boolean }) {
   const originalName = (hallazgo || "").toLowerCase();
   const explicitIcon = (iconoKey || "").toLowerCase();
@@ -3068,74 +3240,36 @@ function LogoRender({ hallazgo, iconoKey, colorOverride, isRealizado, isPendient
   const isLesion = LESIONES_LISTA.some(l => l.toLowerCase() === originalName);
   const isMalEstado = originalName.includes("mal estado") || originalName.includes("fractu") || originalName.includes("infec");
   
-  let color = "#2563eb"; // Azul base (Preexistencias buenas)
+  let color = "#2563eb"; 
   if (colorOverride) color = colorOverride;
-  else if (isRealizado) color = "#059669"; // Verde
-  else if (isPendiente) color = "#ef4444"; // Rojo
-  else if (isLesion || isMalEstado) color = "#0f172a"; // Negro / Gris muy oscuro para lesiones
+  else if (isRealizado) color = "#059669"; 
+  else if (isPendiente) color = "#ef4444"; 
+  else if (isLesion || isMalEstado) color = "#0f172a"; 
 
   const patternId = `hash-${Math.random().toString(36).substr(2, 9)}`;
   const pattern = isMalEstado ? (<defs><pattern id={patternId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke={color} strokeWidth="3" /></pattern></defs>) : null;
   const fill = isMalEstado ? `url(#${patternId})` : color;
   
-  // 1. ESTRELLA (Otro)
   if (h === "otro" || h.includes("estrella")) return <g>{pattern}<polygon points="50,15 61,35 83,38 68,54 71,76 50,66 29,76 32,54 17,38 39,35" fill={fill} /></g>;
-
-  // 2. EROSIÓN Y ABFRACCIÓN (Línea curva en el cuello del diente, zona baja)
   if (h.includes("erosi") || h.includes("abfrac")) return <g>{pattern}<path d="M 25 80 Q 50 100 75 80" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" /></g>;
-
-  // 3. ATRICIÓN (Línea plana arriba, en la corona / oclusal)
   if (h.includes("atrici")) return <g>{pattern}<line x1="20" y1="10" x2="80" y2="10" stroke={color} strokeWidth="10" strokeLinecap="round" /></g>;
-
-  // 4. INFECCIÓN PULPAR (Absceso en la punta de la raíz)
   if (h.includes("infecci")) return <g>{pattern}<circle cx="50" cy="110" r="14" fill={fill} /></g>;
-
-  // 5. FRACTURA (Línea de rayo atravesando el diente)
   if (h.includes("fractu")) return <path d="M 65 10 L 45 50 L 60 50 L 35 100" stroke={color} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none" />;
-
-  // 6. MOVILIDAD (Líneas de movimiento a los lados)
   if (h.includes("movilidad")) return <g stroke={color} strokeWidth="6" fill="none" strokeLinecap="round"><path d="M 15 30 Q -5 60 15 90" /><path d="M 85 30 Q 105 60 85 90" /></g>;
-
-  // 7. ENDODONCIA (Líneas rectas simulando los conductos en las raíces)
   if (h.includes("endo")) return <g><path d="M 35 25 L 35 95 M 65 25 L 65 95" stroke={isMalEstado ? "url(#" + patternId + ")" : color} strokeWidth="8" strokeLinecap="round" /></g>;
-
-  // 8. IMPLANTE (Tornillo)
   if (h.includes("impla")) return <g fill={fill}><rect x="40" y="20" width="20" height="70" rx="4" /><line x1="32" y1="35" x2="68" y2="35" stroke={color} strokeWidth="6" strokeLinecap="round"/><line x1="32" y1="55" x2="68" y2="55" stroke={color} strokeWidth="6" strokeLinecap="round"/><line x1="32" y1="75" x2="68" y2="75" stroke={color} strokeWidth="6" strokeLinecap="round"/></g>;
-
-  // 9. PERNO MUÑÓN (Triángulo invertido)
   if (h.includes("perno") || h.includes("muñón") || h.includes("munon")) return <path d="M 25 20 L 75 20 L 50 90 Z" fill={fill} stroke={color} strokeWidth="4" strokeLinejoin="round" />;
-
-  // 10. CORONA PROVISORIA (Círculo con letra P)
   if (h.includes("provisoria")) return <g><circle cx="50" cy="50" r="35" fill={isMalEstado ? fill : "none"} stroke={color} strokeWidth="6" /><text x="50" y="65" textAnchor="middle" fontSize="40" fontWeight="900" fill={isMalEstado ? "#fff" : color}>P</text></g>;
-
-  // 11. CORONA DEFINITIVA (Círculo hueco)
   if (h.includes("corona")) return <circle cx="50" cy="50" r="35" fill={isMalEstado ? fill : "none"} stroke={color} strokeWidth="6" />;
-
-  // 12. PRÓTESIS REMOVIBLE (Dos líneas horizontales gruesas)
   if (h.includes("protesis") || h.includes("removible")) return <g stroke={color} strokeWidth="8" strokeLinecap="round"><line x1="15" y1="40" x2="85" y2="40" /><line x1="15" y1="60" x2="85" y2="60" /></g>;
-
-  // 13. SELLANTE (Línea curva superior protegiendo la corona)
   if (h.includes("sellante")) return <path d="M 20 30 Q 50 50 80 30" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" />;
-
-  // 14. RESIDUO RADICULAR (Cuadro con RR)
   if (h.includes("rr") || h.includes("residuo radicular")) return <g><rect x="15" y="30" width="70" height="40" rx="8" fill={color} /><text x="50" y="58" fill="#fff" fontSize="28" fontWeight="900" textAnchor="middle">RR</text></g>;
-
-  // 15. EXTRACCIÓN / EXODONCIA / AUSENTE (Gran X)
   if (h.includes("extrac") || h.includes("exodoncia") || h.includes("ausente")) return <g stroke={color} strokeWidth="12" strokeLinecap="round" opacity="0.8"><line x1="15" y1="15" x2="85" y2="85" /><line x1="85" y1="15" x2="15" y2="85" /></g>;
-
-  // 16. LIMPIEZA / DESTARTRAJE / PULIDO (Destellos o burbujas)
   if (h.includes("limpieza") || h.includes("pulido") || h.includes("destartraje") || h.includes("profilaxis")) return <g fill={color}><circle cx="30" cy="30" r="10"/><circle cx="75" cy="45" r="8"/><circle cx="45" cy="75" r="14"/></g>;
-
-  // 17. RAYOS X / RADIOGRAFÍA (Cámara / Sensor)
   if (h.includes("rayos") || h.includes("radiografia") || h.includes("scanner") || h.includes("panoramica")) return <g stroke={color} strokeWidth="8" fill="none"><rect x="15" y="20" width="70" height="60" rx="8" /><circle cx="50" cy="50" r="16"/></g>;
-
-  // 18. SANO (Checkmark grande)
   if (h.includes("sano")) return <path d="M 25 50 L 45 70 L 80 30" stroke={color} strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" fill="none" />;
-
-  // 19. CARIES / RESTAURACIÓN / AMALGAMA / RESINA (Mancha central tradicional)
   if (h.includes("caries") || h.includes("restauraci") || h.includes("amalgama") || h.includes("resina") || h.includes("ionomero")) return <g>{pattern}<path d="M 35 35 Q 50 20 65 35 Q 80 50 65 65 Q 50 80 35 65 Q 20 50 35 35 Z" fill={fill} /></g>;
 
-  // DEFAULT (Círculo base en caso de no coincidir ninguna palabra)
   return <circle cx="50" cy="50" r="25" fill={fill} opacity="0.8" />;
 }
 
