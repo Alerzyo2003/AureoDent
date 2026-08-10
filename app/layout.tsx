@@ -206,7 +206,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   <div className="h-4 border-b border-white/5 mx-2 my-2"></div>
 
                   {/* Acordeón: Mi Menú */}
-                  {['ADMIN', 'RECEPCIONISTA', 'DENTISTA'].includes(perfil?.rol) && (
+                  {['RECEPCIONISTA', 'DENTISTA'].includes(perfil?.rol) && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="flex flex-col">
                       <button onClick={() => setShowMiMenu(!showMiMenu)} className={`flex items-center justify-between px-4 py-3 rounded-xl transition-all group ${showMiMenu ? 'text-white bg-white/5' : 'text-[#8A96A8] hover:text-white hover:bg-white/5'}`}>
                         <div className="flex items-center gap-3.5">
