@@ -72,12 +72,6 @@ const obtenerDientesPorZona = (zona: string, temporal: boolean): number[] => {
   return [];
 }
 
-const LABORATORIOS_BASE = [
-  { id: 'lab_eco', nombre: 'Lab. Dental Económico', costo: 12000 },
-  { id: 'lab_est', nombre: 'Lab. Estética Digital HD', costo: 35000 },
-  { id: 'lab_prem', nombre: 'Lab. Premium Express', costo: 55000 }
-];
-
 export default function DetalleTratamientoPage() {
   const params = useParams()
   const pathname = usePathname()
@@ -97,7 +91,8 @@ export default function DetalleTratamientoPage() {
   const [dientesSeleccionados, setDientesSeleccionados] = useState<number[]>([])
   const [editandoDienteId, setEditandoDienteId] = useState<string | null>(null)
   const [vistaTemporal, setVistaTemporal] = useState(false) 
-  const [panelColapsado, setPanelColapsado] = useState(false)
+  
+  const [panelColapsado, setPanelColapsado] = useState(true)
 
   const [modalEditarItem, setModalEditarItem] = useState<{abierto: boolean, item: any}>({abierto: false, item: null})
   
@@ -107,7 +102,7 @@ export default function DetalleTratamientoPage() {
 
   const [mostrarLeyenda, setMostrarLeyenda] = useState(false)
   const [modalExportar, setModalExportar] = useState<{abierto: boolean, tipo: 'imprimir'|'descargar'|null}>({abierto: false, tipo: null})
-  const [exportarOpciones, setExportarOpciones] = useState({ odontograma: true, finanzas: true })
+  const [exportarOpciones, setExportarOpciones] = useState({ odontograma: false, finanzas: true })
 
   const [cargando, setCargando] = useState(true)
   const [debug, setDebug] = useState('Sincronizando...')
@@ -282,11 +277,23 @@ export default function DetalleTratamientoPage() {
   async function fetchDatosFinales() {
     setCargando(true)
     try {
-      const { data: pres } = await supabase.from('presupuestos').select('*, profesionales:especialista_id (nombre, apellido)').eq('id', idURL).maybeSingle();
+      const { data: pres } = await supabase.from('presupuestos').select(`
+        *, 
+        profesionales:especialista_id (nombre, apellido, user_id)
+      `).eq('id', idURL).maybeSingle();
+      
       if (pres) {
+        if (pres.profesionales?.user_id) {
+            const { data: perf } = await supabase.from('perfiles').select('rut, especialidad').eq('id', pres.profesionales.user_id).maybeSingle();
+            if (perf) {
+                pres.profesionales.rut = perf.rut;
+                pres.profesionales.especialidad = perf.especialidad;
+            }
+        }
+
         if (pres.paciente_id) {
             setPacienteId(pres.paciente_id);
-            const { data: pac } = await supabase.from('pacientes').select('rut, nombre, apellido, prevision, saldo_a_favor').eq('id', pres.paciente_id).single();
+            const { data: pac } = await supabase.from('pacientes').select('rut, nombre, apellido, fecha_nacimiento, prevision, saldo_a_favor').eq('id', pres.paciente_id).single();
             setPacienteInfo(pac);
 
             const { data: odontoMaster } = await supabase.from('odontogramas').select('dentadura').eq('paciente_id', pres.paciente_id).maybeSingle();
@@ -595,20 +602,6 @@ export default function DetalleTratamientoPage() {
     }
   }
   
-const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
-    const nuevaLista = [...listaSecciones];
-    if (direccion === 'arriba' && index > 0) {
-      [nuevaLista[index - 1], nuevaLista[index]] = [nuevaLista[index], nuevaLista[index - 1]];
-    } else if (direccion === 'abajo' && index < nuevaLista.length - 1) {
-      [nuevaLista[index + 1], nuevaLista[index]] = [nuevaLista[index], nuevaLista[index + 1]];
-    } else {
-      return;
-    }
-    
-    setListaSecciones(nuevaLista);
-    await supabase.from('presupuestos').update({ secciones: JSON.stringify(nuevaLista) }).eq('id', idURL);
-  };
-
   const abrirPanelAgregar = (dientePreseleccionado: number | null = null, cara: string = '', zona: string = '') => {
     if (zona) { setDienteInput(''); setZonaInput(zona); setDientesSeleccionados([]); } 
     else if (dientePreseleccionado !== null) { setDienteInput(dientePreseleccionado.toString()); setZonaInput(''); setDientesSeleccionados([dientePreseleccionado]); } 
@@ -1328,24 +1321,19 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
     else toast.success(iconoId ? "Logo global guardado" : "Logo restablecido");
   }
 
-  // 🔥 LÓGICA DE EXPORTACIÓN CON FIX PARA TAILWIND LAB() 🔥
   const handleImprimirPresupuesto = () => {
     window.print();
   };
 
-  // 🔥 LÓGICA DE EXPORTACIÓN CON FIX PARA TAILWIND LAB() 🔥
   const procesarExportacion = async () => {
-    const modo = modalExportar.tipo; // 'imprimir' o 'descargar'
+    const modo = modalExportar.tipo;
     setModalExportar({...modalExportar, abierto: false});
 
-    // 🔥 IMPRIMIR: usamos el motor nativo del navegador, sin html2canvas.
-    // Evita por completo el error de colores oklch()/lab() de Tailwind.
     if (modo === 'imprimir') {
       setTimeout(() => window.print(), 150);
       return;
     }
 
-    // A partir de aquí solo queda la rama de DESCARGAR PDF
     const toastId = toast.loading("Procesando y numerando PDF...");
 
     try {
@@ -1357,7 +1345,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
         return;
       }
 
-      // Ocultamos la interfaz de botones para que el PDF salga limpio
       element.classList.add('modo-impresion');
       await new Promise(r => setTimeout(r, 200));
       
@@ -1396,7 +1383,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
       console.error(error);
       toast.error("Error al generar el PDF", { id: toastId });
     } finally {
-      // Restauramos la interfaz a la normalidad
       const element = document.getElementById('odontograma-container');
       if(element) element.classList.remove('modo-impresion');
     }
@@ -1416,199 +1402,59 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
   const seccionesVisibles = listaSecciones;
 
-  if (cargando) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-blue-600" size={48} /></div>;
+  if (cargando) return <div className="h-screen flex items-center justify-center bg-[#F8FAFC]"><Loader2 className="animate-spin text-blue-600" size={48}/></div>;
 
   return (
     <div className="flex flex-col lg:flex-row gap-6 w-full h-full relative p-6 bg-[#F8FAFC] min-h-screen font-sans" id="odontograma-container" onClick={() => setMenuContextual(null)}>
       
-      {/* ESTILOS APLICADOS DURANTE LA EXPORTACIÓN PDF */}
-      {/* ESTILOS APLICADOS DURANTE LA EXPORTACIÓN PDF / IMPRESIÓN */}
+      {/* ========================================================
+          CSS PARA IMPRESIÓN (QUITA LA URL Y EL LAYOUT DE LA PÁGINA)
+          ======================================================== */}
       <style>{`
         @media print {
-          /* 1. Restablecer el body para evitar que el scroll afecte la paginación */
-          html, body {
+          @page { margin: 0; }
+          
+          /* Oculta layout, navbar, NOTIFICACIONES (Sonner) y CHAT (elementos fijos o iframes) */
+          header, nav, aside:not(.mostrar-en-impresion), footer, [data-sidebar], .navbar,
+          [data-sonner-toaster], [data-sonner-toast], .fixed, iframe { 
+            display: none !important; 
+          }
+          
+          /* Oculta la barra de scroll y asegura que el body ocupe 100% */
+          ::-webkit-scrollbar { display: none !important; }
+          html, body { 
+            overflow: visible !important; 
+            padding: 0 !important; 
+            margin: 0 !important; 
+            background: white !important;
             height: auto !important;
-            overflow: visible !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            background: #fff !important;
           }
-
-          /* 2. Ocultar TODO dentro del contenedor principal, excepto el presupuesto y los estilos */
-          #odontograma-container > *:not(#print-presupuesto):not(style) {
-            display: none !important;
-          }
-
-          /* 3. Limpiar el contenedor principal para que no agregue márgenes ni padding ocultos */
-          #odontograma-container {
-            display: block !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            background: transparent !important;
-            height: auto !important;
-            min-height: auto !important;
-          }
-
-          /* 4. Mostrar el documento a imprimir en el flujo normal (NUNCA absolute para impresión multipágina) */
-          #print-presupuesto {
-            display: block !important;
-            position: static !important; /* Importante para que el navegador lo pagine correctamente */
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-          }
-
-          /* 5. Asegurar que los elementos internos del presupuesto sean visibles */
-          #print-presupuesto * {
-            visibility: visible;
-          }
-
-          @page { 
-            margin: 1.5cm; 
+          
+          .ocultar-en-impresion { display: none !important; }
+          #seccion-odontograma { display: none !important; }
+          
+          .mostrar-en-impresion { 
+            display: block !important; 
+            width: 100% !important; 
+            padding: 1.5cm !important; 
           }
         }
+        
+        /* Reglas equivalentes para la exportación a PDF (html2pdf) */
+        .modo-impresion .ocultar-en-impresion { display: none !important; }
+        .modo-impresion #seccion-odontograma { display: none !important; }
+        .modo-impresion .mostrar-en-impresion { display: block !important; }
+        .modo-impresion [data-sonner-toaster],
+        .modo-impresion .fixed,
+        .modo-impresion iframe { display: none !important; }
       `}</style>
 
-      {/* 📄 DOCUMENTO IMPRIMIBLE: presupuesto en formato factura, con logo y firmas */}
-      <div id="print-presupuesto" style={{ display: 'none', fontFamily: 'Georgia, "Times New Roman", serif', color: '#1e293b' }}>
-
-        {/* Encabezado con logo */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', paddingBottom: 16, marginBottom: 20, borderBottom: '3px solid #0f172a' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <img
-              src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg"
-              alt="Logo Clínica"
-              style={{ width: 64, height: 64, objectFit: 'contain', borderRadius: 10, border: '1px solid #e2e8f0', padding: 4, background: '#fff' }}
-            />
-            <div>
-              <p style={{ fontSize: 16, fontWeight: 700, margin: 0, letterSpacing: 0.5 }}>Centro Médico y Dental Dignidad SpA</p>
-              <p style={{ fontSize: 10, fontWeight: 400, color: '#64748b', margin: '2px 0 0', fontStyle: 'italic' }}>Odontología integral y estética</p>
-            </div>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 2, color: '#2563eb', margin: 0 }}>Presupuesto de Tratamiento</p>
-            <p style={{ fontSize: 10, color: '#64748b', margin: '4px 0 0' }}>
-              Plan N° {idURL.substring(0, 8).toUpperCase()} &nbsp;·&nbsp; {new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
-          </div>
-        </div>
-
-        {/* Datos paciente / profesional */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', border: '1px solid #cbd5e1', borderRadius: 10, overflow: 'hidden', marginBottom: 24 }}>
-          <div style={{ padding: '14px 18px', borderRight: '1px solid #cbd5e1' }}>
-            <p style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px' }}>Paciente</p>
-            <p style={{ fontSize: 14, fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>{pacienteInfo?.nombre} {pacienteInfo?.apellido}</p>
-            <p style={{ fontSize: 10, color: '#64748b', margin: '4px 0 0' }}>RUT: {pacienteInfo?.rut || '-'}</p>
-          </div>
-          <div style={{ padding: '14px 18px' }}>
-            <p style={{ fontSize: 9, fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, margin: '0 0 4px' }}>Profesional a cargo</p>
-            <p style={{ fontSize: 13, fontWeight: 700, textTransform: 'uppercase', margin: 0 }}>Dr(a). {presupuestoData?.profesionales?.nombre || ''} {presupuestoData?.profesionales?.apellido || ''}</p>
-            <p style={{ fontSize: 10, color: '#64748b', margin: '4px 0 0' }}>{presupuestoData?.nombre_tratamiento || 'Tratamiento Integral'}</p>
-          </div>
-        </div>
-
-        {/* Secciones / fases */}
-        {seccionesVisibles.map((seccion) => {
-          const itemsSeccion = acciones.filter(a => a.seccion_nombre === seccion && !a.es_oculto);
-          if (itemsSeccion.length === 0) return null;
-          return (
-            <div key={`print-${seccion}`} style={{ marginBottom: 22, breakInside: 'avoid' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '2px solid #0f172a', marginBottom: 6 }}>
-                <div style={{ width: 6, height: 16, background: '#2563eb', borderRadius: 3 }} />
-                <h3 style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, margin: 0 }}>{seccion}</h3>
-              </div>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10.5 }}>
-                <thead>
-                  <tr>
-                    <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Pieza</th>
-                    <th style={{ textAlign: 'left', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Prestación</th>
-                    {puedeVerFinanzas && (
-                      <>
-                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Precio Base</th>
-                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Dcto.</th>
-                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Pactado</th>
-                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Abonado</th>
-                        <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Saldo</th>
-                      </>
-                    )}
-                    <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: 700, textTransform: 'uppercase', fontSize: 8.5, color: '#94a3b8', borderBottom: '1px solid #cbd5e1' }}>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {itemsSeccion.map((item, idx) => (
-                    <tr key={`print-item-${idx}`} style={{ background: idx % 2 === 0 ? '#ffffff' : '#f8fafc' }}>
-                      <td style={{ padding: '7px 8px', fontWeight: 600 }}>{item.zona ? item.zona : (item.diente_id || '-')}{item.cara ? ` (${item.cara})` : ''}</td>
-                      <td style={{ padding: '7px 8px', fontWeight: 600 }}>{item.display_nombre}</td>
-                      {puedeVerFinanzas && (
-                        <>
-                          <td style={{ padding: '7px 8px', textAlign: 'right', color: '#94a3b8', textDecoration: item.descuento > 0 ? 'line-through' : 'none' }}>${Number(item.precio_base || item.display_pactado).toLocaleString('es-CL')}</td>
-                          <td style={{ padding: '7px 8px', textAlign: 'right', color: item.descuento > 0 ? '#2563eb' : '#cbd5e1', fontWeight: 700 }}>{item.descuento > 0 ? `-${item.descuento}%` : '—'}</td>
-                          <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700 }}>${Number(item.display_pactado).toLocaleString('es-CL')}</td>
-                          <td style={{ padding: '7px 8px', textAlign: 'right', color: '#059669' }}>${Number(item.display_abonado).toLocaleString('es-CL')}</td>
-                          <td style={{ padding: '7px 8px', textAlign: 'right', fontWeight: 700 }}>${Number(item.display_saldo).toLocaleString('es-CL')}</td>
-                        </>
-                      )}
-                      <td style={{ padding: '7px 8px', textAlign: 'center', fontSize: 8.5, textTransform: 'uppercase', fontWeight: 700, color: item.estado === 'realizado' ? '#059669' : item.estado === 'cancelada' ? '#dc2626' : '#2563eb' }}>
-                        {item.estado === 'cancelada' ? 'Cancelado' : (item.estado === 'realizado' ? 'Realizado' : 'Pendiente')}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              {puedeVerFinanzas && (
-                <p style={{ textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#475569', margin: '6px 8px 0', paddingTop: 4, borderTop: '1px solid #e2e8f0' }}>
-                  Subtotal fase: ${totalPorSeccion(seccion).toLocaleString('es-CL')}
-                </p>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Resumen financiero */}
-        {puedeVerFinanzas && (
-          <div style={{ marginTop: 8, marginLeft: 'auto', width: 280, border: '1px solid #0f172a', borderRadius: 10, overflow: 'hidden', breakInside: 'avoid' }}>
-            <div style={{ background: '#0f172a', color: '#fff', padding: '8px 16px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1 }}>Resumen Financiero</div>
-            <div style={{ padding: '10px 16px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                <span style={{ color: '#64748b' }}>Total Plan</span>
-                <span style={{ fontWeight: 700 }}>${totalPlan.toLocaleString('es-CL')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                <span style={{ color: '#64748b' }}>Descuento Global</span>
-                <span style={{ fontWeight: 700, color: '#2563eb' }}>{porcentajeDctoGlobal}%</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11 }}>
-                <span style={{ color: '#64748b' }}>Total Abonado</span>
-                <span style={{ fontWeight: 700, color: '#059669' }}>${abonadoPlan.toLocaleString('es-CL')}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, borderTop: '1px solid #e2e8f0', paddingTop: 6, marginTop: 2 }}>
-                <span style={{ fontWeight: 700 }}>Saldo Pendiente</span>
-                <span style={{ fontWeight: 900 }}>${(totalPlan - abonadoPlan).toLocaleString('es-CL')}</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Firmas */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 60, breakInside: 'avoid' }}>
-          <div style={{ width: '40%', textAlign: 'center' }}>
-            
-          </div>
-          <div style={{ width: '40%', textAlign: 'center' }}>
-            
-          </div>
-        </div>
-
-        <p style={{ textAlign: 'center', fontSize: 8, color: '#94a3b8', marginTop: 30 }}>
-          Documento generado automáticamente · Centro Médico y Dental Dignidad SpA
-        </p>
-      </div>
-
-      <aside className={`shrink-0 flex flex-col gap-4 print:hidden transition-all duration-300 ease-in-out ${panelColapsado ? 'w-0 opacity-0 overflow-hidden hidden lg:flex' : 'lg:w-[280px] opacity-100'}`}>
+      {/* PANEL LATERAL (Info) */}
+      <aside className={`ocultar-en-impresion shrink-0 flex flex-col gap-4 transition-all duration-300 ease-in-out ${panelColapsado ? 'w-0 opacity-0 overflow-hidden hidden lg:flex' : 'lg:w-[280px] opacity-100'}`}>
         <div className="w-[280px] bg-white border border-slate-200 rounded-[1.5rem] shadow-sm overflow-hidden flex flex-col">
            <div className="bg-[#e0f2fe] border-b border-[#bae6fd] p-5 flex justify-between items-start">
               <div className="flex items-center gap-2">
-                 <FileText size={16} className="text-blue-600" />
+                 <FileText className="text-blue-600" size={16}/>
                  <h2 className="text-sm font-black uppercase text-blue-900 tracking-tighter">
                     Plan #{idURL.substring(0, 5).toUpperCase()}
                  </h2>
@@ -1617,7 +1463,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
            <div className="p-5 border-b border-slate-100">
               <div className="flex items-center gap-2 mb-2">
-                 <Stethoscope size={16} className="text-slate-700"/>
+                 <Stethoscope className="text-slate-700" size={16}/>
                  <h3 className="text-xs font-black uppercase text-slate-800">Clínico</h3>
               </div>
               <p className="text-xs font-bold text-slate-500 uppercase">{presupuestoData?.nombre_tratamiento || 'Tratamiento Integral'}</p>
@@ -1626,7 +1472,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
            {puedeVerFinanzas && (
              <div className="p-5 border-b border-slate-100">
                 <div className="flex items-center gap-2 mb-4">
-                   <Wallet size={16} className="text-slate-700"/>
+                   <Wallet className="text-slate-700" size={16}/>
                    <h3 className="text-xs font-black uppercase text-slate-800">Presupuesto</h3>
                 </div>
 
@@ -1658,22 +1504,22 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
            <div className="p-5 border-b border-slate-100 flex flex-col gap-3">
               <div className="flex items-center gap-2">
-                 <User size={16} className="text-slate-700"/>
+                 <User className="text-slate-700" size={16}/>
                  <h3 className="text-xs font-black uppercase text-slate-800">Equipo</h3>
               </div>
               <p className="text-[10px] font-bold text-slate-600 flex items-center gap-2">
-                 <User size={12} className="text-slate-400"/> 
+                 <User className="text-slate-400" size={12}/> 
                  Dr(a) {presupuestoData?.profesionales ? `${presupuestoData.profesionales.nombre} ${presupuestoData.profesionales.apellido}` : 'Sin asignar'}
               </p>
               <p className="text-[10px] font-bold text-slate-600 flex items-center gap-2">
-                 <Building size={12} className="text-slate-400"/> 
+                 <Building className="text-slate-400" size={12}/> 
                  Centro Médico y Dental Dignidad SpA
               </p>
            </div>
 
            <div className="p-5 border-b border-slate-100 flex flex-col gap-2">
               <div className="flex items-center gap-2">
-                 <Building size={16} className="text-slate-700"/>
+                 <Building className="text-slate-700" size={16}/>
                  <h3 className="text-xs font-black uppercase text-slate-800">Convenio</h3>
               </div>
               <p className="text-[10px] font-bold text-slate-500 pl-6">
@@ -1683,7 +1529,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
            <div className="p-5">
               <div className="flex items-center gap-2 mb-2">
-                 <CalendarClock size={16} className="text-slate-700"/>
+                 <CalendarClock className="text-slate-700" size={16}/>
                  <h3 className="text-xs font-black uppercase text-slate-800">Citas</h3>
               </div>
               {citasRelacionadas.length > 0 ? (
@@ -1704,57 +1550,121 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
       <div className="flex-1 flex flex-col gap-6 max-w-full min-w-0">
         
-        {/* ENCABEZADO EXCLUSIVO PARA IMPRESIÓN PDF */}
-        <div id="print-header" className="hidden flex-col w-full mb-4 border-b-2 border-slate-900 pb-6">
-           <div className="flex justify-between items-start mb-6">
-              <div>
-                 <h1 className="text-3xl font-black uppercase tracking-tighter text-slate-900">Presupuesto Dental</h1>
-                 <p className="text-sm font-bold text-slate-500 uppercase tracking-widest mt-1">Plan #{idURL.substring(0, 8)}</p>
+        {/* ========================================================
+            DOCUMENTO DE IMPRESIÓN ÚNICO (SIN ODONTOGRAMA VISUAL)
+            ======================================================== */}
+        <div className="hidden mostrar-en-impresion w-full bg-white" style={{ fontFamily: 'Arial, sans-serif', color: '#1e293b' }}>
+            
+            {/* ENCABEZADO CON LOGO */}
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: 24 }}>
+              <img 
+                src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" 
+                alt="Logo Clínica" 
+                style={{ width: '80px', height: '80px', objectFit: 'contain' }} 
+              />
+              <div style={{ flex: 1, textAlign: 'center', paddingRight: '80px' }}>
+                <h1 style={{ fontSize: 22, fontWeight: 800, margin: '0 0 8px 0', textTransform: 'uppercase' }}>
+                  Centro Médico y Dental Dignidad SpA
+                </h1>
+                <h2 style={{ fontSize: 16, fontWeight: 700, margin: 0 }}>
+                  Presupuesto N° {idURL.substring(0, 8).toUpperCase()}: {presupuestoData?.nombre_tratamiento || 'Tratamiento Integral'}
+                </h2>
               </div>
-              <div className="text-right">
-                 <h2 className="text-xl font-black text-blue-600">Centro Dental</h2>
-                 <p className="text-xs font-bold text-slate-500 mt-1">{new Date().toLocaleDateString('es-CL', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+            </div>
+
+            {/* DATOS DENTISTA Y PACIENTE */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', fontSize: 12, marginBottom: 24 }}>
+              <div style={{ border: '1px solid #cbd5e1', padding: '12px', borderRadius: '8px' }}>
+                <p style={{ fontWeight: 700, borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', marginBottom: '8px' }}>DENTISTA A CARGO</p>
+                <p style={{ marginBottom: '4px' }}><strong>Nombre:</strong> Dr(a). {presupuestoData?.profesionales?.nombre || ''} {presupuestoData?.profesionales?.apellido || ''}</p>
+                <p style={{ marginBottom: '4px' }}><strong>RUT:</strong> {presupuestoData?.profesionales?.rut || 'No registrado'}</p>
+                <p style={{ marginBottom: '4px' }}><strong>Especialidad:</strong> {presupuestoData?.profesionales?.especialidad || 'Odontología General'}</p>
+                <p style={{ marginBottom: '4px' }}><strong>Fecha de impresión:</strong> {new Date().toLocaleDateString('es-CL')}</p>
               </div>
-           </div>
-           
-           <div className="grid grid-cols-2 gap-4 border border-slate-200 rounded-xl p-5 bg-slate-50">
-              <div>
-                 <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Datos del Paciente</p>
-                 <p className="text-base font-black text-slate-800 uppercase">{pacienteInfo?.nombre} {pacienteInfo?.apellido}</p>
-                 <p className="text-xs font-bold text-slate-500 mt-1">RUT: {pacienteInfo?.rut}</p>
+              <div style={{ border: '1px solid #cbd5e1', padding: '12px', borderRadius: '8px' }}>
+                <p style={{ fontWeight: 700, borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', marginBottom: '8px' }}>INFORMACIÓN DEL PACIENTE</p>
+                <p style={{ marginBottom: '4px' }}><strong>Nombre:</strong> {pacienteInfo?.nombre} {pacienteInfo?.apellido}</p>
+                <p style={{ marginBottom: '4px' }}><strong>RUT:</strong> {pacienteInfo?.rut || 'No registrado'}</p>
+                <p style={{ marginBottom: '4px' }}><strong>Fecha de Nacimiento:</strong> {pacienteInfo?.fecha_nacimiento ? new Date(pacienteInfo.fecha_nacimiento).toLocaleDateString('es-CL', { timeZone: 'UTC' }) : 'No registrada'}</p>
+                <p style={{ marginBottom: '4px' }}><strong>Convenio:</strong> {pacienteInfo?.prevision && pacienteInfo?.prevision !== 'Sin convenio' ? pacienteInfo.prevision : 'Sin convenio'}</p>
               </div>
-              <div className="text-right border-l border-slate-200 pl-4">
-                 <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Profesional a Cargo</p>
-                 <p className="text-sm font-bold text-slate-800 uppercase">Dr(a). {presupuestoData?.profesionales?.nombre || ''} {presupuestoData?.profesionales?.apellido || ''}</p>
-                 <p className="text-xs font-bold text-slate-500 mt-1">Tratamiento: {presupuestoData?.nombre_tratamiento}</p>
+            </div>
+
+            {/* TABLA DE PRESTACIONES */}
+            <div style={{ marginBottom: 24 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Detalle de Presupuesto</h3>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #cbd5e1' }}>
+                    <th style={{ textAlign: 'left', padding: '8px' }}>Estado</th>
+                    <th style={{ textAlign: 'center', padding: '8px' }}>Pieza</th>
+                    <th style={{ textAlign: 'left', padding: '8px' }}>Prestación</th>
+                    <th style={{ textAlign: 'right', padding: '8px' }}>Subtotal</th>
+                    <th style={{ textAlign: 'right', padding: '8px' }}>Dcto.</th>
+                    <th style={{ textAlign: 'right', padding: '8px' }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {acciones.filter(a => !a.es_oculto).map((item, idx) => {
+                    let labInfo = '';
+                    if (item.costo_laboratorio > 0) {
+                      labInfo = item.estado === 'realizado' ? ' - Lab: Solicitado' : ' - Lab: Por solicitar';
+                    }
+                    let estadoBase = item.estado === 'cancelada' ? 'Cancelado' : (item.estado === 'realizado' ? 'Realizado' : 'Pendiente');
+                    
+                    return (
+                      <tr key={`print-item-${idx}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                        <td style={{ padding: '8px', fontWeight: 600 }}>{estadoBase}<br/><span style={{fontSize: 9, color: '#64748b', fontWeight: 'normal'}}>{labInfo}</span></td>
+                        <td style={{ padding: '8px', textAlign: 'center' }}>{item.zona ? item.zona : (item.diente_id || '-')}{item.cara ? ` (${item.cara})` : ''}</td>
+                        <td style={{ padding: '8px' }}>{item.display_nombre}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>${Number(item.precio_base || item.display_pactado).toLocaleString('es-CL')}</td>
+                        <td style={{ padding: '8px', textAlign: 'right' }}>{item.descuento > 0 ? `${item.descuento}%` : '0%'}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>${Number(item.display_pactado).toLocaleString('es-CL')}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* RESUMEN */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 40, pageBreakInside: 'avoid' }}>
+              <div style={{ width: '320px', border: '1px solid #cbd5e1', padding: '12px', borderRadius: '8px', fontSize: 12 }}>
+                <p style={{ fontWeight: 700, borderBottom: '1px solid #cbd5e1', paddingBottom: '4px', marginBottom: '8px' }}>RESUMEN DEL PRESUPUESTO</p>
+                <p style={{ marginBottom: '8px', fontWeight: 600 }}>Nombre presupuesto: <span style={{fontWeight: 'normal'}}>{presupuestoData?.nombre_tratamiento || 'Tratamiento Integral'}</span></p>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span>Total presupuesto:</span>
+                  <span>${totalBasePlan.toLocaleString('es-CL')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                  <span>Descuento total:</span>
+                  <span>${(totalBasePlan - totalPlan).toLocaleString('es-CL')}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 800, fontSize: 14, marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #cbd5e1' }}>
+                  <span>Total del presupuesto:</span>
+                  <span>${totalPlan.toLocaleString('es-CL')}</span>
+                </div>
               </div>
-           </div>
-           
-           {exportarOpciones.finanzas && puedeVerFinanzas && (
-               <div className="flex justify-between mt-4 border border-slate-200 rounded-xl p-5 bg-white shadow-sm">
-                  <div className="text-center flex-1">
-                     <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Costo Total del Plan</p>
-                     <p className="text-xl font-black text-slate-800">${totalPlan.toLocaleString('es-CL')}</p>
-                  </div>
-                  <div className="text-center flex-1 border-l border-slate-200">
-                     <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Descuento Global</p>
-                     <p className="text-xl font-black text-blue-600">{porcentajeDctoGlobal}%</p>
-                  </div>
-                  <div className="text-center flex-1 border-l border-slate-200">
-                     <p className="text-[10px] font-black uppercase text-slate-400 mb-1">Total Abonado</p>
-                     <p className="text-xl font-black text-emerald-600">${abonadoPlan.toLocaleString('es-CL')}</p>
-                  </div>
-               </div>
-           )}
+            </div>
+
+            {/* PIE DE PÁGINA */}
+            <div style={{ textAlign: 'center', fontSize: 10, color: '#64748b', marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #e2e8f0', pageBreakInside: 'avoid' }}>
+              <p style={{ fontWeight: 700, color: '#1e293b', fontSize: 12 }}>Centro Médico y Dental Dignidad SpA</p>
+              <p>Ubicación: Av. Observatorio 1500, La Pintana | Teléfono: +56 9 1234 5678</p>
+              <p style={{ marginTop: '12px', fontStyle: 'italic', fontWeight: 600 }}>
+                Al iniciar este tratamiento declaro que acepto la política de privacidad de la clínica y la plataforma establecida.
+              </p>
+            </div>
         </div>
 
-        <div className="flex justify-between items-center print:hidden px-2 esconder-impresion" data-html2canvas-ignore="true">
+        {/* CONTROLES SUPERIORES (SOLO PANTALLA) */}
+        <div className="flex justify-between items-center ocultar-en-impresion" data-html2canvas-ignore="true">
           <div className="flex items-center gap-2">
             <button 
               onClick={(e) => { e.stopPropagation(); setPanelColapsado(!panelColapsado); }}
               className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-200 rounded-xl text-[10px] font-black uppercase text-slate-500 hover:bg-slate-50 shadow-sm transition-all"
             >
-              {panelColapsado ? <ChevronRight size={14} /> : <ChevronLeft size={14} />}
+              {panelColapsado ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
               <span className="hidden sm:inline">{panelColapsado ? 'Mostrar Info' : 'Ocultar Info'}</span>
             </button>
             <div className="flex bg-white rounded-xl shadow-sm border border-slate-200 p-1">
@@ -1769,23 +1679,26 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
             
             <div className="flex gap-2">
                 <button onClick={handleImprimirPresupuesto} className="px-5 py-3 bg-white text-slate-900 border border-slate-200 rounded-xl text-[10px] font-black uppercase hover:bg-slate-50 transition-all flex items-center justify-center gap-2 shadow-sm">
-                    <Printer size={16}/> Imprimir
+                    <Printer size={16}/> Imprimir / PDF
                 </button>
             </div>
         </div>
 
-        <section id="seccion-odontograma" data-html2canvas-ignore={!exportarOpciones.odontograma ? "true" : undefined} className="bg-white p-5 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-200 relative overflow-visible flex flex-col items-center">
+        {/* ========================================================
+            SECCIÓN ODONTOGRAMA (SOLO PANTALLA)
+            ======================================================== */}
+        <section id="seccion-odontograma" data-html2canvas-ignore={!exportarOpciones.odontograma ? "true" : undefined} className="ocultar-en-impresion bg-white p-5 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-200 relative overflow-visible flex flex-col items-center">
           
-          <div className="w-full flex justify-between items-center mb-8 px-4 esconder-impresion" data-html2canvas-ignore="true">
+          <div className="w-full flex justify-between items-center mb-8 px-4 ocultar-en-impresion" data-html2canvas-ignore="true">
               <button onClick={handleDeshacer} className="p-3 bg-slate-50 border border-slate-200 text-slate-500 rounded-xl hover:bg-slate-100 hover:text-slate-800 transition-all shadow-sm flex items-center gap-2" title="Deshacer (Ctrl + Z)">
-                  <Undo2 size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Deshacer</span>
+                  <Undo2 size={16}/> <span className="text-[10px] font-black uppercase hidden md:block">Deshacer</span>
               </button>
               <button onClick={() => setMostrarLeyenda(true)} className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-100 transition-all shadow-sm flex items-center gap-2">
-                  <HelpCircle size={16} /> <span className="text-[10px] font-black uppercase hidden md:block">Leyenda</span>
+                  <HelpCircle size={16}/> <span className="text-[10px] font-black uppercase hidden md:block">Leyenda</span>
               </button>
           </div>
           <div className="w-full overflow-x-auto pb-4">
-            <div className="flex justify-center gap-5 mb-8 bg-slate-50 py-2 px-6 rounded-full border border-slate-200 shadow-sm min-w-max mx-auto">
+            <div className="flex justify-center gap-5 mb-8 bg-slate-50 py-2 px-6 rounded-full border border-slate-200 shadow-sm min-w-max mx-auto ocultar-en-impresion">
               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Realizado / Preexistencia</span></div>
               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Pendiente</span></div>
               <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-slate-900 shadow-sm"></div><span className="text-[8px] font-black text-slate-500 uppercase tracking-widest">Lesión</span></div>
@@ -1796,12 +1709,12 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                 <div className="flex gap-2">
                   <div className="flex gap-0.5 border-r-2 border-slate-100 pr-2">
                     {(!vistaTemporal ? c1 : t1).map(id => (
-                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={obtenerItemsDelDiente(id)} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
                     ))}
                   </div>
                   <div className="flex gap-0.5">
                     {(!vistaTemporal ? c2 : t2).map(id => (
-                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                      <DienteVisual key={id} id={id} seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={obtenerItemsDelDiente(id)} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
                     ))}
                   </div>
                 </div>
@@ -1810,33 +1723,47 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                 <div className="flex gap-4 mt-8">
                   <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
                     {(!vistaTemporal ? c3 : t3).map(id => (
-                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={obtenerItemsDelDiente(id)} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
                     ))}
                   </div>
                   <div className="flex gap-0.5">
                     {(!vistaTemporal ? c4 : t4).map(id => (
-                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(id))} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={obtenerItemsDelDiente(id)} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                    ))}
+                  </div>
+                </div>
+
+                {/* ARCADA INFERIOR (invertida) */}
+                <div className="flex gap-4 mt-8">
+                  <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
+                    {(!vistaTemporal ? c3 : t3).map(id => (
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={obtenerItemsDelDiente(id)} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
+                    ))}
+                  </div>
+                  <div className="flex gap-0.5">
+                    {(!vistaTemporal ? c4 : t4).map(id => (
+                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={obtenerItemsDelDiente(id)} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
                     ))}
                   </div>
                 </div>
               </div>
           </div>
 
-          <div className="mt-12 flex flex-col md:flex-row gap-10 justify-center items-center w-full max-w-4xl esconder-impresion" data-html2canvas-ignore="true">
+          <div className="mt-12 flex flex-col md:flex-row gap-10 justify-center items-center w-full max-w-4xl ocultar-en-impresion" data-html2canvas-ignore="true">
             <div className="flex flex-col gap-2">
                <h4 className="text-[9px] font-black text-slate-300 uppercase tracking-widest text-center">Sextantes</h4>
                <div className="flex flex-col gap-1.5">
                   <div className="flex gap-1.5">
                     {[{ s: 1, Logo: LogoSextante1 }, { s: 2, Logo: LogoSextante2 }, { s: 3, Logo: LogoSextante3 }].map(({ s, Logo }) => (
                        <button key={s} onClick={() => abrirPanelAgregar(null, '', `Sextante ${s}`)} onContextMenu={(e) => handleContextMenu(e, null, undefined, `Sextante ${s}`)} className="px-4 py-2 bg-white border-2 border-slate-100 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all group flex items-center justify-center gap-1.5 shadow-sm">
-                         <Logo /> <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600">S{s}</span>
+                         <Logo/> <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600">S{s}</span>
                        </button>
                     ))}
                   </div>
                   <div className="flex gap-1.5">
                     {[{ s: 6, Logo: LogoSextante6 }, { s: 5, Logo: LogoSextante5 }, { s: 4, Logo: LogoSextante4 }].map(({ s, Logo }) => (
                        <button key={s} onClick={() => abrirPanelAgregar(null, '', `Sextante ${s}`)} onContextMenu={(e) => handleContextMenu(e, null, undefined, `Sextante ${s}`)} className="px-4 py-2 bg-white border-2 border-slate-100 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all group flex items-center justify-center gap-1.5 shadow-sm">
-                         <Logo /> <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600">S{s}</span>
+                         <Logo/> <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600">S{s}</span>
                        </button>
                     ))}
                   </div>
@@ -1849,33 +1776,33 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
               <h4 className="text-[9px] font-black text-slate-300 uppercase tracking-widest text-center">Arcadas</h4>
               <div className="flex flex-col gap-1.5">
                   <button onClick={() => abrirPanelAgregar(null, '', 'Arcada Superior')} onContextMenu={(e) => handleContextMenu(e, null, undefined, 'Arcada Superior')} className="px-5 py-2 bg-white border-2 border-slate-100 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all group flex items-center justify-center gap-2 shadow-sm">
-                    <LogoArcadaSup /> <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600">Superior</span>
+                    <LogoArcadaSup/> <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600">Superior</span>
                   </button>
                   <button onClick={() => abrirPanelAgregar(null, '', 'Arcada Inferior')} onContextMenu={(e) => handleContextMenu(e, null, undefined, 'Arcada Inferior')} className="px-5 py-2 bg-white border-2 border-slate-100 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-all group flex items-center justify-center gap-2 shadow-sm">
-                    <LogoArcadaInf /> <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600">Inferior</span>
+                    <LogoArcadaInf/> <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600">Inferior</span>
                   </button>
               </div>
             </div>
           </div>
           
-          <div className="w-full flex items-center justify-center mt-12 mb-8 opacity-20 esconder-impresion" data-html2canvas-ignore="true">
+          <div className="w-full flex items-center justify-center mt-12 mb-8 opacity-20 ocultar-en-impresion" data-html2canvas-ignore="true">
              <div className="h-[3px] w-[60%] bg-slate-900 rounded-full"></div>
           </div>
 
-          <div className="flex justify-center gap-4 w-full max-w-2xl esconder-impresion" data-html2canvas-ignore="true">
+          <div className="flex justify-center gap-4 w-full max-w-2xl ocultar-en-impresion" data-html2canvas-ignore="true">
              <button onClick={() => setModalNuevaSeccion(true)} className="flex-1 bg-white border-2 border-slate-200 text-slate-600 px-6 py-4 rounded-[1.2rem] font-black text-[11px] uppercase shadow-sm hover:border-blue-500 hover:text-blue-600 transition-all flex items-center justify-center gap-2">
-               <Layers size={16} /> Crear Fase Clínica
+               <Layers size={16}/> Crear Fase Clínica
              </button>
              <button onClick={() => abrirPanelAgregar(null)} className="flex-1 bg-white border-2 border-slate-900 text-slate-900 px-6 py-4 rounded-[1.2rem] font-black text-[11px] uppercase shadow-md hover:bg-slate-900 hover:text-white transition-all flex items-center justify-center gap-2">
-               <Plus size={16} /> Tto. General / Receta
+               <Plus size={16}/> Tto. General / Receta
              </button>
           </div>
-
+          
+          {/* Menú Contextual */}
           <AnimatePresence>
             {menuContextual && (
               <div style={{ position: 'absolute', top: menuContextual.y + 10, left: menuContextual.lado === 'derecha' ? menuContextual.x + 20 : menuContextual.x - 220, zIndex: 100 }}>
                 <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} className="bg-white border shadow-2xl rounded-[2rem] p-2 w-[220px]" onClick={(e) => e.stopPropagation()}>
-                  
                   {vistaMenu === 'principal' ? (
                       <div className="w-[220px] shrink-0 p-3 space-y-1 text-left">
                         <p className="px-3 py-2 text-[10px] font-black uppercase text-blue-600 border-b border-slate-100 mb-2 italic text-center">
@@ -1892,15 +1819,15 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           <Settings size={14}/> Agregar Prestación
                         </button>
                         <button onClick={() => { setVerInfoElemento(menuContextual.diente || menuContextual.zona!); setMenuContextual(null); }} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 rounded-xl transition-all text-left text-slate-600 font-black uppercase text-[9px]">
-                          <Info size={14} className="text-blue-500"/> Ver Información
+                          <Info className="text-blue-500" size={14}/> Ver Información
                         </button>
                         {!menuContextual.cara && (
                             <button onClick={() => aplicarHallazgo('Ausente')} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-slate-50 rounded-xl transition-all text-left text-slate-600 font-black uppercase text-[9px]">
-                              <EyeOff size={14} className="text-slate-400"/> Marcar Ausente
+                              <EyeOff className="text-slate-400" size={14}/> Marcar Ausente
                             </button>
                         )}
                         <button onClick={() => aplicarHallazgo('Sano')} className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-emerald-50 rounded-xl transition-all text-left text-emerald-700 font-black uppercase text-[9px]">
-                          <CheckCircle2 size={14} className="text-emerald-500"/> Marcar Sano (Borrar)
+                          <CheckCircle2 className="text-emerald-500" size={14}/> Marcar Sano (Borrar)
                         </button>
                       </div>
                   ) : (
@@ -1913,7 +1840,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           {(vistaMenu === 'preexistencias' ? PREEXISTENCIAS_LISTA : LESIONES_LISTA).map((op) => (
                             <button key={op} onClick={() => aplicarHallazgo(op)} className="flex items-center gap-3 w-full p-2 hover:bg-blue-50 rounded-lg text-left transition-colors">
                               <div className="w-6 h-6 shrink-0">
-                                 <svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo={op} /></svg>
+                                 <svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo="{op}"/></svg>
                               </div>
                               <span className="text-[9px] font-black uppercase text-slate-600">{op}</span>
                             </button>
@@ -1925,21 +1852,24 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
               </div>
             )}
           </AnimatePresence>
-
         </section>
 
+        {/* BOTÓN APROBACIÓN (SOLO PANTALLA) */}
         {!presupuestoData?.isAprobado && puedeVerFinanzas && (
-          <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-4 flex justify-center mb-6 esconder-impresion" data-html2canvas-ignore="true">
+          <div className="bg-slate-50 border border-slate-200 rounded-[2rem] p-4 flex justify-center mt-6 ocultar-en-impresion" data-html2canvas-ignore="true">
             <button onClick={aprobarPlanManualmente} className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-emerald-600 transition-colors flex items-center gap-2">
               <CheckCircle2 size={16}/> Forzar Aprobación Manual (Sin Pago)
             </button>
           </div>
         )}
         
-        <div className="bg-white border border-slate-200 shadow-sm rounded-[3.5rem] overflow-hidden">
+        {/* ========================================================
+            LISTADO DE TRATAMIENTOS INTERACTIVO (SOLO PANTALLA)
+            ======================================================== */}
+        <div className="bg-white border border-slate-200 shadow-sm rounded-[3.5rem] overflow-hidden ocultar-en-impresion mt-6">
           {seccionesVisibles.length === 0 ? (
             <div className="py-20 text-center">
-              <Layers size={48} className="mx-auto text-slate-200 mb-4" />
+              <Layers className="mx-auto text-slate-200 mb-4" size={48}/>
               <p className="text-xs font-black text-slate-400 uppercase tracking-widest">El presupuesto está vacío</p>
             </div>
           ) : (
@@ -1954,7 +1884,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
               >
                 <h3 className="px-6 py-4 bg-slate-50 border-l-4 border-blue-500 font-black text-xs uppercase text-slate-700 tracking-widest rounded-r-2xl mb-4 flex justify-between items-center pointer-events-none">
                   <div className="flex items-center gap-3">
-                    <Layers size={16} className="text-blue-500" /> {seccion}
+                    <Layers className="text-blue-500" size={16}/> {seccion}
                   </div>
                   {puedeVerFinanzas && (
                     <span className="text-[10px] text-slate-400 font-bold">Subtotal: ${totalPorSeccion(seccion).toLocaleString('es-CL')}</span>
@@ -1970,7 +1900,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                     <table className="w-full text-left">
                       <thead>
                         <tr className="border-b border-slate-100 bg-slate-50/50">
-                            <th className="px-4 py-4 text-center esconder-impresion" data-html2canvas-ignore="true">
+                            <th className="px-4 py-4 text-center">
                               <input 
                                 type="checkbox" 
                                 className="w-5 h-5 accent-blue-600" 
@@ -1998,14 +1928,14 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           
                           {puedeVerFinanzas && (
                               <>
-                                  <th data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Pactado</th>
-                                  <th data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Abonado</th>
-                                  <th data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Saldo</th>
+                                  <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Pactado</th>
+                                  <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Abonado</th>
+                                  <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-right">Saldo</th>
                               </>
                           )}
                           
                           <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center">Estado</th>
-                          <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center w-20 esconder-impresion" data-html2canvas-ignore="true">Acciones</th>
+                          <th className="px-6 py-4 text-[9px] font-black uppercase text-slate-400 italic text-center w-20">Acciones</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-50">
@@ -2016,7 +1946,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                             onDragStart={(e) => handleDragStart(e, item.tempId)}
                             className="hover:bg-blue-50/40 transition-all group cursor-grab active:cursor-grabbing"
                           >
-                              <td className="px-4 py-5 text-center esconder-impresion" data-html2canvas-ignore="true">
+                              <td className="px-4 py-5 text-center">
                                 <input type="checkbox" className="w-5 h-5 accent-blue-600" checked={itemsAEvolucionar.includes(item.id)} onChange={() => setItemsAEvolucionar(prev => prev.includes(item.id) ? prev.filter(i => i !== item.id) : [...prev, item.id])} />
                               </td>
                             <td className="px-6 py-5 text-center">
@@ -2032,7 +1962,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                   />
                                 ) : (
                                   <span className="cursor-pointer" onClick={() => setEditandoDienteId(item.tempId)} title="Click para cambiar pieza">
-                                    {item.zona ? item.zona : (item.diente_id || <Plus size={14} strokeWidth={4} />)}
+                                    {item.zona ? item.zona : (item.diente_id || <Plus size={14} strokeWidth="{4}"/>)}
                                   </span>
                                 )}
                                 {item.cara && <span className="text-[8px] opacity-70 mt-1">CARA {item.cara}</span>}
@@ -2058,9 +1988,9 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
                             {puedeVerFinanzas && (
                                 <>
-                                    <td data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]">${Number(item.display_pactado).toLocaleString('es-CL')}</td>
-                                    <td data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-5 text-right font-bold text-emerald-600 text-[11px]">${Number(item.display_abonado).toLocaleString('es-CL')}</td>
-                                    <td data-html2canvas-ignore={!exportarOpciones.finanzas ? "true" : undefined} className="px-6 py-5 text-right font-black text-slate-900 text-[11px]">${Number(item.display_saldo).toLocaleString('es-CL')}</td>
+                                    <td className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]">${Number(item.display_pactado).toLocaleString('es-CL')}</td>
+                                    <td className="px-6 py-5 text-right font-bold text-emerald-600 text-[11px]">${Number(item.display_abonado).toLocaleString('es-CL')}</td>
+                                    <td className="px-6 py-5 text-right font-black text-slate-900 text-[11px]">${Number(item.display_saldo).toLocaleString('es-CL')}</td>
                                 </>
                             )}
 
@@ -2075,10 +2005,10 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                 </span>
                               )}
                             </td>
-                            <td className="px-6 py-5 text-center esconder-impresion" data-html2canvas-ignore="true">
+                            <td className="px-6 py-5 text-center">
                               <div className="flex items-center justify-center gap-1">
                                 {procesandoId === item.id ? (
-                                  <Loader2 size={16} className="animate-spin text-slate-400" />
+                                  <Loader2 className="animate-spin text-slate-400" size={16}/>
                                 ) : (
                                   <>
                                     {item.estado !== 'cancelada' && item.estado !== 'realizado' && puedeVerFinanzas && (
@@ -2113,14 +2043,13 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
       {mounted && typeof document !== 'undefined' && createPortal(
         <>
-          {/* 🔥 MODAL DE EXPORTACIÓN 🔥 */}
           <AnimatePresence>
             {modalExportar.abierto && (
               <div className="fixed inset-0 z-[1100] bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
                  <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
                     <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div className="flex items-center gap-3">
-                        <Printer size={20} />
+                        <Printer size={20}/>
                         <h3 className="text-xl font-black uppercase italic tracking-tighter">Exportar Presupuesto</h3>
                       </div>
                       <button onClick={() => setModalExportar({abierto: false, tipo: null})} className="hover:text-red-400 transition-colors"><X size={20}/></button>
@@ -2137,7 +2066,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                        </div>
 
                        <button onClick={procesarExportacion} className="w-full bg-blue-600 text-white py-5 mt-4 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3">
-                         <Download size={18} /> Generar Documento
+                         <Download size={18}/> Generar Documento
                        </button>
                     </div>
                  </motion.div>
@@ -2176,7 +2105,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                   </div>
                   <div className="flex items-center gap-2 bg-slate-800 p-1.5 rounded-2xl">
                       <button onClick={() => setModalAjustesMulti(true)} className="px-4 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase transition-all flex items-center gap-1.5">
-                          <Settings size={14} /> Ajustes
+                          <Settings size={14}/> Ajustes
                       </button>
                       <select onChange={(e) => abrirModalEvolucion(itemsAEvolucionar, parseInt(e.target.value))} className="bg-slate-800 text-white p-3 rounded-xl text-xs font-bold outline-none border border-slate-700 cursor-pointer">
                           <option>Evolucionar a...</option>
@@ -2352,7 +2281,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           )}
                        </div>
                        <button onClick={handleGuardarAjustesMulti} disabled={guardandoMulti} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-lg hover:bg-slate-800 transition-all">
-                         {guardandoMulti ? <Loader2 className="animate-spin" /> : <Save size={16}/>} Aplicar Cambios
+                         {guardandoMulti ? <Loader2 className="animate-spin"/> : <Save size={16}/>} Aplicar Cambios
                        </button>
                     </div>
                  </motion.div>
@@ -2431,7 +2360,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
                     <div className="relative group">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                         <Search size={18} className="text-slate-500 group-focus-within:text-blue-600 transition-colors" />
+                         <Search className="text-slate-500 group-focus-within:text-blue-600 transition-colors" size={18}/>
                       </div>
                       <input 
                          type="text" 
@@ -2442,7 +2371,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                       />
                       {busqueda && (
                          <button onClick={() => setBusqueda('')} className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-red-500 transition-colors">
-                            <X size={18} />
+                            <X size={18}/>
                          </button>
                       )}
                     </div>
@@ -2461,7 +2390,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                             <div key={cat} className="mb-4">
                                 <button onClick={() => setCategoriasAbiertas(prev => ({...prev, [cat]: !prev[cat]}))} className="w-full text-left px-5 py-4 rounded-xl font-black text-xs uppercase bg-white border border-slate-200 shadow-sm text-slate-800 flex justify-between items-center transition-all hover:bg-slate-100 hover:border-slate-300">
                                     {cat} 
-                                    {categoriasAbiertas[cat] ? <ChevronUp size={16} className="text-slate-500"/> : <ChevronDown size={16} className="text-slate-500"/>}
+                                    {categoriasAbiertas[cat] ? <ChevronUp className="text-slate-500" size={16}/> : <ChevronDown className="text-slate-500" size={16}/>}
                                 </button>
                                 
                                 <AnimatePresence>
@@ -2472,11 +2401,11 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                                 <button onClick={(e) => { e.stopPropagation(); setModalIcono({abierto: true, prestacion: p}); }} title="Cambiar Logo Permanentemente" className="w-12 h-12 flex shrink-0 items-center justify-center bg-slate-100 hover:bg-blue-600 rounded-l-lg transition-colors overflow-hidden group/logo relative">
                                                    <div className="w-8 h-8 group-hover/logo:opacity-0 transition-opacity">
                                                       <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                                         <LogoRender iconoKey={p.icono_tipo} hallazgo={p.display_nombre} colorOverride="#ef4444" />
+                                                         <LogoRender colorOverride="#ef4444" hallazgo="{p.display_nombre}" iconoKey="{p.icono_tipo}"/>
                                                       </svg>
                                                    </div>
                                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity text-white flex-col">
-                                                      <RefreshCcw size={16} />
+                                                      <RefreshCcw size={16}/>
                                                       <span className="text-[6px] font-black uppercase mt-0.5 tracking-widest">Editar</span>
                                                    </div>
                                                 </button>
@@ -2485,7 +2414,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                                    setModalConfirmarPrestacion({abierto: true, prestacion: p});
                                                 }} className="flex-1 text-left py-3 px-3 flex justify-between items-center h-full">
                                                    <span className="text-sm font-bold text-slate-800 group-hover:text-blue-700 leading-snug capitalize">{p.display_nombre.toLowerCase()}</span>
-                                                   <Plus size={20} className="shrink-0 text-slate-300 group-hover:text-blue-600"/>
+                                                   <Plus className="shrink-0 text-slate-300 group-hover:text-blue-600" size={20}/>
                                                 </button>
                                             </div>
                                         ))}
@@ -2513,11 +2442,11 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                           className="w-full text-left px-5 py-4 rounded-xl font-black text-xs uppercase bg-white border border-slate-200 shadow-sm text-slate-800 flex justify-between items-center transition-all hover:bg-slate-100 hover:border-slate-300"
                                       >
                                           <div className="flex items-center gap-2">
-                                              <Package size={16} className="text-emerald-500"/>
+                                              <Package className="text-emerald-500" size={16}/>
                                               {cat}
                                               <span className="bg-emerald-100 text-emerald-700 text-[9px] px-2 py-0.5 rounded-full ml-2">{filtradas.length}</span>
                                           </div>
-                                          {categoriasAbiertas[`pack_${cat}`] ? <ChevronUp size={16} className="text-slate-500"/> : <ChevronDown size={16} className="text-slate-500"/>}
+                                          {categoriasAbiertas[`pack_${cat}`] ? <ChevronUp className="text-slate-500" size={16}/> : <ChevronDown className="text-slate-500" size={16}/>}
                                       </button>
                                       
                                       <AnimatePresence>
@@ -2533,11 +2462,11 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                                             {pack.icono_tipo ? (
                                                                <div className="w-6 h-6 shrink-0">
                                                                   <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                                                     <LogoRender iconoKey={pack.icono_tipo} hallazgo={pack.nombre} colorOverride="#10b981" />
+                                                                     <LogoRender colorOverride="#10b981" hallazgo="{pack.nombre}" iconoKey="{pack.icono_tipo}"/>
                                                                   </svg>
                                                                </div>
                                                             ) : (
-                                                               <Package size={16} className="text-emerald-500 shrink-0"/>
+                                                               <Package className="text-emerald-500 shrink-0" size={16}/>
                                                             )}
                                                             <span className="text-[8px] font-black uppercase text-emerald-500">{pack.categoria || 'Sección General'}</span>
                                                          </div>
@@ -2574,7 +2503,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                  <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
                     <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div className="flex items-center gap-3">
-                        <Plus size={20} />
+                        <Plus size={20}/>
                         <h3 className="text-xl font-black uppercase italic tracking-tighter">Confirmar Prestación</h3>
                       </div>
                       <button onClick={() => setModalConfirmarPrestacion({abierto: false, prestacion: null})} className="hover:text-red-400 transition-colors"><X size={20}/></button>
@@ -2602,7 +2531,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                            handleSeleccionarTratamiento(modalConfirmarPrestacion.prestacion);
                            setModalConfirmarPrestacion({abierto: false, prestacion: null});
                          }} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3">
-                         <Plus size={18} /> Agregar al Plan
+                         <Plus size={18}/> Agregar al Plan
                        </button>
                     </div>
                  </motion.div>
@@ -2620,7 +2549,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                {modalPack.pack.icono_tipo ? (
                                   <div className="w-8 h-8">
                                      <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                        <LogoRender iconoKey={modalPack.pack.icono_tipo} hallazgo={modalPack.pack.nombre} colorOverride="#ffffff" />
+                                        <LogoRender colorOverride="#ffffff" hallazgo="{modalPack.pack.nombre}" iconoKey="{modalPack.pack.icono_tipo}"/>
                                      </svg>
                                   </div>
                                ) : (
@@ -2660,7 +2589,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                                           </div>
 
                                           <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 flex-1 min-w-[150px]">
-                                             <Tag size={12} className="text-blue-500 shrink-0" />
+                                             <Tag className="text-blue-500 shrink-0" size={12}/>
                                              <select value={config.descuento} onChange={(e) => updatePackItemConfig(pi.prestacion.id, 'descuento', parseInt(e.target.value))} className="bg-transparent w-full text-xs font-black text-slate-700 outline-none cursor-pointer">
                                                 <option value={0}>0% Descuento</option>
                                                 <option value={5}>5% Descuento</option>
@@ -2677,7 +2606,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
                                           {config.labsDisponibles.length > 0 && (
                                              <div className="flex items-center gap-2 bg-purple-50 px-3 py-1.5 rounded-xl border border-purple-200 flex-1 min-w-[200px]">
-                                                <Activity size={12} className="text-purple-600 shrink-0" />
+                                                <Activity className="text-purple-600 shrink-0" size={12}/>
                                                 <select value={config.labId || ''} onChange={(e) => updatePackItemConfig(pi.prestacion.id, 'labId', e.target.value)} className="bg-transparent w-full text-[10px] font-black text-purple-800 outline-none cursor-pointer">
                                                    {config.labsDisponibles.map((l:any) => (
                                                       <option key={l.laboratorio_id} value={l.laboratorio_id}>
@@ -2734,7 +2663,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                         <div className="space-y-3 max-h-64 overflow-y-auto custom-scrollbar pr-2">
                           {acciones.filter(a => a.estado !== 'realizado').length === 0 ? (
                             <div className="p-8 bg-slate-50 rounded-3xl text-center border-2 border-dashed border-slate-200">
-                              <CheckCircle2 size={32} className="mx-auto text-emerald-400 mb-2"/>
+                              <CheckCircle2 className="mx-auto text-emerald-400 mb-2" size={32}/>
                               <p className="text-[10px] font-black text-slate-400 uppercase">No hay procedimientos pendientes</p>
                             </div>
                           ) : (
@@ -2743,7 +2672,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                               return (
                                 <div key={item.id} onClick={() => setItemsAEvolucionar(prev => isSelected ? prev.filter(i => i !== item.id) : [...prev, item.id])} className={`p-4 rounded-2xl border-2 cursor-pointer transition-all flex items-center gap-4 ${isSelected ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-blue-200'}`}>
                                    <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center shrink-0 transition-colors ${isSelected ? 'border-blue-600 border-blue-600' : 'border-slate-300 bg-white'}`}>
-                                      {isSelected && <CheckCircle2 size={16} className="text-white" />}
+                                      {isSelected && <CheckCircle2 className="text-white" size={16}/>}
                                    </div>
                                    <div>
                                      <p className="text-[10px] font-black text-slate-400 uppercase leading-none">
@@ -2794,7 +2723,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 
                    <div className="p-8 bg-slate-50 border-t border-slate-100 flex justify-end shrink-0">
                       <button onClick={ejecutarGuardadoEvolucion} disabled={guardandoEvolucion || itemsAEvolucionar.length === 0 || !profesionalSeleccionado || !notaClinica.trim()} className="bg-emerald-500 text-white px-10 py-5 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-emerald-600 transition-all flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed">
-                        {guardandoEvolucion ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+                        {guardandoEvolucion ? <Loader2 className="animate-spin" size={18}/> : <CheckCircle2 size={18}/>}
                         {guardandoEvolucion ? 'Firmando...' : 'Guardar y Firmar Evolución'}
                       </button>
                    </div>
@@ -2809,7 +2738,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                  <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col">
                     <div className="p-8 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div className="flex items-center gap-3">
-                        <Layers size={20} />
+                        <Layers size={20}/>
                         <h3 className="text-xl font-black uppercase italic tracking-tighter">Nueva Fase Clínica</h3>
                       </div>
                       <button onClick={() => setModalNuevaSeccion(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
@@ -2828,7 +2757,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           />
                        </div>
                        <button onClick={handleCrearSeccion} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black text-xs uppercase shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-3">
-                         <Plus size={18} /> Crear Fase
+                         <Plus size={18}/> Crear Fase
                        </button>
                     </div>
                  </motion.div>
@@ -2846,7 +2775,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                 <div className="flex-1 overflow-y-auto p-8 space-y-8 text-left text-slate-800">
                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100 flex flex-col items-center">
                       <div className="w-24 h-28 mb-4 pointer-events-none">
-                        <DienteVisual id={typeof verInfoElemento === 'number' ? verInfoElemento : 0} estadoDiente={odontogramaEstado[verInfoElemento.toString()]} itemsDiente={todasLasAccionesBoca.filter(a => String(a.diente_id) === String(verInfoElemento))} onFaceClick={()=>{}} onContextMenu={()=>{}} />
+                        <DienteVisual id={typeof verInfoElemento === 'number' ? verInfoElemento : 0} estadoDiente={odontogramaEstado[verInfoElemento.toString()]} itemsDiente={typeof verInfoElemento === 'number' ? obtenerItemsDelDiente(verInfoElemento) : []} onFaceClick={()=>{}} onContextMenu={()=>{}} />
                       </div>
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Vista Previa</span>
                    </div>
@@ -2858,7 +2787,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                          {odontogramaEstado[verInfoElemento.toString()]?.hallazgos?.map((h:string, idx:number)=>(
                             <div key={idx} className="p-4 bg-white border border-slate-200 rounded-2xl flex items-center justify-between group shadow-sm">
                               <div className="flex items-center gap-4">
-                                <div className="w-8 h-8"><svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo={h} /></svg></div>
+                                <div className="w-8 h-8"><svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo="{h}"/></svg></div>
                                 <span className="text-xs font-black uppercase text-slate-700">{h} (Raíz)</span>
                               </div>
                               <button onClick={() => eliminarHallazgoEspecifico(verInfoElemento as number, h)} className="text-red-400 opacity-0 group-hover:opacity-100 hover:text-red-600 transition-all p-2 hover:bg-slate-50 rounded-lg">
@@ -2904,7 +2833,6 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                           itemsPanel.map((item, i) => (
                             <div key={i} className="p-5 bg-white rounded-[1.5rem] border border-slate-200 shadow-sm relative group transition-all hover:border-blue-300 hover:shadow-md">
                               
-                              {/* 🔥 BOTONES DE EDITAR LOGO Y ELIMINAR RESTAURADOS 🔥 */}
                               <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-all">
                                 <button 
                                     onClick={() => {
@@ -2985,7 +2913,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                        {ICONOS_DISPONIBLES.map(ico => (
                           <button key={ico.id} onClick={() => handleGuardarIcono(ico.id)} className="flex flex-col items-center justify-center p-3 bg-white hover:border-blue-400 rounded-2xl border-2 border-slate-100 shadow-sm transition-all group hover:bg-blue-50">
                             <div className="w-10 h-10 mb-2 group-hover:scale-110 transition-transform">
-                               <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender iconoKey={ico.id} hallazgo={ico.label} colorOverride="#2563eb" /></svg>
+                               <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#2563eb" hallazgo="{ico.label}" iconoKey="{ico.id}"/></svg>
                             </div>
                             <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600 text-center leading-tight">{ico.label}</span>
                           </button>
@@ -3011,7 +2939,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                  <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden text-left flex flex-col max-h-[85vh]">
                     <div className="p-6 bg-slate-900 text-white flex justify-between items-center shrink-0">
                       <div className="flex items-center gap-3">
-                        <HelpCircle size={20} className="text-blue-400" />
+                        <HelpCircle className="text-blue-400" size={20}/>
                         <h3 className="text-xl font-black uppercase italic tracking-tighter">Simbología del Odontograma</h3>
                       </div>
                       <button onClick={() => setMostrarLeyenda(false)} className="hover:text-red-400 transition-colors"><X size={20}/></button>
@@ -3058,7 +2986,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                             {ICONOS_DISPONIBLES.map(ico => (
                               <div key={ico.id} className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                                 <div className="w-8 h-8 mb-3">
-                                   <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender iconoKey={ico.id} hallazgo={ico.label} colorOverride="#64748b" /></svg>
+                                   <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#64748b" hallazgo="{ico.label}" iconoKey="{ico.id}"/></svg>
                                 </div>
                                 <span className="text-[9px] font-black uppercase text-slate-500 text-center leading-tight">{ico.label}</span>
                               </div>
@@ -3072,7 +3000,7 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
                             {LESIONES_LISTA.slice(0, 8).map(lesion => (
                               <div key={lesion} className="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                 <div className="w-8 h-8 mb-3">
-                                   <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender hallazgo={lesion} colorOverride="#0f172a" /></svg>
+                                   <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#0f172a" hallazgo="{lesion}"/></svg>
                                 </div>
                                 <span className="text-[9px] font-black uppercase text-slate-800 text-center leading-tight">{lesion}</span>
                               </div>
@@ -3098,9 +3026,9 @@ const moverSeccion = async (index: number, direccion: 'arriba' | 'abajo') => {
 } 
     
 function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFaceClick, invert }: any) {
-      const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48) || (id >= 51 && id <= 55) || (id >= 81 && id <= 85);
-      const faceLeft = screenLeft ? 'D' : 'M';
-      const faceRight = screenLeft ? 'M' : 'D';
+  const screenLeft = (id >= 11 && id <= 18) || (id >= 41 && id <= 48) || (id >= 51 && id <= 55) || (id >= 81 && id <= 85);
+  const faceLeft = screenLeft ? 'D' : 'M';
+  const faceRight = screenLeft ? 'M' : 'D';
 
   const getFill = (c: string) => {
     const valCara = estado?.caras?.[c];
@@ -3123,7 +3051,8 @@ function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFace
     }
 
     try {
-        if (itemsDiente && itemsDiente.length > 0) {
+        // Validación de seguridad para prevenir el error .some()
+        if (Array.isArray(itemsDiente) && itemsDiente.length > 0) {
             const realiz = itemsDiente.some((i:any) => i.cara && typeof i.cara === 'string' && i.cara.includes(c) && i.estado === 'realizado');
             if (realiz) return "#10b981"; 
             
@@ -3168,12 +3097,12 @@ function CarasDentales({ id, itemsDiente = [], estado, abrirPanelAgregar, onFace
 function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, invert = false, itemsDiente = [], estadoDiente, abrirPanelAgregar }: any) {
   const hallazgos = estadoDiente?.hallazgos || [];
   
-  const tratamientosEnPieza = itemsDiente.filter((i:any) => !i.zona);
+  const tratamientosEnPieza = Array.isArray(itemsDiente) ? itemsDiente.filter((i:any) => !i.zona) : [];
   const todosRealizados = tratamientosEnPieza.length > 0 && tratamientosEnPieza.every((i:any) => i.estado === 'realizado');
   const tienePendientes = tratamientosEnPieza.some((i:any) => i.estado !== 'realizado');
   
   const isAusenteManual = hallazgos.includes('Ausente');
-  const isExodonciaRealizada = itemsDiente.some((i:any) => {
+  const isExodonciaRealizada = Array.isArray(itemsDiente) && itemsDiente.some((i:any) => {
       const n = String(i.display_nombre).toLowerCase();
       const ico = String(i.icono_tipo || "").toLowerCase();
       return n.includes('extrac') || n.includes('exodoncia') || ico.includes('extrac');
@@ -3182,24 +3111,26 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
   
   let elementosRaiz: any[] = hallazgos.map((h: string) => ({ nombre: h, icono: null, isManual: true }));
   
-  itemsDiente.forEach((t:any) => {
-      const n = String(t.display_nombre).toLowerCase();
-      const ico = String(t.icono_tipo || "").toLowerCase();
-      const esRaiz = n.includes("endo") || ico.includes("endo") || 
-                     n.includes("impla") || ico.includes("impla") || 
-                     n.includes("perno") || ico.includes("perno") || 
-                     n.includes("corona") || ico.includes("corona") || 
-                     n.includes("extra") || ico.includes("extra") || 
-                     n.includes("exodoncia") ||
-                     ico === "default" || 
-                     ico === "otro"; 
-      
-      if (!t.cara || esRaiz) {
-          if (!elementosRaiz.some(e => e.nombre === t.display_nombre)) {
-              elementosRaiz.push({ nombre: t.display_nombre, icono: t.icono_tipo, isManual: false });
+  if (Array.isArray(itemsDiente)) {
+      itemsDiente.forEach((t:any) => {
+          const n = String(t.display_nombre).toLowerCase();
+          const ico = String(t.icono_tipo || "").toLowerCase();
+          const esRaiz = n.includes("endo") || ico.includes("endo") || 
+                         n.includes("impla") || ico.includes("impla") || 
+                         n.includes("perno") || ico.includes("perno") || 
+                         n.includes("corona") || ico.includes("corona") || 
+                         n.includes("extra") || ico.includes("extra") || 
+                         n.includes("exodoncia") ||
+                         ico === "default" || 
+                         ico === "otro"; 
+          
+          if (!t.cara || esRaiz) {
+              if (!elementosRaiz.some(e => e.nombre === t.display_nombre)) {
+                  elementosRaiz.push({ nombre: t.display_nombre, icono: t.icono_tipo, isManual: false });
+              }
           }
-      }
-  });
+      });
+  }
 
   let start = "#ffffff", end = "#f1f5f9", stroke = "#cbd5e1";
   
@@ -3224,7 +3155,7 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
 
   return (
     <div className={`flex flex-col items-center gap-1 group ${invert ? 'flex-col-reverse' : ''} ${seleccionado ? 'ring-4 ring-blue-400 bg-blue-50 rounded-xl pb-1 px-1' : ''} ${isAusenteManual ? 'opacity-40' : ''}`}>
-  <div onClick={(e) => onSelect && onSelect(id, e)} onContextMenu={onContextMenu} className="relative w-9 h-11 cursor-pointer transition-all duration-300 drop-shadow-sm hover:scale-105">
+      <div onClick={(e) => onSelect && onSelect(id, e)} onContextMenu={onContextMenu} className="relative w-9 h-11 cursor-pointer transition-all duration-300 drop-shadow-sm hover:scale-105">
         <svg viewBox="-10 -10 120 140" className={`w-full h-full overflow-visible ${invert ? 'rotate-180' : ''}`}>
           <defs>
             <linearGradient id={`g-${id}`} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -3242,8 +3173,8 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
              </g>
           ) : (
               elementosRaiz.map((el, i) => {
-                  const isTtoRealizado = !el.isManual && itemsDiente.some((t:any) => t.display_nombre === el.nombre && t.estado === 'realizado');
-                  const isTtoPendiente = !el.isManual && itemsDiente.some((t:any) => t.display_nombre === el.nombre && t.estado !== 'realizado');
+                  const isTtoRealizado = !el.isManual && Array.isArray(itemsDiente) && itemsDiente.some((t:any) => t.display_nombre === el.nombre && t.estado === 'realizado');
+                  const isTtoPendiente = !el.isManual && Array.isArray(itemsDiente) && itemsDiente.some((t:any) => t.display_nombre === el.nombre && t.estado !== 'realizado');
                   return <LogoRender key={`h-${i}`} hallazgo={el.nombre} iconoKey={el.icono} isRealizado={isTtoRealizado} isPendiente={isTtoPendiente} />
               })
           )}
@@ -3252,7 +3183,7 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
       <span className="text-[10px] font-black text-slate-400 italic group-hover:text-blue-500 cursor-pointer" onClick={(e) => onSelect && onSelect(id, e)} onContextMenu={onContextMenu}>{id}</span>
       
       <div className={isAusente ? 'pointer-events-none' : ''}>
-         <CarasDentales id={id} estado={estadoDiente} itemsDiente={itemsDiente} onFaceClick={onFaceClick} abrirPanelAgregar={abrirPanelAgregar} invert={invert} />
+         <CarasDentales id={id} estado={estadoDiente} itemsDiente={Array.isArray(itemsDiente) ? itemsDiente : []} onFaceClick={onFaceClick} abrirPanelAgregar={abrirPanelAgregar} invert={invert} />
       </div>
     </div>
   )
@@ -3298,8 +3229,8 @@ function LogoRender({ hallazgo, iconoKey, colorOverride, isRealizado, isPendient
 
   return <circle cx="50" cy="50" r="25" fill={fill} opacity="0.8" />;
 }
-
 const commonSvgProps = { viewBox: "0 0 100 100", className: "w-4 h-4 text-slate-400 group-hover:text-blue-500", stroke: "currentColor", fill: "none", strokeWidth: "10" };
+
 function LogoSextante1() { return <svg {...commonSvgProps}><polyline points="10,0 100,100 0,100"/></svg>; }
 function LogoSextante2() { return <svg {...commonSvgProps}><polyline points="10,20 50,100 90,20"/></svg>; }
 function LogoSextante3() { return <svg {...commonSvgProps}><polyline points="90,0 0,100 100,100"/></svg>; }
