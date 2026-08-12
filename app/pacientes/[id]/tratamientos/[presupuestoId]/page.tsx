@@ -1732,20 +1732,6 @@ export default function DetalleTratamientoPage() {
                     ))}
                   </div>
                 </div>
-
-                {/* ARCADA INFERIOR (invertida) */}
-                <div className="flex gap-4 mt-8">
-                  <div className="flex gap-0.5 border-r-2 border-slate-100 pr-4">
-                    {(!vistaTemporal ? c3 : t3).map(id => (
-                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={obtenerItemsDelDiente(id)} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
-                    ))}
-                  </div>
-                  <div className="flex gap-0.5">
-                    {(!vistaTemporal ? c4 : t4).map(id => (
-                      <DienteVisual key={id} id={id} invert seleccionado={dientesSeleccionados.includes(id)} onSelect={handleDienteClick} onContextMenu={(e:any) => handleContextMenu(e, id)} itemsDiente={obtenerItemsDelDiente(id)} estadoDiente={odontogramaEstado[id.toString()]} abrirPanelAgregar={abrirPanelAgregar} onFaceClick={(e:any, cara:string) => handleContextMenu(e, id, cara)} />
-                    ))}
-                  </div>
-                </div>
               </div>
           </div>
 
