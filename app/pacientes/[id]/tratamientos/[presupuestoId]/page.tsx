@@ -1823,15 +1823,17 @@ export default function DetalleTratamientoPage() {
                           <button onClick={() => setVistaMenu('principal')} className="bg-slate-100 text-slate-600 text-[8px] px-3 py-1 rounded-full font-black uppercase hover:bg-slate-200">Volver</button>
                         </div>
                         <div className="grid grid-cols-1 gap-1 max-h-[300px] overflow-y-auto custom-scrollbar p-1">
-                          {(vistaMenu === 'preexistencias' ? PREEXISTENCIAS_LISTA : LESIONES_LISTA).map((op) => (
-                            <button key={op} onClick={() => aplicarHallazgo(op)} className="flex items-center gap-3 w-full p-2 hover:bg-blue-50 rounded-lg text-left transition-colors">
-                              <div className="w-6 h-6 shrink-0">
-                                 <svg viewBox="-10 -10 120 140" className="w-full h-full"><LogoRender hallazgo="{op}"/></svg>
-                              </div>
-                              <span className="text-[9px] font-black uppercase text-slate-600">{op}</span>
-                            </button>
-                          ))}
-                        </div>
+   {(vistaMenu === 'preexistencias' ? PREEXISTENCIAS_LISTA : LESIONES_LISTA).map((op) => (
+     <button key={op} onClick={() => aplicarHallazgo(op)} className="flex items-center gap-3 w-full p-2 hover:bg-blue-50 rounded-lg text-left transition-colors">
+       <div className="w-6 h-6 shrink-0">
+          <svg viewBox="-10 -10 120 140" className="w-full h-full">
+            <LogoRender hallazgo={op}/>
+          </svg>
+       </div>
+       <span className="text-[9px] font-black uppercase text-slate-600">{op}</span>
+     </button>
+   ))}
+ </div>
                       </div>
                   )}
                 </motion.div>
@@ -2386,10 +2388,10 @@ export default function DetalleTratamientoPage() {
                                             <div key={p.id} className="w-full flex items-center bg-white border-2 border-slate-100 hover:border-blue-400 hover:bg-blue-50 rounded-xl transition-all shadow-sm group">
                                                 <button onClick={(e) => { e.stopPropagation(); setModalIcono({abierto: true, prestacion: p}); }} title="Cambiar Logo Permanentemente" className="w-12 h-12 flex shrink-0 items-center justify-center bg-slate-100 hover:bg-blue-600 rounded-l-lg transition-colors overflow-hidden group/logo relative">
                                                    <div className="w-8 h-8 group-hover/logo:opacity-0 transition-opacity">
-                                                      <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                                         <LogoRender colorOverride="#ef4444" hallazgo="{p.display_nombre}" iconoKey="{p.icono_tipo}"/>
-                                                      </svg>
-                                                   </div>
+    <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+       <LogoRender colorOverride="#ef4444" hallazgo={p.display_nombre} iconoKey={p.icono_tipo}/>
+    </svg>
+ </div>
                                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/logo:opacity-100 transition-opacity text-white flex-col">
                                                       <RefreshCcw size={16}/>
                                                       <span className="text-[6px] font-black uppercase mt-0.5 tracking-widest">Editar</span>
@@ -2444,13 +2446,11 @@ export default function DetalleTratamientoPage() {
                                                          onClick={() => abrirModalPack(pack)}
                                                          className="bg-white p-5 rounded-2xl border-2 border-emerald-100 hover:border-emerald-400 hover:bg-emerald-50 transition-all cursor-pointer shadow-sm flex flex-col group mx-1"
                                                       >
-                                                         <div className="flex items-center gap-3 mb-2">
-                                                            {pack.icono_tipo ? (
-                                                               <div className="w-6 h-6 shrink-0">
-                                                                  <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                                                     <LogoRender colorOverride="#10b981" hallazgo="{pack.nombre}" iconoKey="{pack.icono_tipo}"/>
-                                                                  </svg>
-                                                               </div>
+                                                         <div className="w-6 h-6 shrink-0">
+    <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+       <LogoRender colorOverride="#10b981" hallazgo={pack.nombre} iconoKey={pack.icono_tipo}/>
+    </svg>
+ </div>
                                                             ) : (
                                                                <Package className="text-emerald-500 shrink-0" size={16}/>
                                                             )}
@@ -2534,10 +2534,10 @@ export default function DetalleTratamientoPage() {
                             <div className="bg-white/20 p-3 rounded-xl">
                                {modalPack.pack.icono_tipo ? (
                                   <div className="w-8 h-8">
-                                     <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                        <LogoRender colorOverride="#ffffff" hallazgo="{modalPack.pack.nombre}" iconoKey="{modalPack.pack.icono_tipo}"/>
-                                     </svg>
-                                  </div>
+    <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+       <LogoRender colorOverride="#ffffff" hallazgo={modalPack.pack.nombre} iconoKey={modalPack.pack.icono_tipo}/>
+    </svg>
+ </div>
                                ) : (
                                   <Package size={24}/>
                                )}
@@ -2896,15 +2896,15 @@ export default function DetalleTratamientoPage() {
                       </p>
                     </div>
                     <div className="p-6 overflow-y-auto grid grid-cols-3 md:grid-cols-4 gap-3 custom-scrollbar">
-                       {ICONOS_DISPONIBLES.map(ico => (
-                          <button key={ico.id} onClick={() => handleGuardarIcono(ico.id)} className="flex flex-col items-center justify-center p-3 bg-white hover:border-blue-400 rounded-2xl border-2 border-slate-100 shadow-sm transition-all group hover:bg-blue-50">
-                            <div className="w-10 h-10 mb-2 group-hover:scale-110 transition-transform">
-                               <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#2563eb" hallazgo="{ico.label}" iconoKey="{ico.id}"/></svg>
-                            </div>
-                            <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600 text-center leading-tight">{ico.label}</span>
-                          </button>
-                       ))}
-                    </div>
+    {ICONOS_DISPONIBLES.map(ico => (
+       <button key={ico.id} onClick={() => handleGuardarIcono(ico.id)} className="flex flex-col items-center justify-center p-3 bg-white hover:border-blue-400 rounded-2xl border-2 border-slate-100 shadow-sm transition-all group hover:bg-blue-50">
+         <div className="w-10 h-10 mb-2 group-hover:scale-110 transition-transform">
+            <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#2563eb" hallazgo={ico.label} iconoKey={ico.id}/></svg>
+         </div>
+         <span className="text-[9px] font-black uppercase text-slate-500 group-hover:text-blue-600 text-center leading-tight">{ico.label}</span>
+       </button>
+    ))}
+ </div>
                     
                     <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center shrink-0">
                        <button onClick={() => handleGuardarIcono(null)} className="flex items-center gap-2 px-4 py-2 text-[10px] font-black uppercase text-red-500 hover:bg-red-50 rounded-xl transition-all">
@@ -2972,8 +2972,7 @@ export default function DetalleTratamientoPage() {
                             {ICONOS_DISPONIBLES.map(ico => (
                               <div key={ico.id} className="flex flex-col items-center justify-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm">
                                 <div className="w-8 h-8 mb-3">
-                                   <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#64748b" hallazgo="{ico.label}" iconoKey="{ico.id}"/></svg>
-                                </div>
+<svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#64748b" hallazgo={ico.label} iconoKey={ico.id}/></svg>                                </div>
                                 <span className="text-[9px] font-black uppercase text-slate-500 text-center leading-tight">{ico.label}</span>
                               </div>
                             ))}
@@ -2986,8 +2985,7 @@ export default function DetalleTratamientoPage() {
                             {LESIONES_LISTA.slice(0, 8).map(lesion => (
                               <div key={lesion} className="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-2xl border border-slate-100 shadow-sm">
                                 <div className="w-8 h-8 mb-3">
-                                   <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#0f172a" hallazgo="{lesion}"/></svg>
-                                </div>
+<svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm"><LogoRender colorOverride="#0f172a" hallazgo={lesion}/></svg>                                </div>
                                 <span className="text-[9px] font-black uppercase text-slate-800 text-center leading-tight">{lesion}</span>
                               </div>
                             ))}
