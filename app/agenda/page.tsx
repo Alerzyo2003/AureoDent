@@ -608,6 +608,20 @@ export default function AgendaPage() {
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
 
+  const contactarWhatsApp = (telefono: string, nombre: string, estado: string, hora: string) => {
+  if (!telefono) return toast.error("Paciente sin teléfono");
+  const num = telefono.replace(/\D/g, '');
+  let mensaje = `Hola ${nombre}, nos comunicamos de la clínica dental.`;
+  if (estado === 'programada' || estado === 'confirmado_tel') {
+      mensaje = `Hola ${nombre}, te escribimos de la clínica para recordar tu cita de hoy a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
+  } else if (estado === 'atendido') {
+      mensaje = `Hola ${nombre}, esperamos que estés muy bien tras tu atención de hoy en la clínica. ¡Cualquier consulta no dudes en escribirnos!`;
+  } else if (estado === 'no_asiste') {
+      mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita de hoy. ¿Te gustaría reagendar para otro día?`;
+  }
+  window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
+}
+  
   const generarYMostrarResumen = async (presupuestoId: string, cita: any) => {
     const toastId = toast.loading("Generando resumen del tratamiento...");
     try {
