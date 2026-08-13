@@ -896,7 +896,7 @@ export default function AgendaPage() {
           .update({
             inicio,
             fin,
-            profional_id: filtro.profesional_id,
+            profesional_id: filtro.profesional_id,
             estado: 'reprogramada',
             motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo,
             modificado_por: usuarioLogueado
@@ -965,8 +965,10 @@ export default function AgendaPage() {
     }
 
     const laboral = esHorarioLaboral(fecha, hora, filtro.duracionDefault);
-    const ocupado = esCitaOcupada(fecha, hora, filtro.duracionDefault);
+    // Para agendar evaluamos la duración total, NO solo 15 minutos
+    const ocupadoReal = esCitaOcupada(fecha, hora, filtro.duracionDefault);
     const diaCompletamenteBloqueado = bloqueosSemana.some(b => b.fecha === fecha && (!b.hora_inicio || !b.hora_fin));
+    
     const chocaConSeleccion = horasSeleccionadas.some(s => {
         if (s.fecha === fecha && s.hora === hora) return false; 
         const selStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
@@ -980,8 +982,8 @@ export default function AgendaPage() {
     if (!laboral) return toast.error("Fuera del horario laboral del especialista.");
     if (chocaConSeleccion) return toast.warning("El horario choca con otra selección actual.");
     
-    if (ocupado) {
-        if (!window.confirm(`⚠️ El horario de las ${hora} ya está ocupado. ¿Deseas forzar un SOBRECUPO encima de otra cita?`)) {
+    if (ocupadoReal) {
+        if (!window.confirm(`⚠️ El bloque completo que intentas agendar (desde las ${hora} por ${filtro.duracionDefault} min) choca con otra cita existente. ¿Deseas forzar un SOBRECUPO?`)) {
             return;
         }
     }
@@ -1168,16 +1170,17 @@ export default function AgendaPage() {
 
   const calcularDeudaTotalCaja = () => deudasPaciente.reduce((acc, curr) => acc + curr.deuda, 0);
 
-  // Helper para identificar citas de sobrecupo de forma dinámica
+  // Helper para identificar citas de sobrecupo de forma matemática y estricta
   const checkIsSobrecupo = (c: any) => {
-    // Si la cita no tiene profesional asignado, no puede ser sobrecupo de nadie
+    // Si la cita no tiene profesional, no puede ser sobrecupo
     if (!c.profesional_id) return false;
     
+    // citasFiltradas ya excluye citas 'cancelada', así que solo comparamos contra citas visibles y activas
     return citasFiltradas.some(otra => {
-        // Ignoramos si es la misma cita exacta o si está anulada
-        if (otra.id === c.id || otra.estado === 'cancelada') return false;
+        // Ignoramos la misma cita
+        if (otra.id === c.id) return false;
         
-        // REGLA CRÍTICA: Deben ser ESTRICTAMENTE del mismo profesional
+        // REGLA 1: Tienen que ser obligatoriamente del mismo profesional
         if (!otra.profesional_id) return false;
         if (String(otra.profesional_id) !== String(c.profesional_id)) return false; 
         
@@ -1186,16 +1189,16 @@ export default function AgendaPage() {
         const oIni = new Date(otra.inicio.replace(' ', 'T')).getTime();
         const oFin = new Date(otra.fin.replace(' ', 'T')).getTime();
         
-        // Si no chocan en el tiempo, lo ignoramos
+        // REGLA 2: Deben solaparse en el tiempo
         if (cIni >= oFin || cFin <= oIni) return false; 
         
-        // Si sí chocan y SON del mismo profesional, definimos cuál es el sobrecupo
-        // (La que se haya agendado más recientemente es la de sobrecupo)
+        // REGLA 3: Si chocan, la cita creada DESPUÉS es la de sobrecupo
         const timeC = c.created_at ? new Date(c.created_at).getTime() : 0;
         const timeO = otra.created_at ? new Date(otra.created_at).getTime() : 0;
         
-        if (timeC !== timeO && timeC > 0 && timeO > 0) return timeO < timeC;
-        return String(otra.id) < String(c.id);
+        if (timeC !== timeO && timeC > 0 && timeO > 0) return timeC > timeO;
+        
+        return String(c.id) > String(otra.id);
     });
   }
 
@@ -1460,8 +1463,8 @@ export default function AgendaPage() {
                             <div className={`w-2 h-2 rounded-full ${estadoConfig.dot}`}></div>
                             <select value={c.estado || 'programada'} onChange={(e) => actualizarEstadoCita(c.id, e.target.value)} className={`appearance-none bg-transparent outline-none cursor-pointer pr-5 font-black ${estadoConfig.text} text-base md:text-[10px]`}>
                             {Object.entries(ESTADOS_CITA).map(([key, val]) => {
-        let labelText = val.label.toUpperCase();
-        if (key === 'en_espera' && c.hora_llegada && c.estado === 'en_espera') {
+                                let labelText = val.label.toUpperCase();
+                                if (key === 'en_espera' && c.hora_llegada && c.estado === 'en_espera') {
                                     const timeLlegada = new Date(c.hora_llegada).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
                                     labelText = `ESPERA DESDE LAS ${timeLlegada}`;
                                 }
@@ -2149,29 +2152,32 @@ export default function AgendaPage() {
                                   <div key={hora} className="grid grid-cols-6 gap-2 md:gap-4 items-center min-h-[48px] md:min-h-[44px]">
                                     {getDiasLunesSabado(semanaInicio).map(dia => {
                                       const fStr = getLocalDateISO(dia);
-                                      const laboral = esHorarioLaboral(fStr, hora, filtro.duracionDefault);
-                                      const ocupado = esCitaOcupada(fStr, hora, filtro.duracionDefault);
-                                      const sel = horasSeleccionadas.some(x => x.fecha === fStr && x.hora === hora);
+                                      // Solo validamos 15 minutos visualmente para que no se agrande hacia atrás
+                                      const laboralVisual = esHorarioLaboral(fStr, hora, 15);
+                                      const ocupadoVisual = esCitaOcupada(fStr, hora, 15);
                                       const diaCompletamenteBloqueado = bloqueosSemana.some(b => b.fecha === fStr && (!b.hora_inicio || !b.hora_fin));
                                       
+                                      const sel = horasSeleccionadas.some(x => x.fecha === fStr && x.hora === hora);
                                       const chocaConSeleccion = horasSeleccionadas.some(s => {
                                         if (s.fecha === fStr && s.hora === hora) return false;
                                         const selStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
                                         const selEnd = selStart + s.duracion * 60000;
                                         const slotStart = new Date(`${fStr}T${hora}:00`).getTime();
-                                        const slotEnd = slotStart + filtro.duracionDefault * 60000;
+                                        const slotEnd = slotStart + 15 * 60000;
                                         return slotStart < selEnd && slotEnd > selStart;
                                       });
 
                                       let btnClass = "w-full py-3 md:py-2.5 text-[11px] md:text-[10px] font-black rounded-xl border transition-all ";
                                       if (sel) {
                                           btnClass += "text-white border-[#0E1B2E] shadow-md bg-[#0E1B2E]";
-                                      } else if (diaCompletamenteBloqueado || chocaConSeleccion) {
+                                      } else if (chocaConSeleccion) {
+                                          // Efecto visual para mostrar que esa celda es parte de una cita más larga seleccionada
+                                          btnClass += "bg-[#0E1B2E]/10 text-[#0E1B2E] border-[#0E1B2E]/30";
+                                      } else if (diaCompletamenteBloqueado) {
                                           btnClass += "bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed opacity-50 line-through decoration-slate-300";
-                                      } else if (ocupado) {
-                                          // Cambiado para que se note y permita sobrecupo
+                                      } else if (ocupadoVisual) {
                                           btnClass += "bg-red-50 text-red-500 border-red-200 hover:bg-red-100 hover:border-red-300 shadow-sm";
-                                      } else if (laboral) {
+                                      } else if (laboralVisual) {
                                           btnClass += "bg-white border-slate-200 text-slate-600 hover:border-[#C9A24B] hover:text-[#8A6D2F] hover:bg-[#C9A24B]/5 shadow-sm";
                                       } else {
                                           return <div key={fStr}></div>;
@@ -2182,7 +2188,7 @@ export default function AgendaPage() {
                                           <button
                                             onClick={() => handleSlotClick(fStr, hora)}
                                             className={btnClass}
-                                            title={ocupado ? "Horario ocupado (Click para agendar Sobrecupo)" : ""}
+                                            title={ocupadoVisual ? "Horario ocupado (Click para agendar Sobrecupo)" : ""}
                                           >
                                             {hora}
                                           </button>
