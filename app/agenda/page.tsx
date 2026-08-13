@@ -1170,16 +1170,27 @@ export default function AgendaPage() {
 
   // Helper para identificar citas de sobrecupo de forma dinámica
   const checkIsSobrecupo = (c: any) => {
+    // Si la cita no tiene profesional asignado, no puede ser sobrecupo de nadie
+    if (!c.profesional_id) return false;
+    
     return citasFiltradas.some(otra => {
-        if (otra.id === c.id || otra.profesional_id !== c.profesional_id || otra.estado === 'cancelada') return false;
+        // Ignoramos si es la misma cita exacta o si está anulada
+        if (otra.id === c.id || otra.estado === 'cancelada') return false;
+        
+        // REGLA CRÍTICA: Deben ser ESTRICTAMENTE del mismo profesional
+        if (!otra.profesional_id) return false;
+        if (String(otra.profesional_id) !== String(c.profesional_id)) return false; 
+        
         const cIni = new Date(c.inicio.replace(' ', 'T')).getTime();
         const cFin = new Date(c.fin.replace(' ', 'T')).getTime();
         const oIni = new Date(otra.inicio.replace(' ', 'T')).getTime();
         const oFin = new Date(otra.fin.replace(' ', 'T')).getTime();
         
-        if (!(oIni < cFin && oFin > cIni)) return false; // Si no hay choque de horario no es sobrecupo
+        // Si no chocan en el tiempo, lo ignoramos
+        if (cIni >= oFin || cFin <= oIni) return false; 
         
-        // El desempate es ver cual se creó después (Si fue después, es el sobrecupo)
+        // Si sí chocan y SON del mismo profesional, definimos cuál es el sobrecupo
+        // (La que se haya agendado más recientemente es la de sobrecupo)
         const timeC = c.created_at ? new Date(c.created_at).getTime() : 0;
         const timeO = otra.created_at ? new Date(otra.created_at).getTime() : 0;
         
