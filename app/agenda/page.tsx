@@ -613,7 +613,7 @@ export default function AgendaPage() {
   if (!telefono) return toast.error("Paciente sin teléfono");
   const num = telefono.replace(/\D/g, '');
   const hora = new Date(cita.inicio).toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Santiago'});
-  const link = `https://confirmar-citas.vercel.app/confirmar/${cita.id}`;
+  const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
   const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de la clínica para recordar tu cita de hoy a las ${hora} hrs. Por favor confirma tu asistencia aquí: ${link}`;
   window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
 }
