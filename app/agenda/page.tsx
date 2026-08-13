@@ -91,6 +91,7 @@ export default function AgendaPage() {
   const puedeVerAgendaCompleta = ['ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(userRol);
 
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
+  const [anuladasCount, setAnuladasCount] = useState(0);
   const dateInputRef = useRef<HTMLInputElement>(null);
 
   const [realtimeTrigger, setRealtimeTrigger] = useState(0);
@@ -266,26 +267,33 @@ export default function AgendaPage() {
     }
     
     const { data: citasData } = await query
-  .order('inicio', { ascending: true })
-  .order('id', { ascending: true });
+      .order('inicio', { ascending: true })
+      .order('id', { ascending: true });
     
     if (!citasData || citasData.length === 0) {
         setCitasDia([]);
+        setAnuladasCount(0);
         return;
     }
 
-    const pacienteIds = [...new Set(citasData.map(c => c.paciente_id).filter(Boolean))];
+    const anuladas = citasData.filter((c: any) => c.estado === 'cancelada').length;
+    setAnuladasCount(anuladas);
+
+    // Filtramos las citas activas para que las anuladas desaparezcan de la vista y liberen el horario
+    const citasActivas = citasData.filter((c: any) => c.estado !== 'cancelada');
+
+    const pacienteIds = [...new Set(citasActivas.map((c: any) => c.paciente_id).filter(Boolean))];
     
     const { data: presups } = await supabase.from('presupuestos').select('id, paciente_id').in('paciente_id', pacienteIds).eq('aprobado', true);
 
     const presupsIds = presups?.map(p => p.id) || [];
     
     let finanzasMap: Record<string, { total: number, abonado: number, deuda: number, deuda_realizada: number }> = {};
-    pacienteIds.forEach(id => finanzasMap[id] = { total: 0, abonado: 0, deuda: 0, deuda_realizada: 0 });
+    pacienteIds.forEach(id => finanzasMap[id as string] = { total: 0, abonado: 0, deuda: 0, deuda_realizada: 0 });
 
     if (presupsIds.length > 0) {
         const { data: items } = await supabase.from('presupuesto_items').select('presupuesto_id, precio_pactado, abonado, estado').in('presupuesto_id', presupsIds).neq('estado', 'cancelada');
-        items?.forEach(item => {
+        items?.forEach((item: any) => {
             const p = presups?.find(x => x.id === item.presupuesto_id);
             if (p) {
                 const precio = Number(item.precio_pactado || 0); 
@@ -303,7 +311,7 @@ export default function AgendaPage() {
         });
     }
 
-    const citasConFinanzas = citasData.map(c => {
+    const citasConFinanzas = citasActivas.map((c: any) => {
         const fin = finanzasMap[c.paciente_id];
         let estadoFinanciero = 'sin_saldo'; 
         let requiereCobroInmediato = false;
@@ -516,6 +524,7 @@ export default function AgendaPage() {
       }
       toast.success("Cita anulada correctamente");
       setCitasHuerfanas(prev => prev.filter(c => c.id !== citaId));
+      await fetchCitasAgenda();
     } catch(e) {
       toast.error("No se pudo anular la cita");
     }
@@ -592,20 +601,6 @@ export default function AgendaPage() {
       });
     }
     toast.success("Estado actualizado"); await fetchCitasAgenda();
-  }
-
-  const contactarWhatsApp = (telefono: string, nombre: string, estado: string, hora: string) => {
-    if (!telefono) return toast.error("Paciente sin teléfono");
-    const num = telefono.replace(/\D/g, '');
-    let mensaje = `Hola ${nombre}, nos comunicamos de la clínica dental.`;
-    if (estado === 'programada' || estado === 'confirmado_tel') {
-        mensaje = `Hola ${nombre}, te escribimos de la clínica para recordar tu cita de hoy a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
-    } else if (estado === 'atendido') {
-        mensaje = `Hola ${nombre}, esperamos que estés muy bien tras tu atención de hoy en la clínica. ¡Cualquier consulta no dudes en escribirnos!`;
-    } else if (estado === 'no_asiste') {
-        mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita de hoy. ¿Te gustaría reagendar para otro día?`;
-    }
-    window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
 
   const enviarRecordatorioConLink = (cita: any) => {
@@ -1278,6 +1273,12 @@ export default function AgendaPage() {
          <div className="bg-white text-slate-700 px-6 py-3.5 md:py-3 rounded-full border border-slate-200 shadow-sm flex items-center justify-center sm:justify-start gap-2 shrink-0 w-full sm:w-auto">
             <CalendarDays className="text-[#C9A24B] md:w-[16px] md:h-[16px]" size={18} />
             <span className="font-bold text-sm md:text-xs uppercase tracking-widest">{citasFiltradas.length} Citas hoy</span>
+            {anuladasCount > 0 && (
+                <>
+                   <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300 mx-1"></span>
+                   <span className="font-bold text-sm md:text-xs uppercase tracking-widest text-red-500">{anuladasCount} Anuladas</span>
+                </>
+            )}
          </div>
       </div>
 
@@ -1405,7 +1406,18 @@ export default function AgendaPage() {
                         <div className={`relative ${estadoConfig.bg} border border-transparent px-3 py-2 md:px-3 md:py-1.5 rounded-full flex items-center gap-2 text-xs md:text-[10px] font-black uppercase ${estadoConfig.text} transition-colors shrink-0 sm:ml-2 mt-2 sm:mt-0 self-start w-auto`}>
     <div className={`w-2 h-2 rounded-full ${estadoConfig.dot}`}></div>
     <select value={c.estado || 'programada'} onChange={(e) => actualizarEstadoCita(c.id, e.target.value)} className={`appearance-none bg-transparent outline-none cursor-pointer pr-5 font-black ${estadoConfig.text} text-base md:text-[10px]`}>
-    {Object.entries(ESTADOS_CITA).map(([key, val]) => ( <option key={key} value={key} className="text-slate-800 bg-white">{val.label.toUpperCase()}</option> ))}
+    {Object.entries(ESTADOS_CITA).map(([key, val]) => {
+        let labelText = val.label.toUpperCase();
+        if (key === 'en_espera' && c.hora_llegada) {
+            const timeLlegada = new Date(c.hora_llegada).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+            labelText = `EN ESPERA DESDE LAS ${timeLlegada}`;
+        }
+        return (
+            <option key={key} value={key} className="text-slate-800 bg-white">
+                {labelText}
+            </option>
+        );
+    })}
     </select>
     <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${estadoConfig.text} opacity-60 md:w-[12px] md:h-[12px]`} size={14} />
 </div>
@@ -1431,7 +1443,6 @@ export default function AgendaPage() {
 
                         <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto justify-start sm:justify-end">
                             <button onClick={() => iniciarReprogramacion(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-[#C9A24B] hover:bg-slate-50 transition-colors" title="Reprogramar"><CalendarClock className="md:w-[16px] md:h-[16px]" size={18} /></button>
-                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-emerald-500 hover:bg-slate-50 transition-colors" title="WhatsApp"><MessageCircle className="md:w-[16px] md:h-[16px]" size={18} /></button>
                             <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-blue-500 hover:bg-slate-50 transition-colors" title="Enviar Presupuesto"><FileText className="md:w-[16px] md:h-[16px]" size={18} /></button>
                             <button onClick={() => enviarRecordatorioConLink(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-[#C9A24B] hover:bg-slate-50 transition-colors" title="Enviar link de confirmación"><LinkIcon className="md:w-[16px] md:h-[16px]" size={18} /></button>
                           
@@ -1503,7 +1514,11 @@ export default function AgendaPage() {
                                               <div className="flex flex-col items-start gap-1.5 mt-2">
                                                   <div className="flex items-center justify-between w-full">
                                                       <span className="text-[11px] md:text-[10px] font-black text-[#8A6D2F] bg-[#C9A24B]/10 px-1.5 py-0.5 rounded-md">{hInicio}</span>
-                                                      <span className={`text-[9px] md:text-[8px] font-black uppercase ${configEstado.text}`}>{configEstado.label}</span>
+                                                      <span className={`text-[9px] md:text-[8px] font-black uppercase ${configEstado.text}`}>
+                                                          {c.estado === 'en_espera' && c.hora_llegada 
+                                                            ? `ESPERA DESDE LAS ${new Date(c.hora_llegada).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' })}` 
+                                                            : configEstado.label}
+                                                      </span>
                                                   </div>
                                               </div>
                                           </div>
@@ -1513,7 +1528,6 @@ export default function AgendaPage() {
                                               <button onClick={(e) => { e.stopPropagation(); iniciarReprogramacion(c); }} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><CalendarClock className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><FileText className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               <button onClick={() => enviarRecordatorioConLink(c)} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><LinkIcon className="md:w-[14px] md:h-[14px]" size={16} /></button>
-                                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 md:p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               {puedeVerFinanzas && (
                                                   <button onClick={(e) => { e.stopPropagation(); abrirCaja(c); }} className="p-2 md:p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 rounded-md transition-all"><Coins className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               )}
