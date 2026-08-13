@@ -608,17 +608,13 @@ export default function AgendaPage() {
     window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
 
-  const contactarWhatsApp = (telefono: string, nombre: string, estado: string, hora: string) => {
+  const enviarRecordatorioConLink = (cita: any) => {
+  const telefono = cita.pacientes?.telefono;
   if (!telefono) return toast.error("Paciente sin teléfono");
   const num = telefono.replace(/\D/g, '');
-  let mensaje = `Hola ${nombre}, nos comunicamos de la clínica dental.`;
-  if (estado === 'programada' || estado === 'confirmado_tel') {
-      mensaje = `Hola ${nombre}, te escribimos de la clínica para recordar tu cita de hoy a las ${hora} hrs. ¿Nos confirmas tu asistencia por favor?`;
-  } else if (estado === 'atendido') {
-      mensaje = `Hola ${nombre}, esperamos que estés muy bien tras tu atención de hoy en la clínica. ¡Cualquier consulta no dudes en escribirnos!`;
-  } else if (estado === 'no_asiste') {
-      mensaje = `Hola ${nombre}, notamos que no pudiste asistir a tu cita de hoy. ¿Te gustaría reagendar para otro día?`;
-  }
+  const hora = new Date(cita.inicio).toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Santiago'});
+  const link = `https://confirmar-citas.vercel.app/confirmar/${cita.id}`;
+  const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de la clínica para recordar tu cita de hoy a las ${hora} hrs. Por favor confirma tu asistencia aquí: ${link}`;
   window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
 }
   
@@ -1437,7 +1433,8 @@ export default function AgendaPage() {
                             <button onClick={() => iniciarReprogramacion(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-[#C9A24B] hover:bg-slate-50 transition-colors" title="Reprogramar"><CalendarClock className="md:w-[16px] md:h-[16px]" size={18} /></button>
                             <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-emerald-500 hover:bg-slate-50 transition-colors" title="WhatsApp"><MessageCircle className="md:w-[16px] md:h-[16px]" size={18} /></button>
                             <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-blue-500 hover:bg-slate-50 transition-colors" title="Enviar Presupuesto"><FileText className="md:w-[16px] md:h-[16px]" size={18} /></button>
-                            
+                            <button onClick={() => enviarRecordatorioConLink(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-[#C9A24B] hover:bg-slate-50 transition-colors" title="Enviar link de confirmación"><LinkIcon className="md:w-[16px] md:h-[16px]" size={18} /></button>
+                          
                             {puedeVerFinanzas && (
                             <button onClick={() => abrirCaja(c)} className="p-2.5 md:p-2 border border-slate-200 rounded-lg text-slate-500 hover:text-amber-500 hover:bg-slate-50 transition-colors" title="Caja/Cobrar"><Coins className="md:w-[16px] md:h-[16px]" size={18} /></button>
                             )}
@@ -1515,7 +1512,8 @@ export default function AgendaPage() {
                                           <div className="absolute inset-0 bg-white/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 md:gap-1">
                                               <button onClick={(e) => { e.stopPropagation(); iniciarReprogramacion(c); }} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><CalendarClock className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               <button onClick={() => abrirEnvioPresupuesto(c)} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><FileText className="md:w-[14px] md:h-[14px]" size={16} /></button>
-                                              <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 md:p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle className="md:w-[14px] md:h-[14px]" size={16} /></button>
+                                              <button onClick={() => enviarRecordatorioConLink(c)} className="p-2 md:p-1.5 text-slate-500 hover:bg-[#C9A24B]/10 hover:text-[#C9A24B] rounded-md transition-all"><LinkIcon className="md:w-[14px] md:h-[14px]" size={16} /></button>
+                                            <button onClick={() => contactarWhatsApp(c.pacientes?.telefono, c.pacientes?.nombre, c.estado, hInicio)} className="p-2 md:p-1.5 text-slate-500 hover:bg-emerald-50 hover:text-emerald-600 rounded-md transition-all"><MessageCircle className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               {puedeVerFinanzas && (
                                                   <button onClick={(e) => { e.stopPropagation(); abrirCaja(c); }} className="p-2 md:p-1.5 text-slate-500 hover:bg-amber-50 hover:text-amber-600 rounded-md transition-all"><Coins className="md:w-[14px] md:h-[14px]" size={16} /></button>
                                               )}
