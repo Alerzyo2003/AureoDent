@@ -279,7 +279,6 @@ export default function AgendaPage() {
     const anuladas = citasData.filter((c: any) => c.estado === 'cancelada').length;
     setAnuladasCount(anuladas);
 
-    // Filtramos las citas activas para que las anuladas desaparezcan de la vista y liberen el horario
     const citasActivas = citasData.filter((c: any) => c.estado !== 'cancelada');
 
     const pacienteIds = [...new Set(citasActivas.map((c: any) => c.paciente_id).filter(Boolean))];
@@ -449,7 +448,7 @@ export default function AgendaPage() {
           inicio: getMinsFromDateStr(c.inicio), fin: getMinsFromDateStr(c.fin)
         })) || [];
 
-        let slotsLibres: string[] = [];
+        let slotsLibres: any[] = [];
         dispoDia.forEach(bloque => {
           let currTime = tToMins(bloque.hora_inicio);
           const endTime = tToMins(bloque.hora_fin);
@@ -461,12 +460,24 @@ export default function AgendaPage() {
               if(!b.hora_inicio || !b.hora_fin) return true;
               return currTime < tToMins(b.hora_fin) && slotEnd > tToMins(b.hora_inicio);
             });
-            if (!chocaCita && !chocaBloqueo) slotsLibres.push(minsToT(currTime));
+            if (!chocaBloqueo) {
+               slotsLibres.push({ time: minsToT(currTime), ocupado: chocaCita });
+            }
             currTime += 15;
           }
         });
 
-        return { date: dateStr, dateObj, status: slotsLibres.length > 0 ? 'limpio' : 'lleno', slots: [...new Set(slotsLibres)].sort() };
+        const uniqueSlots: any[] = [];
+        const seen = new Set();
+        for (const s of slotsLibres) {
+            if (!seen.has(s.time)) {
+                seen.add(s.time);
+                uniqueSlots.push(s);
+            }
+        }
+        uniqueSlots.sort((a: any, b: any) => a.time.localeCompare(b.time));
+
+        return { date: dateStr, dateObj, status: uniqueSlots.length > 0 ? 'limpio' : 'lleno', slots: uniqueSlots };
       });
 
       setDispoSemanaEdicion(semanaProcesada);
@@ -885,7 +896,7 @@ export default function AgendaPage() {
           .update({
             inicio,
             fin,
-            profesional_id: filtro.profesional_id,
+            profional_id: filtro.profesional_id,
             estado: 'reprogramada',
             motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo,
             modificado_por: usuarioLogueado
@@ -967,8 +978,13 @@ export default function AgendaPage() {
 
     if (diaCompletamenteBloqueado) return toast.error("Este día está completamente bloqueado.");
     if (!laboral) return toast.error("Fuera del horario laboral del especialista.");
-    if (ocupado) return toast.error("Horario ocupado por otra cita o bloqueo.");
     if (chocaConSeleccion) return toast.warning("El horario choca con otra selección actual.");
+    
+    if (ocupado) {
+        if (!window.confirm(`⚠️ El horario de las ${hora} ya está ocupado. ¿Deseas forzar un SOBRECUPO encima de otra cita?`)) {
+            return;
+        }
+    }
     
     toggleHora(fecha, hora);
   };
@@ -1152,6 +1168,26 @@ export default function AgendaPage() {
 
   const calcularDeudaTotalCaja = () => deudasPaciente.reduce((acc, curr) => acc + curr.deuda, 0);
 
+  // Helper para identificar citas de sobrecupo de forma dinámica
+  const checkIsSobrecupo = (c: any) => {
+    return citasFiltradas.some(otra => {
+        if (otra.id === c.id || otra.profesional_id !== c.profesional_id || otra.estado === 'cancelada') return false;
+        const cIni = new Date(c.inicio.replace(' ', 'T')).getTime();
+        const cFin = new Date(c.fin.replace(' ', 'T')).getTime();
+        const oIni = new Date(otra.inicio.replace(' ', 'T')).getTime();
+        const oFin = new Date(otra.fin.replace(' ', 'T')).getTime();
+        
+        if (!(oIni < cFin && oFin > cIni)) return false; // Si no hay choque de horario no es sobrecupo
+        
+        // El desempate es ver cual se creó después (Si fue después, es el sobrecupo)
+        const timeC = c.created_at ? new Date(c.created_at).getTime() : 0;
+        const timeO = otra.created_at ? new Date(otra.created_at).getTime() : 0;
+        
+        if (timeC !== timeO && timeC > 0 && timeO > 0) return timeO < timeC;
+        return String(otra.id) < String(c.id);
+    });
+  }
+
   // --- Renderización Principal ---
   const GOLD = '#C9A24B'
   const NAVY = '#0E1B2E'
@@ -1312,6 +1348,7 @@ export default function AgendaPage() {
                 const doctor = profesionales.find(p => p.user_id === c.profesional_id);
                 const theme = getAvatarColorClass(pNombre + pApellido);
                 const estadoConfig = ESTADOS_CITA[c.estado] || ESTADOS_CITA.programada;
+                const isSobrecupo = checkIsSobrecupo(c);
 
                 return (
                     <motion.div 
@@ -1332,11 +1369,11 @@ export default function AgendaPage() {
                         initial={{ scale: 0 }} 
                         animate={{ scale: 1 }} 
                         transition={{ delay: index * 0.05 + 0.2, type: "spring" }}
-                        className="hidden md:block absolute -left-[45px] top-5 w-3 h-3 rounded-full bg-white border-[3px] border-[#C9A24B] shadow-[0_0_0_6px_#FBF8F2] z-20 group-hover:scale-125 transition-transform" 
+                        className={`hidden md:block absolute -left-[45px] top-5 w-3 h-3 rounded-full bg-white border-[3px] shadow-[0_0_0_6px_#FBF8F2] z-20 group-hover:scale-125 transition-transform ${isSobrecupo ? 'border-red-500' : 'border-[#C9A24B]'}`} 
                     />
 
                     {/* Tarjeta de Cita */}
-                    <div className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all border border-slate-100 border-l-4 ${theme.border} p-5 md:p-6 w-full flex flex-col gap-4 hover:-translate-y-0.5`}>
+                    <div className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all border border-l-4 ${theme.border} p-5 md:p-6 w-full flex flex-col gap-4 hover:-translate-y-0.5 ${isSobrecupo ? 'border-red-100 shadow-[0_4px_12px_rgba(239,68,68,0.08)]' : 'border-slate-100'}`}>
                         {/* Fila Superior: Info Paciente y Dropdown */}
                         <div className="flex flex-col sm:flex-row sm:justify-between items-start gap-4 sm:gap-0">
                         <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -1345,82 +1382,87 @@ export default function AgendaPage() {
                             </div>
                             
                            <div className="relative flex-1">
-<div className="flex items-center gap-2">
-    <h3 className="text-base font-black text-[#0A111F] uppercase tracking-wide leading-tight">{pNombre} {pApellido}</h3>
-    <button
-    onClick={(e) => { e.stopPropagation(); setMotivoVisibleId(motivoVisibleId === c.id ? null : c.id); }}
-    className={`p-1.5 md:p-1.5 rounded-full transition-all shrink-0 ${
-        motivoVisibleId === c.id 
-            ? 'text-[#C9A24B] bg-[#C9A24B]/10' 
-            : 'text-slate-400 hover:text-[#C9A24B] hover:bg-slate-50'
-    }`}
-    title="Ver motivo de la cita"
->
-    <MessageSquareText className="md:w-[15px] md:h-[15px]" size={18} />
-</button>
-</div>
-<div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs font-semibold text-slate-400 uppercase">
-    <span>RUT: {c.pacientes?.rut || 'S/N'}</span>
-    <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
-    <span className="flex items-center gap-1"><User className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> Dr. {doctor?.apellido || 'S/A'}</span>
-</div>
+                                {isSobrecupo && (
+                                    <div className="bg-red-500 text-white text-[10px] md:text-[9px] font-black px-2 py-0.5 rounded uppercase tracking-widest flex items-center gap-1 w-max mb-1.5 animate-pulse shadow-sm">
+                                        <AlertTriangle size={12} /> Cita de Sobrecupo
+                                    </div>
+                                )}
+                                <div className="flex items-center gap-2">
+                                    <h3 className="text-base font-black text-[#0A111F] uppercase tracking-wide leading-tight">{pNombre} {pApellido}</h3>
+                                    <button
+                                    onClick={(e) => { e.stopPropagation(); setMotivoVisibleId(motivoVisibleId === c.id ? null : c.id); }}
+                                    className={`p-1.5 md:p-1.5 rounded-full transition-all shrink-0 ${
+                                        motivoVisibleId === c.id 
+                                            ? 'text-[#C9A24B] bg-[#C9A24B]/10' 
+                                            : 'text-slate-400 hover:text-[#C9A24B] hover:bg-slate-50'
+                                    }`}
+                                    title="Ver motivo de la cita"
+                                >
+                                    <MessageSquareText className="md:w-[15px] md:h-[15px]" size={18} />
+                                </button>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs font-semibold text-slate-400 uppercase">
+                                    <span>RUT: {c.pacientes?.rut || 'S/N'}</span>
+                                    <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
+                                    <span className="flex items-center gap-1"><User className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> Dr. {doctor?.apellido || 'S/A'}</span>
+                                </div>
 
-<AnimatePresence>
-{motivoVisibleId === c.id && (
-    <>
-        {/* Overlay invisible para cerrar al hacer click afuera */}
-        <div 
-            className="fixed inset-0 z-20" 
-            onClick={() => setMotivoVisibleId(null)}
-        />
-        <motion.div
-            initial={{ opacity: 0, y: -8, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.96 }}
-            transition={{ duration: 0.15, ease: "easeOut" }}
-            className="absolute left-0 top-full mt-3 z-30 w-72 max-w-[85vw]"
-        >
-            {/* Flechita apuntando hacia el ícono */}
-            <div className="absolute -top-1.5 left-4 w-3 h-3 rotate-45 bg-[#0E1B2E] border-t border-l border-[#C9A24B]/30" />
+                                <AnimatePresence>
+                                {motivoVisibleId === c.id && (
+                                    <>
+                                        {/* Overlay invisible para cerrar al hacer click afuera */}
+                                        <div 
+                                            className="fixed inset-0 z-20" 
+                                            onClick={() => setMotivoVisibleId(null)}
+                                        />
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                                            exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                                            transition={{ duration: 0.15, ease: "easeOut" }}
+                                            className="absolute left-0 top-full mt-3 z-30 w-72 max-w-[85vw]"
+                                        >
+                                            {/* Flechita apuntando hacia el ícono */}
+                                            <div className="absolute -top-1.5 left-4 w-3 h-3 rotate-45 bg-[#0E1B2E] border-t border-l border-[#C9A24B]/30" />
 
-            <div className="relative bg-[#0E1B2E] border border-[#C9A24B]/30 rounded-2xl shadow-2xl overflow-hidden">
-                <div className="flex items-center gap-2 px-4 pt-3.5 pb-2 border-b border-white/10">
-                    <div className="w-6 h-6 rounded-full bg-[#C9A24B]/15 flex items-center justify-center shrink-0">
-                        <MessageSquareText size={12} style={{ color: '#E8CD8A' }} />
-                    </div>
-                    <p className="text-[10px] md:text-[9px] font-black uppercase tracking-widest" style={{ color: '#E8CD8A' }}>
-                        Motivo de la cita
-                    </p>
-                </div>
-                <p className="px-4 py-3.5 text-sm md:text-xs font-semibold text-white/90 leading-relaxed">
-                    {c.motivo || 'Consulta general'}
-                </p>
-            </div>
-        </motion.div>
-    </>
-)}
-</AnimatePresence>
-</div>
+                                            <div className="relative bg-[#0E1B2E] border border-[#C9A24B]/30 rounded-2xl shadow-2xl overflow-hidden">
+                                                <div className="flex items-center gap-2 px-4 pt-3.5 pb-2 border-b border-white/10">
+                                                    <div className="w-6 h-6 rounded-full bg-[#C9A24B]/15 flex items-center justify-center shrink-0">
+                                                        <MessageSquareText size={12} style={{ color: '#E8CD8A' }} />
+                                                    </div>
+                                                    <p className="text-[10px] md:text-[9px] font-black uppercase tracking-widest" style={{ color: '#E8CD8A' }}>
+                                                        Motivo de la cita
+                                                    </p>
+                                                </div>
+                                                <p className="px-4 py-3.5 text-sm md:text-xs font-semibold text-white/90 leading-relaxed">
+                                                    {c.motivo || 'Consulta general'}
+                                                </p>
+                                            </div>
+                                        </motion.div>
+                                    </>
+                                )}
+                                </AnimatePresence>
+                            </div>
                         </div>
 
                         <div className={`relative ${estadoConfig.bg} border border-transparent px-3 py-2 md:px-3 md:py-1.5 rounded-full flex items-center gap-2 text-xs md:text-[10px] font-black uppercase ${estadoConfig.text} transition-colors shrink-0 sm:ml-2 mt-2 sm:mt-0 self-start w-auto`}>
-    <div className={`w-2 h-2 rounded-full ${estadoConfig.dot}`}></div>
-    <select value={c.estado || 'programada'} onChange={(e) => actualizarEstadoCita(c.id, e.target.value)} className={`appearance-none bg-transparent outline-none cursor-pointer pr-5 font-black ${estadoConfig.text} text-base md:text-[10px]`}>
-    {Object.entries(ESTADOS_CITA).map(([key, val]) => {
+                            <div className={`w-2 h-2 rounded-full ${estadoConfig.dot}`}></div>
+                            <select value={c.estado || 'programada'} onChange={(e) => actualizarEstadoCita(c.id, e.target.value)} className={`appearance-none bg-transparent outline-none cursor-pointer pr-5 font-black ${estadoConfig.text} text-base md:text-[10px]`}>
+                            {Object.entries(ESTADOS_CITA).map(([key, val]) => {
         let labelText = val.label.toUpperCase();
-        if (key === 'en_espera' && c.hora_llegada) {
-            const timeLlegada = new Date(c.hora_llegada).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
-            labelText = `EN ESPERA DESDE LAS ${timeLlegada}`;
-        }
-        return (
-            <option key={key} value={key} className="text-slate-800 bg-white">
-                {labelText}
-            </option>
-        );
-    })}
-    </select>
-    <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${estadoConfig.text} opacity-60 md:w-[12px] md:h-[12px]`} size={14} />
-</div>
+        if (key === 'en_espera' && c.hora_llegada && c.estado === 'en_espera') {
+                                    const timeLlegada = new Date(c.hora_llegada).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+                                    labelText = `ESPERA DESDE LAS ${timeLlegada}`;
+                                }
+                                return (
+                                    <option key={key} value={key} className="text-slate-800 bg-white">
+                                        {labelText}
+                                    </option>
+                                );
+                            })}
+                            </select>
+                            <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none ${estadoConfig.text} opacity-60 md:w-[12px] md:h-[12px]`} size={14} />
+                        </div>
                         </div>
 
                         {/* Fila Inferior: Badges y Botones */}
@@ -1499,6 +1541,7 @@ export default function AgendaPage() {
                                   const pNombre = c.pacientes?.nombre || 'S/N';
                                   const pApellido = c.pacientes?.apellido || '';
                                   const theme = getAvatarColorClass(pNombre + pApellido);
+                                  const isSobrecupo = checkIsSobrecupo(c);
                                   
                                   return (
                                       <motion.div 
@@ -1506,9 +1549,14 @@ export default function AgendaPage() {
                                           animate={{ opacity: 1, scale: 1 }}
                                           transition={{ delay: (diaIndex * 0.05) + (cIndex * 0.05) }}
                                           key={c.id} 
-                                          className={`bg-white p-3.5 md:p-3 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border-l-4 ${theme.border}`}
+                                          className={`bg-white p-3.5 md:p-3 rounded-xl border shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group border-l-4 ${theme.border} ${isSobrecupo ? 'border-t-red-100 border-r-red-100 border-b-red-100 bg-red-50/30' : 'border-slate-200'}`}
                                       >
                                           <div className="pl-1">
+                                              {isSobrecupo && (
+                                                  <span className="text-[8px] font-black bg-red-500 text-white px-1.5 py-0.5 rounded uppercase tracking-widest mb-1.5 inline-block animate-pulse">
+                                                      Sobrecupo
+                                                  </span>
+                                              )}
                                               <p className="text-sm md:text-xs font-black text-slate-900 leading-tight mb-1 truncate">{pNombre} {pApellido}</p>
                                               
                                               <div className="flex flex-col items-start gap-1.5 mt-2">
@@ -1916,13 +1964,24 @@ export default function AgendaPage() {
                                                         {dia.status === 'sin_horario' && <span className="text-[10px] md:text-[9px] font-bold text-slate-300 text-center py-4 italic">Sin Horario</span>}
                                                         {dia.status === 'lleno' && <span className="text-[10px] md:text-[9px] font-bold text-amber-400 text-center py-4 italic">Agenda Llena</span>}
                                                         
-                                                        {dia.status === 'limpio' && dia.slots.map((slot: string, sIdx: number) => {
+                                                        {dia.status === 'limpio' && dia.slots.map((slotObj: any, sIdx: number) => {
+                                                        const slot = slotObj.time;
+                                                        const ocupado = slotObj.ocupado;
                                                         const isSelected = nuevaFecha === dia.date && nuevaHora === slot;
+                                                        
+                                                        let btnClass = `w-full py-3 md:py-2 rounded-lg text-xs md:text-[10px] font-black transition-all border `;
+                                                        if (isSelected) btnClass += 'bg-emerald-500 text-white border-emerald-600 shadow-md';
+                                                        else if (ocupado) btnClass += 'bg-red-50 text-red-500 border-red-200 hover:bg-red-100';
+                                                        else btnClass += 'bg-slate-50 text-emerald-600 border-emerald-100 hover:bg-emerald-50';
+
                                                         return (
                                                             <button
                                                             key={sIdx}
-                                                            onClick={() => { setNuevaFecha(dia.date); setNuevaHora(slot); }}
-                                                            className={`w-full py-3 md:py-2 rounded-lg text-xs md:text-[10px] font-black transition-all border ${isSelected ? 'bg-emerald-500 text-white border-emerald-600 shadow-md' : 'bg-slate-50 text-emerald-600 border-emerald-100 hover:bg-emerald-50'}`}
+                                                            onClick={() => { 
+                                                                if (ocupado && !window.confirm(`⚠️ El horario de las ${slot} ya está ocupado. ¿Deseas agendar un SOBRECUPO?`)) return;
+                                                                setNuevaFecha(dia.date); setNuevaHora(slot); 
+                                                            }}
+                                                            className={btnClass}
                                                             >
                                                             {slot}
                                                             </button>
@@ -2094,16 +2153,25 @@ export default function AgendaPage() {
                                       });
 
                                       let btnClass = "w-full py-3 md:py-2.5 text-[11px] md:text-[10px] font-black rounded-xl border transition-all ";
-                                      if (sel) btnClass += "text-white border-[#0E1B2E] shadow-md bg-[#0E1B2E]";
-                                      else if (ocupado || diaCompletamenteBloqueado || chocaConSeleccion) btnClass += "bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed opacity-50 line-through decoration-slate-300";
-                                      else if (laboral) btnClass += "bg-white border-slate-200 text-slate-600 hover:border-[#C9A24B] hover:text-[#8A6D2F] hover:bg-[#C9A24B]/5 shadow-sm";
-                                      else return <div key={fStr}></div>;
+                                      if (sel) {
+                                          btnClass += "text-white border-[#0E1B2E] shadow-md bg-[#0E1B2E]";
+                                      } else if (diaCompletamenteBloqueado || chocaConSeleccion) {
+                                          btnClass += "bg-slate-100 text-slate-300 border-slate-100 cursor-not-allowed opacity-50 line-through decoration-slate-300";
+                                      } else if (ocupado) {
+                                          // Cambiado para que se note y permita sobrecupo
+                                          btnClass += "bg-red-50 text-red-500 border-red-200 hover:bg-red-100 hover:border-red-300 shadow-sm";
+                                      } else if (laboral) {
+                                          btnClass += "bg-white border-slate-200 text-slate-600 hover:border-[#C9A24B] hover:text-[#8A6D2F] hover:bg-[#C9A24B]/5 shadow-sm";
+                                      } else {
+                                          return <div key={fStr}></div>;
+                                      }
 
                                       return (
                                         <div key={fStr}>
                                           <button
                                             onClick={() => handleSlotClick(fStr, hora)}
                                             className={btnClass}
+                                            title={ocupado ? "Horario ocupado (Click para agendar Sobrecupo)" : ""}
                                           >
                                             {hora}
                                           </button>
@@ -2143,9 +2211,14 @@ export default function AgendaPage() {
                                         const miEnd = miStart + newDur * 60000;
                                         return miStart < otraEnd && miEnd > otraStart;
                                       });
-                                      if (!laboral || ocupado || chocaConOtraSeleccion) {
-                                        toast.error("La nueva duración excede el turno o choca con otra cita.");
+                                      if (!laboral || chocaConOtraSeleccion) {
+                                        toast.error("La nueva duración excede el turno laboral o choca con otra selección.");
                                         return;
+                                      }
+                                      if (ocupado) {
+                                          if (!window.confirm("Ajustar esta duración causará choque con otra cita existente. ¿Deseas mantenerlo como SOBRECUPO?")) {
+                                              return;
+                                          }
                                       }
                                       const c = [...horasSeleccionadas]; c[idx].duracion = newDur; setHorasSeleccionadas(c);
                                     }}
