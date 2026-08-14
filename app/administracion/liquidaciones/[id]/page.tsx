@@ -1,8 +1,7 @@
-'use client'
 import { useParams, useSearchParams } from 'next/navigation'
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, Calculator, ArrowUpRight, History, AlertCircle, FileText } from 'lucide-react'
+import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, Calculator, ArrowUpRight, History, AlertCircle, FileText, Download } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 
@@ -216,7 +215,56 @@ export default function DetalleLiquidacionPage() {
       window.print();
     }, 100);
   }
+  const descargarExcel = () => {
+    if (itemsPendientes.length === 0) {
+      toast.error("No hay producción pendiente para descargar");
+      return;
+    }
 
+    // 1. Cabeceras de Excel
+    const encabezados = [
+      'Fecha',
+      'Paciente',
+      'Prestacion',
+      'Ingreso Bruto',
+      'Costo Lab',
+      'Base Imponible',
+      'A Pagar al Dr'
+    ];
+
+    // 2. Formatear filas (solo items pendientes a pagar)
+    const filas = itemsPendientes.map(item => {
+      const fecha = item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F';
+      return [
+        fecha,
+        `"${item.paciente}"`, // Comillas para evitar problemas si el nombre tiene puntos o comas
+        `"${item.prestacion}"`,
+        Math.round(item.montoPago || 0),
+        Math.round(item.descuentoLab || 0),
+        Math.round(item.imponible || 0),
+        Math.round(item.honorario || 0)
+      ].join(';'); // Separador punto y coma para Excel en español
+    });
+
+    // 3. Fila de Total
+    filas.push(['', '', 'TOTAL PENDIENTE A PAGAR', '', '', '', Math.round(resumenMes.saldoPendiente)].join(';'));
+
+    // 4. Crear archivo y forzar descarga (BOM \uFEFF para que Excel lea los acentos)
+    const csvContent = "\uFEFF" + encabezados.join(';') + "\n" + filas.join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = url;
+    const nombreSaneado = `${profesional?.nombre}_${profesional?.apellido}`.replace(/\s+/g, '_');
+    link.setAttribute('download', `Liquidacion_Pendiente_${nombreSaneado}_${mesSeleccionado}.csv`);
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    toast.success("Excel descargado correctamente");
+  }
   const obtenerFechaFinalizacion = () => {
     const [year, month] = mesSeleccionado.split('-');
     const ultimoDiaNum = new Date(Number(year), Number(month), 0).getDate();
@@ -290,9 +338,22 @@ export default function DetalleLiquidacionPage() {
                 </div>
               </div>
             </div>
-            <button onClick={handlePrint} className="bg-[#0A111F] text-white px-6 py-4 rounded-2xl hover:bg-[#1a2538] transition-all shadow-md font-black text-xs uppercase tracking-widest flex items-center gap-2 shrink-0">
-              <Printer size={18}/> Imprimir Reporte
-            </button>
+            
+            {/* NUEVA BOTONERA AQUI */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto mt-4 md:mt-0">
+              <button 
+                onClick={descargarExcel} 
+                className="bg-emerald-600 text-white px-6 py-4 rounded-2xl hover:bg-emerald-700 transition-all shadow-md font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 w-full sm:w-auto"
+              >
+                <Download size={18}/> Descargar Excel
+              </button>
+              <button 
+                onClick={handlePrint} 
+                className="bg-[#0A111F] text-white px-6 py-4 rounded-2xl hover:bg-[#1a2538] transition-all shadow-md font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 w-full sm:w-auto"
+              >
+                <Printer size={18}/> Imprimir Reporte
+              </button>
+            </div>
           </div>
 
           <div className="space-y-12">
