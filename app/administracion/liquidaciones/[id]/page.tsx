@@ -1,3 +1,5 @@
+'use client'
+
 import { useParams, useSearchParams } from 'next/navigation'
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
