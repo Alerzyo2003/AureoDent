@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import { createPortal } from 'react-dom'
 import {
   Plus, Loader2, Wallet, Stethoscope, ChevronRight,
-  FileText, Trash2, CheckCircle2, X, Calendar, Activity, AlertCircle, Tag, StethoscopeIcon
+  FileText, Trash2, CheckCircle2, X, Calendar, Activity, AlertCircle, Tag, StethoscopeIcon, RefreshCcw, Settings
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Link from 'next/link'
@@ -24,7 +24,7 @@ export default function ListaTratamientosPage() {
   const params = useParams()
   const paciente_id = params.id as string
   const router = useRouter()
- 
+  
   // ESTADO PARA EL PORTAL
   const [portalNode, setPortalNode] = useState<HTMLElement | null>(null);
 
@@ -34,13 +34,19 @@ export default function ListaTratamientosPage() {
   const [filtroActivo, setFiltroActivo] = useState<string>('TODOS')
 
   const [perfil, setPerfil] = useState<any>(null)
- 
+  const [usuarioId, setUsuarioId] = useState<string>('')
+  
   const [modalNuevoPlan, setModalNuevoPlan] = useState(false)
   const [creandoPlan, setCreandoPlan] = useState(false)
   const [nuevoPlan, setNuevoPlan] = useState({
     nombre: '',
     especialista_id: ''
   })
+
+  // ESTADOS PARA EDICIÓN
+  const [modalEditarPlan, setModalEditarPlan] = useState(false)
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  const [planEnEdicion, setPlanEnEdicion] = useState({ id: '', nombre: '', especialista_id: '' })
 
   // EFECTO PARA CREAR EL NODO DEL PORTAL SEGURO EN NEXT.JS
   useEffect(() => {
@@ -71,6 +77,7 @@ export default function ListaTratamientosPage() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (session) {
+        setUsuarioId(session.user.id);
         const { data: pData } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single()
         setPerfil(pData)
         
@@ -119,7 +126,7 @@ export default function ListaTratamientosPage() {
       .from('temp_presupuestos')
       .select('*')
       .or(`rut.eq.${rutLimpio},rut.ilike.${rutFuzzy}`);
-   
+    
     const idsDentalinkOficiales = oficiales?.map(p => String(p.id_dentalink)).filter(id => id !== "null") || [];
     const idsSoloTemporales = (temporales || []).map(p => String(p.id_dentalink));
     const todosIdsDentalink = [...new Set([...idsDentalinkOficiales, ...idsSoloTemporales])];
@@ -141,7 +148,7 @@ export default function ListaTratamientosPage() {
 
     const idsOficialesYaMigrados = oficiales?.map(o => String(o.id_dentalink)) || [];
     const temporalesNoMigrados = (temporales || []).filter(t => !idsOficialesYaMigrados.includes(String(t.id_dentalink)));
-   
+    
     const temporalesProcesados = temporalesNoMigrados.map(plan => {
         const items = itemsTempGlobal.filter(i => String(i.id_dentalink) === String(plan.id_dentalink));
         return procesarPlan({ ...plan, id: `temp-${plan.id_dentalink}`, estado: 'pendiente' }, items);
@@ -183,20 +190,23 @@ export default function ListaTratamientosPage() {
     const estadoFinanciero = deudaExigible > 0 ? 'CON DEUDA' : (deudaTotalDelPlan <= 0 && totalPlan > 0 ? 'SALDADO' : 'AL DIA');
 
     let estadoGeneral = 'BORRADOR';
+    const isManualFinalizado = plan.estado === 'FINALIZADO';
+    const isManualEnCurso = plan.estado === 'EN_CURSO';
+
     if (String(plan.id).startsWith('temp-')) {
         estadoGeneral = 'IMPORTADO';
-    } else if (progreso === 100) {
-        if (deudaTotalDelPlan <= 0) {
-            estadoGeneral = 'FINALIZADO';
-        } else {
-            estadoGeneral = 'FINALIZADO_CON_DEUDA';
-        }
-    } else if (progreso > 0) {
+    } else if (isManualFinalizado) {
+        // Fuerza el estado finalizado si así lo mandó el usuario en la BD
+        estadoGeneral = deudaTotalDelPlan <= 0 ? 'FINALIZADO' : 'FINALIZADO_CON_DEUDA';
+    } else if (progreso === 100 && !isManualEnCurso) {
+        // Cálculo automático
+        estadoGeneral = deudaTotalDelPlan <= 0 ? 'FINALIZADO' : 'FINALIZADO_CON_DEUDA';
+    } else if (progreso > 0 || isManualEnCurso) {
         estadoGeneral = 'EN_CURSO';
     } else if (plan.aprobado || totalAbonado > 0) {
         estadoGeneral = 'POR_INICIAR';
     }
-   
+    
     return {
       ...plan,
       progresoClinico: progreso,
@@ -232,6 +242,13 @@ export default function ListaTratamientosPage() {
 
       if (error) throw error;
 
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: usuarioId,
+        accion: 'INSERT / PLAN',
+        tabla: 'presupuestos',
+        detalles: `Creó el plan "${nuevoPlan.nombre.toUpperCase()}".`
+      }]);
+
       toast.success("Plan creado exitosamente");
       setModalNuevoPlan(false);
       setNuevoPlan({ nombre: '', especialista_id: '' });
@@ -244,10 +261,153 @@ export default function ListaTratamientosPage() {
     }
   }
 
+  // =========== NUEVAS FUNCIONES: ELIMINAR, FINALIZAR, REANUDAR Y EDITAR ===========
+  const handleEliminarPlan = async (e: React.MouseEvent, plan: any) => {
+    e.stopPropagation();
+    
+    if (plan.abonadoCalculado > 0) {
+      return toast.error("Este plan tiene abonos o pagos registrados. No puedes eliminarlo hasta anular esos pagos primero.");
+    }
+
+    if (!window.confirm(`⚠️ ¿Estás seguro de ELIMINAR permanentemente el plan "${plan.nombre_tratamiento || plan.nombre}"?\nEsta acción eliminará todos los tratamientos asociados a este folio y no se puede deshacer.`)) {
+      return;
+    }
+
+    const toastId = toast.loading("Eliminando plan...");
+    try {
+      if (String(plan.id).startsWith('temp-')) {
+        const { error } = await supabase.from('temp_presupuestos').delete().eq('id_dentalink', plan.id_dentalink);
+        if (error) throw error;
+      } else {
+        await supabase.from('presupuesto_items').delete().eq('presupuesto_id', plan.id);
+        const { error } = await supabase.from('presupuestos').delete().eq('id', plan.id);
+        if (error) throw error;
+      }
+
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: usuarioId,
+        accion: 'DELETE / PLAN',
+        tabla: 'presupuestos',
+        detalles: `Eliminó el plan "${plan.nombre_tratamiento || plan.nombre}" y todas sus prestaciones asociadas.`
+      }]);
+
+      toast.success("Tratamiento eliminado correctamente", { id: toastId });
+      fetchPlanes();
+    } catch (error: any) {
+      console.error(error);
+      toast.error("Error al eliminar el tratamiento.", { id: toastId });
+    }
+  };
+
+  const handleFinalizarPlan = async (e: React.MouseEvent, plan: any) => {
+    e.stopPropagation();
+    if (String(plan.id).startsWith('temp-')) {
+      return toast.error("No se puede forzar el cierre de un plan importado. Se calcula automáticamente.");
+    }
+
+    if (!window.confirm(`🔒 ¿Estás seguro de MARCAR COMO FINALIZADO el plan "${plan.nombre_tratamiento || plan.nombre}"?\nQuedará archivado como cerrado y no se registrará más progreso clínico en él.`)) {
+      return;
+    }
+
+    const toastId = toast.loading("Finalizando...");
+    try {
+      const { error } = await supabase.from('presupuestos').update({ estado: 'FINALIZADO' }).eq('id', plan.id);
+      if (error) throw error;
+
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: usuarioId,
+        accion: 'UPDATE / FINALIZAR PLAN',
+        tabla: 'presupuestos',
+        detalles: `Marcó manualmente como finalizado el plan "${plan.nombre_tratamiento || plan.nombre}".`
+      }]);
+
+      toast.success("Tratamiento archivado y finalizado", { id: toastId });
+      fetchPlanes();
+    } catch (error: any) {
+      console.error(error);
+      toast.error("Error al finalizar el tratamiento.", { id: toastId });
+    }
+  };
+
+  const handleReanudarPlan = async (e: React.MouseEvent, plan: any) => {
+    e.stopPropagation();
+    if (String(plan.id).startsWith('temp-')) {
+      return toast.error("No se puede reanudar un plan importado.");
+    }
+
+    if (!window.confirm(`🔄 ¿Estás seguro de REANUDAR el plan "${plan.nombre_tratamiento || plan.nombre}"?`)) {
+      return;
+    }
+
+    const toastId = toast.loading("Reanudando...");
+    try {
+      const { error } = await supabase.from('presupuestos').update({ estado: 'EN_CURSO' }).eq('id', plan.id);
+      if (error) throw error;
+
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: usuarioId,
+        accion: 'UPDATE / REANUDAR PLAN',
+        tabla: 'presupuestos',
+        detalles: `Reanudó el plan "${plan.nombre_tratamiento || plan.nombre}".`
+      }]);
+
+      toast.success("Tratamiento reanudado", { id: toastId });
+      fetchPlanes();
+    } catch (error: any) {
+      toast.error("Error al reanudar el tratamiento.", { id: toastId });
+    }
+  };
+
+  const abrirModalEditarPlan = (e: React.MouseEvent, plan: any) => {
+    e.stopPropagation();
+    if (String(plan.id).startsWith('temp-')) {
+      return toast.error("No se puede editar la estructura de un plan importado.");
+    }
+    setPlanEnEdicion({
+      id: plan.id,
+      nombre: plan.nombre_tratamiento || plan.nombre || '',
+      especialista_id: plan.especialista_id || ''
+    });
+    setModalEditarPlan(true);
+  };
+
+  const handleGuardarEdicionPlan = async () => {
+    if (!planEnEdicion.nombre || !planEnEdicion.especialista_id) {
+      return toast.error("Completa los datos para actualizar");
+    }
+    setGuardandoEdicion(true);
+    try {
+      const { error } = await supabase
+        .from('presupuestos')
+        .update({
+          nombre_tratamiento: planEnEdicion.nombre.toUpperCase(),
+          especialista_id: planEnEdicion.especialista_id
+        })
+        .eq('id', planEnEdicion.id);
+
+      if (error) throw error;
+
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: usuarioId,
+        accion: 'UPDATE / EDITAR PLAN',
+        tabla: 'presupuestos',
+        detalles: `Editó el plan #${String(planEnEdicion.id).substring(0,8)}. Nuevo nombre: ${planEnEdicion.nombre.toUpperCase()}.`
+      }]);
+
+      toast.success("Plan actualizado correctamente");
+      setModalEditarPlan(false);
+      fetchPlanes();
+    } catch (e: any) {
+      toast.error("Error al actualizar el plan");
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  };
+
   const planesFiltrados = planes.filter(plan => {
     if (filtroActivo === 'TODOS') return true;
-    if (filtroActivo === 'EN CURSO') return plan.progresoClinico < 100;
-    if (filtroActivo === 'FINALIZADOS') return plan.progresoClinico === 100;
+    if (filtroActivo === 'EN CURSO') return plan.estadoGeneral === 'EN_CURSO' || plan.estadoGeneral === 'POR_INICIAR' || plan.estadoGeneral === 'BORRADOR';
+    if (filtroActivo === 'FINALIZADOS') return plan.estadoGeneral === 'FINALIZADO' || plan.estadoGeneral === 'FINALIZADO_CON_DEUDA';
     if (puedeVerFinanzas && filtroActivo === 'DEUDA') return plan.estadoFinanciero === 'CON DEUDA';
     return true;
   });
@@ -330,7 +490,7 @@ export default function ListaTratamientosPage() {
                   </div>
                 </div>
 
-                <div className="mb-8">
+                <div className="mb-4 flex-1">
                     <div className="flex justify-between items-end mb-2">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Activity size={12}/> Progreso Clínico</p>
                       <p className="text-xs font-black text-slate-800">{plan.progresoClinico}%</p>
@@ -341,7 +501,7 @@ export default function ListaTratamientosPage() {
                 </div>
 
                 {puedeVerFinanzas && (
-                  <div className="flex justify-between items-end border-t border-slate-100 pt-6">
+                  <div className="flex justify-between items-end border-t border-slate-100/50 pt-6">
                     <div className="space-y-1">
                       <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Finanzas</p>
                       <p className="text-[10px] font-bold text-slate-500">
@@ -356,6 +516,49 @@ export default function ListaTratamientosPage() {
                   </div>
                 )}
 
+                {/* BOTONERA DE ACCIONES RÁPIDAS */}
+                <div className="border-t border-slate-100/50 pt-4 mt-4 flex justify-end gap-2 items-center">
+                  {plan.estadoGeneral !== 'FINALIZADO' && plan.estadoGeneral !== 'FINALIZADO_CON_DEUDA' && plan.estadoGeneral !== 'IMPORTADO' && puedeVerFinanzas && (
+                    <button
+                      onClick={(e) => handleFinalizarPlan(e, plan)}
+                      className="px-3 py-1.5 bg-slate-50 hover:bg-emerald-50 text-slate-500 hover:text-emerald-600 rounded-lg border border-slate-200 transition-colors text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm"
+                      title="Marcar como Finalizado (Bloquear para edición)"
+                    >
+                      <CheckCircle2 size={12} /> Finalizar
+                    </button>
+                  )}
+
+                  {(plan.estadoGeneral === 'FINALIZADO' || plan.estadoGeneral === 'FINALIZADO_CON_DEUDA') && plan.estadoGeneral !== 'IMPORTADO' && puedeVerFinanzas && (
+                    <button
+                      onClick={(e) => handleReanudarPlan(e, plan)}
+                      className="px-3 py-1.5 bg-slate-50 hover:bg-blue-50 text-slate-500 hover:text-blue-600 rounded-lg border border-slate-200 transition-colors text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm"
+                      title="Reanudar Tratamiento"
+                    >
+                      <RefreshCcw size={12} /> Reanudar
+                    </button>
+                  )}
+
+                  {plan.estadoGeneral !== 'IMPORTADO' && puedeVerFinanzas && (
+                    <button
+                      onClick={(e) => abrirModalEditarPlan(e, plan)}
+                      className="px-3 py-1.5 bg-slate-50 hover:bg-amber-50 text-slate-500 hover:text-amber-600 rounded-lg border border-slate-200 transition-colors text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm"
+                      title="Editar Nombre y Doctor"
+                    >
+                      <Settings size={12} /> Editar
+                    </button>
+                  )}
+                  
+                  {puedeVerFinanzas && (
+                    <button
+                      onClick={(e) => handleEliminarPlan(e, plan)}
+                      className="px-3 py-1.5 bg-slate-50 hover:bg-red-50 text-slate-500 hover:text-red-600 rounded-lg border border-slate-200 transition-colors text-[10px] font-black uppercase flex items-center gap-1.5 shadow-sm"
+                      title="Eliminar Plan Completamente"
+                    >
+                      <Trash2 size={12} /> Eliminar
+                    </button>
+                  )}
+                </div>
+
               </motion.div>
             )})
           )}
@@ -365,7 +568,7 @@ export default function ListaTratamientosPage() {
         {portalNode ? createPortal(
           <AnimatePresence>
             {modalNuevoPlan && (
-              <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
                 <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white/95 backdrop-blur-2xl w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left border border-white/80">
                   <div className="bg-slate-900 p-8 text-white flex justify-between items-center">
                     <h2 className="text-xl font-black uppercase italic tracking-tighter">Nuevo Tratamiento</h2>
@@ -386,6 +589,40 @@ export default function ListaTratamientosPage() {
                     </div>
                     <button onClick={handleCrearPlan} disabled={creandoPlan} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40 transition-all flex items-center justify-center gap-2 border border-blue-500 disabled:opacity-50">
                       {creandoPlan ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />} Crear Plan
+                    </button>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>,
+          portalNode
+        ) : null}
+
+        {/* MODAL EDITAR PLAN - PORTAL */}
+        {portalNode ? createPortal(
+          <AnimatePresence>
+            {modalEditarPlan && (
+              <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white/95 backdrop-blur-2xl w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden text-left border border-white/80">
+                  <div className="bg-amber-500 p-8 text-white flex justify-between items-center">
+                    <h2 className="text-xl font-black uppercase italic tracking-tighter">Editar Tratamiento</h2>
+                    <button onClick={() => setModalEditarPlan(false)} className="p-2 text-white/60 hover:text-white transition-colors"><X size={20}/></button>
+                  </div>
+                  <div className="p-8 space-y-6">
+                    <div className="space-y-1.5"><label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Nombre del Plan</label><input autoFocus className="w-full p-4 bg-slate-50/80 hover:bg-white focus:bg-white rounded-2xl outline-none font-bold text-xs uppercase text-slate-800 border border-slate-200/60 shadow-sm" value={planEnEdicion.nombre} onChange={(e) => setPlanEnEdicion({...planEnEdicion, nombre: e.target.value})} placeholder="Ej: Rehabilitación Oral" /></div>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase text-slate-500 tracking-widest ml-1">Especialista</label>
+                      <select className="w-full p-4 bg-slate-50/80 hover:bg-white focus:bg-white rounded-2xl outline-none font-bold text-xs uppercase text-slate-800 border border-slate-200/60 shadow-sm cursor-pointer" value={planEnEdicion.especialista_id} onChange={(e) => setPlanEnEdicion({...planEnEdicion, especialista_id: e.target.value})}>
+                        <option value="">SELECCIONAR...</option>
+                        {profesionales.map(p => (
+                          <option key={p.id} value={p.id}>
+                            DR/A. {p.nombre} {p.apellido}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <button onClick={handleGuardarEdicionPlan} disabled={guardandoEdicion} className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl transition-all flex items-center justify-center gap-2 hover:bg-slate-800 disabled:opacity-50">
+                      {guardandoEdicion ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />} Guardar Cambios
                     </button>
                   </div>
                 </motion.div>
