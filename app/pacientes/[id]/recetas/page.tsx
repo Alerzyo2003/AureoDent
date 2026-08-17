@@ -3,27 +3,49 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import {
-  Pill, Plus, Trash2, Loader2, Save, ClipboardList, ArrowLeft, Printer
+  Pill, Plus, Loader2, Save, ClipboardList, ArrowLeft, Printer, Edit, Trash2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 
 export default function RecetasPage() {
   const { id: paciente_id } = useParams()
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [recetas, setRecetas] = useState<any[]>([])
   const [planes, setPlanes] = useState<any[]>([])
+  const [profesionales, setProfesionales] = useState<any[]>([])
   const [paciente, setPaciente] = useState<any>(null)
   const [cargando, setCargando] = useState(true)
-  const [creando, setCreando] = useState(false)
+  
+  const [showForm, setShowForm] = useState(false)
+  const [guardando, setGuardando] = useState(false)
   const [recetaSeleccionada, setRecetaSeleccionada] = useState<any>(null)
-  const [nuevaReceta, setNuevaReceta] = useState({ presupuesto_id: '', indicaciones: '' })
+  const [formData, setFormData] = useState({ id: '', presupuesto_id: '', indicaciones: '', profesional_id: '' })
 
   useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setSessionUserId(user.id);
+    });
+
     if (paciente_id) {
       fetchData()
       fetchPaciente()
     }
   }, [paciente_id])
+
+  const registrarAuditoria = async (accion: string, detalles: string) => {
+    if (!sessionUserId) return;
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUserId,
+        accion,
+        tabla: 'recetas',
+        detalles
+      }]);
+    } catch (e) {
+      console.error("Error al registrar auditoría", e);
+    }
+  }
 
   async function fetchPaciente() {
     const { data } = await supabase.from('pacientes').select('*').eq('id', paciente_id).maybeSingle()
@@ -51,10 +73,17 @@ export default function RecetasPage() {
 
       const { data: perfiles } = await supabase.from('perfiles').select('id, rut');
 
+      const listaProfesionales = (profs || []).map(p => ({
+        user_id: p.user_id,
+        nombre_completo: `Dr/a. ${p.nombre} ${p.apellido}`,
+        especialidad: p.especialidades?.nombre || 'Dentista'
+      }));
+      setProfesionales(listaProfesionales);
+
       const recetasCompletas = (recsRes.data || []).map((receta: any) => {
         const prof = profs?.find((p: any) => p.user_id === receta.profesional_id) as any;
         const perf = perfiles?.find((p: any) => p.id === receta.profesional_id) as any;
-       
+        
         return {
           ...receta,
           profesional_data: {
@@ -86,27 +115,88 @@ export default function RecetasPage() {
     return `${edad} años`;
   }
 
+  const iniciarCreacion = () => {
+    setFormData({ id: '', presupuesto_id: '', indicaciones: '', profesional_id: '' });
+    setRecetaSeleccionada(null);
+    setShowForm(true);
+  }
+
+  const iniciarEdicion = () => {
+    if (!recetaSeleccionada) return;
+    setFormData({ 
+      id: recetaSeleccionada.id, 
+      presupuesto_id: recetaSeleccionada.presupuesto_id || '', 
+      indicaciones: recetaSeleccionada.indicaciones || '', 
+      profesional_id: recetaSeleccionada.profesional_id || '' 
+    });
+    setShowForm(true);
+  }
+
+  const volver = () => {
+    if (showForm && recetaSeleccionada) {
+      setShowForm(false);
+    } else {
+      setShowForm(false);
+      setRecetaSeleccionada(null);
+    }
+  }
+
   const guardarReceta = async () => {
-    if (!nuevaReceta.indicaciones.trim()) return toast.error("Escriba las indicaciones");
+    if (!formData.profesional_id) return toast.error("Seleccione un especialista a cargo");
+    if (!formData.indicaciones.trim()) return toast.error("Escriba las indicaciones");
+    
+    setGuardando(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Sesión no válida");
+      if (formData.id) {
+        const { error } = await supabase.from('recetas').update({
+          presupuesto_id: formData.presupuesto_id || null,
+          indicaciones: formData.indicaciones.trim(),
+          profesional_id: formData.profesional_id
+        }).eq('id', formData.id);
 
-      const { error } = await supabase.from('recetas').insert([{
-        paciente_id: paciente_id,
-        presupuesto_id: nuevaReceta.presupuesto_id || null,
-        indicaciones: nuevaReceta.indicaciones.trim(),
-        profesional_id: user.id,
-        medicamentos: "Rp."
-      }]);
+        if (error) throw error;
+        await registrarAuditoria('EDITAR', `Editó la receta (ID: ${formData.id}) del paciente ${paciente?.nombre} ${paciente?.apellido}`);
+        toast.success("Receta actualizada");
+      } else {
+        const { data, error } = await supabase.from('recetas').insert([{
+          paciente_id: paciente_id,
+          presupuesto_id: formData.presupuesto_id || null,
+          indicaciones: formData.indicaciones.trim(),
+          profesional_id: formData.profesional_id,
+          medicamentos: "Rp."
+        }]).select('id').single();
 
-      if (error) throw error;
-      toast.success("Receta guardada");
-      setNuevaReceta({ presupuesto_id: '', indicaciones: '' });
-      setCreando(false);
+        if (error) throw error;
+        await registrarAuditoria('CREAR', `Creó una nueva receta médica (ID: ${data?.id}) para el paciente ${paciente?.nombre} ${paciente?.apellido}`);
+        toast.success("Receta creada exitosamente");
+      }
+      
+      setFormData({ id: '', presupuesto_id: '', indicaciones: '', profesional_id: '' });
+      setShowForm(false);
       fetchData();
     } catch (error: any) {
-      alert("Error: " + error.message);
+      toast.error("Error: " + error.message);
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  const eliminarReceta = async () => {
+    if (!recetaSeleccionada) return;
+    const confirmacion = window.confirm("¿Está seguro de que desea eliminar esta receta? Esta acción no se puede deshacer.");
+    if (!confirmacion) return;
+
+    try {
+      const { error } = await supabase.from('recetas').delete().eq('id', recetaSeleccionada.id);
+      if (error) throw error;
+
+      await registrarAuditoria('ELIMINAR', `Eliminó la receta médica (ID: ${recetaSeleccionada.id}) del paciente ${paciente?.nombre} ${paciente?.apellido}`);
+      toast.success("Receta eliminada correctamente");
+      setRecetaSeleccionada(null);
+      setShowForm(false);
+      fetchData();
+    } catch (e) {
+      toast.error("Ocurrió un error al intentar eliminar la receta");
     }
   }
 
@@ -173,42 +263,63 @@ export default function RecetasPage() {
   )
 
   return (
-    <div className="min-h-screen p-6 md:p-10 font-sans text-left pb-24 print:bg-white print:p-0 print:m-0 print:block" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
-     
+    <div className="min-h-screen p-4 sm:p-6 md:p-10 font-sans text-left pb-24 print:bg-white print:p-0 print:m-0 print:block" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
+      
       {/* HEADER PRINCIPAL */}
-      <header className="bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-white/60 flex justify-between items-center text-left print:hidden mb-8">
-        <div className="flex items-center gap-4 text-left">
-          <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-4 rounded-[1.5rem] text-white shadow-xl shadow-blue-600/20">
-            <Pill size={24} strokeWidth={2.5} />
+      <header className="bg-white/90 backdrop-blur-xl p-5 md:p-8 rounded-[2rem] md:rounded-[2.5rem] shadow-xl border border-white/60 flex flex-col md:flex-row justify-between items-start md:items-center text-left print:hidden mb-6 md:mb-8 gap-5 md:gap-0">
+        <div className="flex items-center gap-3 md:gap-4 text-left w-full md:w-auto">
+          <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-3 md:p-4 rounded-[1rem] md:rounded-[1.5rem] text-white shadow-xl shadow-blue-600/20">
+            <Pill size={20} className="md:w-6 md:h-6" strokeWidth={2.5} />
           </div>
-          <div className="text-left">
-            <h3 className="text-2xl font-black text-slate-800 uppercase italic tracking-tight leading-none text-left">Recetario Maestro</h3>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 text-left">
+          <div className="text-left flex-1">
+            <h3 className="text-xl md:text-2xl font-black text-slate-800 uppercase italic tracking-tight leading-none text-left">Recetario Maestro</h3>
+            <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1 text-left line-clamp-1">
               Paciente: {paciente?.nombre} {paciente?.apellido}
             </p>
           </div>
         </div>
-        <div className="flex gap-3">
-          {(creando || recetaSeleccionada) && (
-            <button onClick={() => { setCreando(false); setRecetaSeleccionada(null); }} className="bg-slate-100 text-slate-600 px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase flex items-center gap-2 hover:bg-slate-200 transition-all shadow-sm">
+        
+        <div className="flex flex-wrap gap-2 md:gap-3 w-full md:w-auto">
+          {/* Botones al ver una receta */}
+          {recetaSeleccionada && !showForm && (
+            <>
+              <button onClick={handlePrint} className="bg-white border border-slate-200 text-slate-700 px-4 py-3 md:px-5 md:py-3.5 rounded-[1rem] md:rounded-2xl font-black text-[9px] md:text-[10px] uppercase shadow-sm flex items-center gap-2 hover:bg-slate-50 transition-all flex-1 md:flex-none justify-center">
+                <Printer size={14}/> <span className="hidden sm:inline">Imprimir</span>
+              </button>
+              <button onClick={iniciarEdicion} className="bg-amber-500 text-white px-4 py-3 md:px-5 md:py-3.5 rounded-[1rem] md:rounded-2xl font-black text-[9px] md:text-[10px] uppercase shadow-md flex items-center gap-2 hover:bg-amber-600 transition-all border border-amber-600 flex-1 md:flex-none justify-center">
+                <Edit size={14}/> <span className="hidden sm:inline">Editar</span>
+              </button>
+              <button onClick={eliminarReceta} className="bg-red-50 text-red-600 px-4 py-3 md:px-5 md:py-3.5 rounded-[1rem] md:rounded-2xl font-black text-[9px] md:text-[10px] uppercase shadow-sm flex items-center gap-2 hover:bg-red-100 transition-all border border-red-200 flex-1 md:flex-none justify-center">
+                <Trash2 size={14}/> <span className="hidden sm:inline">Eliminar</span>
+              </button>
+            </>
+          )}
+
+          {/* Botón Volver */}
+          {(showForm || recetaSeleccionada) && (
+            <button onClick={volver} className="bg-slate-100 text-slate-600 px-5 py-3 md:px-6 md:py-3.5 rounded-[1rem] md:rounded-2xl font-black text-[9px] md:text-[10px] uppercase flex items-center gap-2 hover:bg-slate-200 transition-all shadow-sm border border-slate-200 w-full sm:w-auto justify-center">
               <ArrowLeft size={14}/> Volver
             </button>
           )}
-          <button onClick={() => { setCreando(true); setRecetaSeleccionada(null); }} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-7 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 active:scale-95 transition-all border border-blue-500 flex items-center gap-2">
-            <Plus size={14} strokeWidth={3}/> Nueva Receta
-          </button>
+
+          {/* Botón Nueva Receta */}
+          {!showForm && !recetaSeleccionada && (
+            <button onClick={iniciarCreacion} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-5 py-3 md:px-7 md:py-3.5 rounded-[1rem] md:rounded-2xl font-black text-[9px] md:text-[10px] uppercase shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 active:scale-95 transition-all border border-blue-500 flex items-center justify-center gap-2 w-full md:w-auto">
+              <Plus size={14} strokeWidth={3}/> Nueva Receta
+            </button>
+          )}
         </div>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start text-left print:block print:w-full print:m-0">
-       
-        {/* HISTORIAL LATERAL */}
-        <aside className="lg:col-span-1 space-y-4 text-left print:hidden">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8 items-start text-left print:block print:w-full print:m-0">
+        
+        {/* HISTORIAL LATERAL (Se oculta en móvil si hay una receta o formulario abierto) */}
+        <aside className={`lg:col-span-1 space-y-4 text-left print:hidden ${ (showForm || recetaSeleccionada) ? 'hidden lg:block' : 'block' }`}>
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 italic text-left">Historial de Recetas</h4>
-          <div className="space-y-3 max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar text-left">
+          <div className="space-y-3 max-h-[60vh] lg:max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar text-left">
             {recetas.map(r => (
-              <div key={r.id} onClick={() => { setRecetaSeleccionada(r); setCreando(false); }}
-                className={`p-5 rounded-[2rem] border cursor-pointer transition-all text-left shadow-sm ${recetaSeleccionada?.id === r.id ? 'bg-blue-600 border-blue-600 text-white shadow-xl scale-[1.02]' : 'bg-white/90 backdrop-blur-xl border-white/60 text-slate-700 hover:border-blue-200'}`}
+              <div key={r.id} onClick={() => { setRecetaSeleccionada(r); setShowForm(false); }}
+                className={`p-4 md:p-5 rounded-2xl md:rounded-[2rem] border cursor-pointer transition-all text-left shadow-sm ${recetaSeleccionada?.id === r.id ? 'bg-blue-600 border-blue-600 text-white shadow-xl lg:scale-[1.02]' : 'bg-white/90 backdrop-blur-xl border-white/60 text-slate-700 hover:border-blue-200'}`}
               >
                 <div className="flex justify-between items-center mb-1 text-left">
                     <span className="text-[9px] font-black uppercase opacity-75 text-left">
@@ -219,7 +330,7 @@ export default function RecetasPage() {
               </div>
             ))}
             {recetas.length === 0 && (
-              <div className="p-6 bg-white/50 backdrop-blur-md rounded-[1.5rem] text-center border border-white/40">
+              <div className="p-5 md:p-6 bg-white/50 backdrop-blur-md rounded-2xl md:rounded-[1.5rem] text-center border border-white/40">
                 <p className="text-[9px] font-black uppercase text-slate-400">Sin recetas previas</p>
               </div>
             )}
@@ -229,70 +340,84 @@ export default function RecetasPage() {
         {/* ÁREA PRINCIPAL / FORMULARIO / RECETA */}
         <main className="lg:col-span-3 text-left print:block print:w-full print:m-0">
           <AnimatePresence mode="wait">
-            {creando ? (
-              <motion.div key="form" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="bg-white/90 backdrop-blur-xl p-10 md:p-12 rounded-[2.5rem] shadow-xl border border-white/60 text-left print:hidden">
-                <h4 className="text-2xl font-black text-slate-800 uppercase italic mb-8 text-left">Nueva Prescripción</h4>
-                <div className="space-y-6 text-left">
+            {showForm ? (
+              <motion.div key="form" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="bg-white/90 backdrop-blur-xl p-6 md:p-12 rounded-[2rem] md:rounded-[2.5rem] shadow-xl border border-white/60 text-left print:hidden">
+                <h4 className="text-xl md:text-2xl font-black text-slate-800 uppercase italic mb-6 md:mb-8 text-left">
+                  {formData.id ? 'Editar Prescripción' : 'Nueva Prescripción'}
+                </h4>
+                <div className="space-y-5 md:space-y-6 text-left">
+                  
+                  {/* SELECTOR DE ESPECIALISTA */}
                   <div className="space-y-1.5 text-left">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block text-left">Vincular Tratamiento</label>
-                    <select className="w-full bg-slate-50/80 hover:bg-white focus:bg-white p-4 rounded-2xl text-xs font-bold border border-slate-200/60 shadow-sm text-slate-800 outline-none focus:border-blue-500 appearance-none cursor-pointer" value={nuevaReceta.presupuesto_id} onChange={(e) => setNuevaReceta({...nuevaReceta, presupuesto_id: e.target.value})}>
+                    <label className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block text-left">Especialista Responsable</label>
+                    <select className="w-full bg-slate-50/80 hover:bg-white focus:bg-white p-3.5 md:p-4 rounded-[1rem] md:rounded-2xl text-xs md:text-sm font-bold border border-slate-200/60 shadow-sm text-slate-800 outline-none focus:border-blue-500 appearance-none cursor-pointer" value={formData.profesional_id} onChange={(e) => setFormData({...formData, profesional_id: e.target.value})}>
+                      <option value="">-- Seleccione Profesional --</option>
+                      {profesionales.map(p => <option key={p.user_id} value={p.user_id}>{p.nombre_completo}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block text-left">Vincular Tratamiento (Opcional)</label>
+                    <select className="w-full bg-slate-50/80 hover:bg-white focus:bg-white p-3.5 md:p-4 rounded-[1rem] md:rounded-2xl text-xs md:text-sm font-bold border border-slate-200/60 shadow-sm text-slate-800 outline-none focus:border-blue-500 appearance-none cursor-pointer" value={formData.presupuesto_id} onChange={(e) => setFormData({...formData, presupuesto_id: e.target.value})}>
                       <option value="">Atención General</option>
                       {planes.map(p => <option key={p.id} value={p.id}>{p.nombre_tratamiento}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1.5 text-left">
-                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block italic text-left">Rp. Indicaciones</label>
-                    <textarea rows={10} className="w-full bg-slate-50/80 hover:bg-white focus:bg-white p-6 rounded-[2rem] text-sm font-medium border border-slate-200/60 shadow-inner text-slate-800 outline-none focus:ring-4 ring-blue-500/10 leading-relaxed resize-none placeholder:text-slate-300" value={nuevaReceta.indicaciones} onChange={(e) => setNuevaReceta({...nuevaReceta, indicaciones: e.target.value})} placeholder="Rp. &#10;Medicamento..."/>
+                    <label className="text-[9px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1 block italic text-left">Rp. Indicaciones</label>
+                    <textarea rows={8} className="w-full bg-slate-50/80 hover:bg-white focus:bg-white p-5 md:p-6 rounded-[1.5rem] md:rounded-[2rem] text-xs md:text-sm font-medium border border-slate-200/60 shadow-inner text-slate-800 outline-none focus:ring-4 ring-blue-500/10 leading-relaxed resize-none placeholder:text-slate-300" value={formData.indicaciones} onChange={(e) => setFormData({...formData, indicaciones: e.target.value})} placeholder="Rp. &#10;Medicamento..."/>
                   </div>
-                  <button onClick={guardarReceta} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40 hover:from-slate-900 hover:to-slate-900 transition-all border border-blue-500">Guardar Receta</button>
+                  <button onClick={guardarReceta} disabled={guardando} className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-4 md:py-5 rounded-[1rem] md:rounded-2xl font-black text-[10px] md:text-xs uppercase tracking-[0.1em] md:tracking-[0.2em] shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40 hover:from-slate-900 hover:to-slate-900 transition-all border border-blue-500 flex items-center justify-center gap-2">
+                    {guardando ? <Loader2 className="animate-spin" size={16}/> : <Save size={16}/>} 
+                    {formData.id ? 'Guardar Cambios' : 'Generar Receta'}
+                  </button>
                 </div>
               </motion.div>
             ) : recetaSeleccionada ? (
               <div className="w-full flex justify-center text-left print:block print:w-full print:m-0">
-               
+                
                 {/* CONTENEDOR MAESTRO DE LA HOJA */}
                 <div 
                   id="hoja-impresion"
-                  className="bg-white shadow-2xl relative w-full max-w-[210mm] mx-auto flex flex-col justify-between p-10 md:p-12 min-h-[280mm] rounded-[2.5rem] border border-white/80 print:rounded-none"
+                  className="bg-white shadow-xl md:shadow-2xl relative w-full max-w-[210mm] mx-auto flex flex-col justify-between p-6 sm:p-8 md:p-12 min-h-auto md:min-h-[280mm] rounded-[1.5rem] md:rounded-[2.5rem] border border-slate-100 md:border-white/80 print:rounded-none print:border-none print:p-[1.5cm]"
                 >
-                 
+                  
                   <div>
                     {/* ENCABEZADO */}
-                    <div className="text-left border-b-2 border-slate-900 pb-5 mb-6 flex items-center gap-6">
+                    <div className="text-left border-b-2 border-slate-900 pb-4 md:pb-5 mb-5 md:mb-6 flex flex-col sm:flex-row items-center sm:items-start gap-4 md:gap-6">
                       <img 
                           src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg"
-                          className="w-20 h-20 rounded-full object-cover shrink-0 mix-blend-multiply" 
-                          style={{ width: '80px', height: '80px' }}
+                          className="w-16 h-16 md:w-20 md:h-20 rounded-full object-cover shrink-0 mix-blend-multiply" 
                           alt="Logo" referrerPolicy="no-referrer" />
-                      <div className="flex-1 text-left">
-                        <h1 className="text-lg font-black text-slate-900 leading-tight text-left">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
-                        <p className="text-[13px] font-black text-slate-800 uppercase mt-1 text-left">
+                      <div className="flex-1 text-center sm:text-left">
+                        <h1 className="text-sm sm:text-base md:text-lg font-black text-slate-900 leading-tight">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
+                        <p className="text-[11px] md:text-[13px] font-black text-slate-800 uppercase mt-1">
                           Dr/a. {recetaSeleccionada.profesional_data?.nombre} {recetaSeleccionada.profesional_data?.apellido}
                         </p>
-                        <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed text-left">
+                        <p className="text-[9px] md:text-[10px] font-bold text-slate-600 uppercase tracking-widest leading-relaxed">
                           {recetaSeleccionada.profesional_data?.especialidad_nombre}
                           {recetaSeleccionada.profesional_data?.rut && ` • RUT: ${recetaSeleccionada.profesional_data.rut}`}
                         </p>
                       </div>
                     </div>
 
-                    <h2 className="text-xl font-black uppercase italic text-center border-y border-slate-100 py-2.5 mb-6 text-slate-800">Receta Médica</h2>
+                    <h2 className="text-lg md:text-xl font-black uppercase italic text-center border-y border-slate-100 py-2.5 mb-5 md:mb-6 text-slate-800">Receta Médica</h2>
 
                     {/* DATOS DEL PACIENTE */}
-                    <div className="bg-slate-50 p-5 rounded-2xl mb-6 border border-slate-100 text-left print:bg-white print:border-slate-200">
-                      <div className="grid grid-cols-2 gap-y-3 gap-x-10 text-left">
-                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Nombre Paciente</p><p className="text-xs font-bold text-slate-900 uppercase text-left">{paciente?.nombre} {paciente?.apellido}</p></div>
-                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">RUT</p><p className="text-xs font-bold text-slate-900 text-left">{paciente?.rut || '---'}</p></div>
-                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Edad</p><p className="text-xs font-bold text-slate-900 text-left">{calcularEdad(paciente?.fecha_nacimiento)}</p></div>
-                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Sexo</p><p className="text-xs font-bold text-slate-900 uppercase text-left">{paciente?.sexo || '---'}</p></div>
-                          <div className="col-span-2 text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Fecha Emisión</p><p className="text-xs font-bold text-slate-900 text-left">{recetaSeleccionada.fecha_emision ? new Date(recetaSeleccionada.fecha_emision).toLocaleDateString('es-CL') : 'S/F'}</p></div>
+                    <div className="bg-slate-50 p-4 md:p-5 rounded-2xl mb-5 md:mb-6 border border-slate-100 text-left print:bg-white print:border-slate-200">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4 sm:gap-x-10 text-left">
+                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Nombre Paciente</p><p className="text-[11px] md:text-xs font-bold text-slate-900 uppercase text-left">{paciente?.nombre} {paciente?.apellido}</p></div>
+                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">RUT</p><p className="text-[11px] md:text-xs font-bold text-slate-900 text-left">{paciente?.rut || '---'}</p></div>
+                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Edad</p><p className="text-[11px] md:text-xs font-bold text-slate-900 text-left">{calcularEdad(paciente?.fecha_nacimiento)}</p></div>
+                          <div className="text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Sexo</p><p className="text-[11px] md:text-xs font-bold text-slate-900 uppercase text-left">{paciente?.sexo || '---'}</p></div>
+                          <div className="sm:col-span-2 text-left"><p className="text-[8px] font-black text-slate-400 uppercase text-left">Fecha Emisión</p><p className="text-[11px] md:text-xs font-bold text-slate-900 text-left">{recetaSeleccionada.fecha_emision ? new Date(recetaSeleccionada.fecha_emision).toLocaleDateString('es-CL') : 'S/F'}</p></div>
                       </div>
                     </div>
 
                     {/* RP. CUERPO */}
                     <div className="text-left">
-                      <h3 className="text-2xl font-black text-slate-900 mb-4 italic opacity-10 text-left">Rp.</h3>
-                      <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-medium pl-6 border-l-2 border-slate-200 text-left">
+                      <h3 className="text-xl md:text-2xl font-black text-slate-900 mb-3 md:mb-4 italic opacity-10 text-left">Rp.</h3>
+                      <p className="text-xs md:text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-medium pl-4 md:pl-6 border-l-2 border-slate-200 text-left">
                         {recetaSeleccionada.indicaciones}
                       </p>
                     </div>
@@ -300,43 +425,38 @@ export default function RecetasPage() {
 
                   {/* PIE DE PÁGINA */}
                   <div>
-                    <div className="pt-16 flex justify-end">
-                      <div className="w-80 flex flex-col items-center text-center">
-                        <div className="w-full h-20 mb-2 flex items-center justify-center relative">
+                    <div className="pt-10 md:pt-16 flex justify-center md:justify-end">
+                      <div className="w-full max-w-[20rem] flex flex-col items-center text-center">
+                        <div className="w-full h-16 md:h-20 mb-2 flex items-center justify-center relative">
                           {recetaSeleccionada.profesional_data?.firma_base64 ? (
                             <img
                               src={recetaSeleccionada.profesional_data.firma_base64}
                               alt="Firma Especialista"
-                              className="max-h-20 w-auto object-contain mix-blend-multiply"
+                              className="max-h-16 md:max-h-20 w-auto object-contain mix-blend-multiply"
                             />
                           ) : (
                             <div className="text-[8px] text-slate-300 uppercase font-black mb-4 italic">Firma no registrada</div>
                           )}
                         </div>
                         <div className="h-px bg-slate-900 w-full mb-2"/>
-                        <p className="text-xs font-black uppercase text-slate-900 leading-tight">
+                        <p className="text-[11px] md:text-xs font-black uppercase text-slate-900 leading-tight">
                           Dr/a. {recetaSeleccionada.profesional_data?.nombre} {recetaSeleccionada.profesional_data?.apellido}
                         </p>
-                        <p className="text-[10px] font-bold uppercase text-slate-500">{recetaSeleccionada.profesional_data?.especialidad_nombre}</p>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase mt-1 italic">RUT: {recetaSeleccionada.profesional_data?.rut}</p>
+                        <p className="text-[9px] md:text-[10px] font-bold uppercase text-slate-500">{recetaSeleccionada.profesional_data?.especialidad_nombre}</p>
+                        <p className="text-[8px] md:text-[9px] font-bold text-slate-400 uppercase mt-1 italic">RUT: {recetaSeleccionada.profesional_data?.rut}</p>
                       </div>
                     </div>
-                   
-                    <p className="mt-6 text-center text-[8px] font-bold text-slate-400 uppercase tracking-[0.4em] text-center">
+                    
+                    <p className="mt-5 md:mt-6 text-center text-[7px] md:text-[8px] font-bold text-slate-400 uppercase tracking-[0.2em] md:tracking-[0.4em]">
                       Venancia Leiva 1871, La Pintana • +569 6646 7641
                     </p>
                   </div>
                 </div>
-
-                {/* BOTÓN FLOTANTE */}
-                <button onClick={handlePrint} className="fixed bottom-10 right-10 bg-gradient-to-r from-blue-600 to-blue-700 text-white p-5 rounded-full shadow-2xl print:hidden hover:scale-110 transition-all z-50 no-print border border-blue-500">
-                  <Printer size={24}/>
-                </button>
               </div>
             ) : (
-              <div className="h-[600px] flex flex-col items-center justify-center bg-white/90 backdrop-blur-xl rounded-[2.5rem] border border-white/60 shadow-xl text-center print:hidden">
-                <ClipboardList size={48} className="text-slate-300 mb-4" />
-                <p className="text-slate-400 font-black uppercase text-xs tracking-widest italic text-center">Seleccione una receta</p>
+              <div className="h-[400px] md:h-[600px] flex flex-col items-center justify-center bg-white/90 backdrop-blur-xl rounded-[2rem] md:rounded-[2.5rem] border border-white/60 shadow-xl text-center print:hidden">
+                <ClipboardList size={40} className="text-slate-300 mb-4 md:w-12 md:h-12" />
+                <p className="text-slate-400 font-black uppercase text-[10px] md:text-xs tracking-widest italic text-center">Seleccione una receta</p>
               </div>
             )}
           </AnimatePresence>
