@@ -1130,7 +1130,7 @@ export default function DetalleTratamientoPage() {
     } else {
         toast.error("Error al guardar el pack en el presupuesto.");
     }
-  }; // <--- ¡AQUÍ ESTÁ LA LLAVE QUE FALTA!
+  }; // <--- ¡AQUÍ ESTÁ! AGREGA ESTO Y GUARDA.
 
   const abrirModalEvolucion = (itemIds: string[], avanceInicial: number) => {
     if (itemIds.length === 0) return;
@@ -1319,6 +1319,7 @@ export default function DetalleTratamientoPage() {
       toast.error("Error al actualizar una o más prestaciones."); 
   } finally { 
       setGuardandoMulti(false); 
+  }
   }
 
   const handleGuardarIcono = async (iconoId: string | null) => {
