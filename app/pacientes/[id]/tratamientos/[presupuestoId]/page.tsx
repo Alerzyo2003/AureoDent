@@ -1130,6 +1130,7 @@ export default function DetalleTratamientoPage() {
     } else {
         toast.error("Error al guardar el pack en el presupuesto.");
     }
+  };
 
   const abrirModalEvolucion = (itemIds: string[], avanceInicial: number) => {
     if (itemIds.length === 0) return;
