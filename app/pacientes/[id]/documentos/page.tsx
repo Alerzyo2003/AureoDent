@@ -34,6 +34,7 @@ export default function DocumentosClinicosPage() {
   const [tituloEdicion, setTituloEdicion] = useState('')
   const [especialistaSeleccionadoId, setEspecialistaSeleccionadoId] = useState<string>('')
   const [mounted, setMounted] = useState(false)
+
   useEffect(() => {
     setMounted(true);
     supabase.auth.getUser().then(async ({ data: { user } }) => {
@@ -50,6 +51,21 @@ export default function DocumentosClinicosPage() {
     }
   }, [paciente_id])
 
+  // --- FUNCIÓN DE AUDITORÍA ---
+  const registrarAuditoria = async (accion: string, detalles: string) => {
+    if (!sessionUserId) return;
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUserId,
+        accion,
+        tabla: 'documentos_clinicos',
+        detalles
+      }]);
+    } catch (e) {
+      console.error("Error al registrar auditoría", e);
+    }
+  }
+
   async function fetchPaciente() {
     const { data } = await supabase.from('pacientes').select('*').eq('id', paciente_id).single()
     if (data) setPacienteData(data)
@@ -60,21 +76,14 @@ export default function DocumentosClinicosPage() {
       const { data: profs, error: errProfs } = await supabase
         .from('profesionales')
         .select(`
-          user_id,
-          nombre,
-          apellido,
-          firma_base64,
-          activo,
+          user_id, nombre, apellido, firma_base64, activo,
           especialidades ( nombre )
         `)
         .eq('activo', true);
 
       if (errProfs) throw errProfs;
 
-      const { data: perfiles, error: errPerf } = await supabase
-        .from('perfiles')
-        .select('id, rut');
-
+      const { data: perfiles, error: errPerf } = await supabase.from('perfiles').select('id, rut');
       if (errPerf) throw errPerf;
 
       const mapeados = (profs || [])
@@ -111,10 +120,10 @@ export default function DocumentosClinicosPage() {
   }
 
   const handleNuevoDocumento = () => {
+    setDocSeleccionado(null); // Aseguramos resetear la selección para el flujo nuevo
     if (sessionUserRole === 'DENTISTA' && sessionUserId) {
       setEspecialistaSeleccionadoId(sessionUserId);
       setMostrandoCategorias(true);
-      setDocSeleccionado(null);
     } else {
       setShowModalEspecialista(true);
       setIsOpenLista(false);
@@ -216,25 +225,67 @@ export default function DocumentosClinicosPage() {
     } catch (error) { toast.error("Error al generar PDF", { id: 'pdf-toast' }); } finally { setGenerandoPdf(false); }
   };
 
+  // --- LÓGICA DE GUARDAR NUEVO O ACTUALIZAR ENCARGADO ---
   const guardarDocumentoFinal = async () => {
     if (guardando) return;
     if (!tituloEdicion || !especialistaSeleccionadoId) return toast.error("Faltan datos", { id: 'datos-faltantes' });
     
     setGuardando(true);
     try {
-      const { error } = await supabase.from('documentos_clinicos').insert([{
-        paciente_id, especialista_id: especialistaSeleccionadoId, titulo_documento: tituloEdicion, contenido: bloquesEdicion,
-        llenado_por: profesionalesFull.find(p => p.user_id === especialistaSeleccionadoId)?.nombre_completo
-      }]);
-      if (error) throw error;
-      toast.success("Guardado", { id: 'guardado-exito' }); 
-      setDocSeleccionado(null); 
-      setMostrandoCategorias(false); 
+      const especialistaFull = profesionalesFull.find(p => p.user_id === especialistaSeleccionadoId);
+      const nombreLlenado = especialistaFull?.nombre_completo;
+
+      if (docSeleccionado === 'NUEVO') {
+        const { error } = await supabase.from('documentos_clinicos').insert([{
+          paciente_id, especialista_id: especialistaSeleccionadoId, titulo_documento: tituloEdicion, contenido: bloquesEdicion,
+          llenado_por: nombreLlenado
+        }]);
+        if (error) throw error;
+        
+        await registrarAuditoria('CREAR', `Creó nuevo documento clínico: ${tituloEdicion}`);
+
+        toast.success("Documento Guardado", { id: 'guardado-exito' }); 
+        setDocSeleccionado(null); 
+        setMostrandoCategorias(false); 
+      } else {
+        // ACTUALIZACIÓN DE ENCARGADO EXISTENTE
+        const { error } = await supabase.from('documentos_clinicos')
+          .update({ especialista_id: especialistaSeleccionadoId, llenado_por: nombreLlenado })
+          .eq('id', docSeleccionado.id);
+        
+        if (error) throw error;
+
+        await registrarAuditoria('EDITAR_ENCARGADO', `Actualizó el encargado del doc. "${tituloEdicion}" a ${nombreLlenado}`);
+
+        toast.success("Encargado actualizado exitosamente");
+        setDocSeleccionado({ ...docSeleccionado, especialista_id: especialistaSeleccionadoId, llenado_por: nombreLlenado });
+      }
+      
       fetchDocumentos();
     } catch (e) { 
       toast.error("Error al guardar", { id: 'error-guardar' }); 
     } finally { 
       setGuardando(false); 
+    }
+  }
+
+  // --- LÓGICA DE ELIMINAR DOCUMENTO ---
+  const eliminarDocumento = async () => {
+    if (!docSeleccionado || docSeleccionado === 'NUEVO') return;
+    const confirmacion = window.confirm("¿Está seguro de que desea eliminar este documento clínico? Esta acción no se puede deshacer.");
+    if (!confirmacion) return;
+
+    try {
+      const { error } = await supabase.from('documentos_clinicos').delete().eq('id', docSeleccionado.id);
+      if (error) throw error;
+
+      await registrarAuditoria('ELIMINAR', `Eliminó el documento clínico: ${docSeleccionado.titulo_documento}`);
+
+      toast.success("Documento eliminado correctamente");
+      setDocSeleccionado(null);
+      fetchDocumentos();
+    } catch (e) {
+      toast.error("Ocurrió un error al intentar eliminar el documento");
     }
   }
 
@@ -283,9 +334,25 @@ export default function DocumentosClinicosPage() {
                 {generandoPdf ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />} 
                 {generandoPdf ? 'Generando...' : 'Descargar PDF'}
               </button>
+              
+              {/* Botón de Guardar Inicial */}
               {docSeleccionado === 'NUEVO' && (
                 <button onClick={guardarDocumentoFinal} disabled={guardando} className="px-5 py-3 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-emerald-600 flex items-center gap-2 transition-all">
                   {guardando ? <Loader2 className="animate-spin" size={14}/> : <Save size={14} />} Guardar
+                </button>
+              )}
+
+              {/* Botón de Actualizar Encargado */}
+              {docSeleccionado !== 'NUEVO' && docSeleccionado?.especialista_id !== especialistaSeleccionadoId && (
+                <button onClick={guardarDocumentoFinal} disabled={guardando} className="px-5 py-3 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-amber-600 flex items-center gap-2 transition-all">
+                  {guardando ? <Loader2 className="animate-spin" size={14}/> : <Save size={14} />} Actualizar Encargado
+                </button>
+              )}
+
+              {/* Botón de Eliminar */}
+              {docSeleccionado !== 'NUEVO' && (
+                <button onClick={eliminarDocumento} className="px-5 py-3 bg-red-50 text-red-600 border border-red-200 rounded-2xl font-black text-[10px] uppercase shadow-sm hover:bg-red-100 flex items-center gap-2 transition-all">
+                  <Trash2 size={14} /> Eliminar
                 </button>
               )}
             </>
@@ -340,7 +407,19 @@ export default function DocumentosClinicosPage() {
                               )}
                           </AnimatePresence>
                       </div>
-                      <button disabled={!especialistaSeleccionadoId || isOpenLista} onClick={() => { setShowModalEspecialista(false); setMostrandoCategorias(true); setDocSeleccionado(null); }} className={`w-full py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all ${especialistaSeleccionadoId && !isOpenLista ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:shadow-lg active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-50'}`}>Continuar</button>
+                      <button 
+                        disabled={!especialistaSeleccionadoId || isOpenLista} 
+                        onClick={() => { 
+                          setShowModalEspecialista(false); 
+                          // Validamos para no romper el estado si estábamos editando el responsable de un doc guardado
+                          if (!docSeleccionado) {
+                            setMostrandoCategorias(true); 
+                          }
+                        }} 
+                        className={`w-full py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl transition-all ${especialistaSeleccionadoId && !isOpenLista ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:shadow-lg active:scale-95' : 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-50'}`}
+                      >
+                        Continuar
+                      </button>
                   </div>
               </motion.div>
             </div>
