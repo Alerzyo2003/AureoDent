@@ -68,11 +68,23 @@ export default function NuevoPaciente() {
 
     setCargando(true)
 
+    // 1. OBTENER EL USUARIO ACTUAL PARA LA AUDITORÍA
+    const { data: { user } } = await supabase.auth.getUser();
+
+    // 2. FORMATEO DE RUT O DOCUMENTO EXTRANJERO
     let rutFinal = form.rut.toUpperCase().trim();
     if (esOtroDocumento) {
+        // Se guarda tal cual lo escribió el usuario. Si está vacío, genera uno automático.
         if (!rutFinal) rutFinal = `OTRO-DOC-${Date.now()}`;
     } else {
-        rutFinal = rutFinal.replace(/[^0-9kK-]/g, '');
+        // Si es RUT chileno: limpiamos todo lo que no sea número o letra K
+        let cleanRut = rutFinal.replace(/[^0-9K]/g, '');
+        // Insertamos el guion justo antes del último carácter
+        if (cleanRut.length > 1) {
+            rutFinal = cleanRut.slice(0, -1) + '-' + cleanRut.slice(-1);
+        } else {
+            rutFinal = cleanRut; // Por si acaso ingresó solo 1 carácter
+        }
     }
 
     try {
@@ -91,7 +103,7 @@ export default function NuevoPaciente() {
                   icon: <AlertTriangle className="text-amber-500" />
               })
           } else {
-              toast.error(`El documento ${form.rut} ya existe`, {
+              toast.error(`El documento ${rutFinal} ya existe`, {
                   description: `Pertenece a ${existente.nombre} ${existente.apellido}`,
                   duration: 5000
               })
@@ -100,6 +112,90 @@ export default function NuevoPaciente() {
           return
         }
       }
+
+      // 3. GUARDAR PACIENTE
+      const { error: errorInsert } = await supabase
+        .from('pacientes')
+        .insert([{ 
+          ...form, 
+          rut: rutFinal,
+          nombre: form.nombre.toUpperCase().trim(),
+          apellido: form.apellido.toUpperCase().trim(),
+          extranjero: esOtroDocumento, // Marcamos si es extranjero según el checkbox
+          activo: true 
+        }])
+
+      if (errorInsert) {
+        if (errorInsert.code === '23505') {
+            throw new Error("El RUT ya se encuentra registrado.")
+        }
+        throw errorInsert
+      }
+
+      // 4. REGISTRAR EN LA TABLA DE AUDITORÍA
+      if (user) {
+        await supabase.from('auditoria_clinica').insert([{
+          usuario_id: user.id,
+          accion: 'CREAR',
+          tabla: 'pacientes',
+          detalles: `Se creó el paciente ${form.nombre.toUpperCase().trim()} ${form.apellido.toUpperCase().trim()} con documento ${rutFinal}.`
+        }])
+      }
+
+      setExito(true)
+      toast.success("Paciente registrado correctamente")
+      setTimeout(() => router.push('/pacientes'), 2000)
+
+    } catch (error: any) {
+      console.error("Error completo:", error)
+      toast.error("Error al guardar", {
+          description: error.message || "No se pudo conectar con el servidor"
+      })
+      setCargando(false)
+    }
+  }
+
+      // 3. GUARDAR PACIENTE
+      const { error: errorInsert } = await supabase
+        .from('pacientes')
+        .insert([{ 
+          ...form, 
+          rut: rutFinal,
+          nombre: form.nombre.toUpperCase().trim(),
+          apellido: form.apellido.toUpperCase().trim(),
+          extranjero: esOtroDocumento, // Marcamos si es extranjero según el checkbox
+          activo: true 
+        }])
+
+      if (errorInsert) {
+        if (errorInsert.code === '23505') {
+            throw new Error("El RUT ya se encuentra registrado.")
+        }
+        throw errorInsert
+      }
+
+      // 4. REGISTRAR EN LA TABLA DE AUDITORÍA
+      if (user) {
+        await supabase.from('auditoria_clinica').insert([{
+          usuario_id: user.id,
+          accion: 'CREAR',
+          tabla: 'pacientes',
+          detalles: `Se creó el paciente ${form.nombre.toUpperCase().trim()} ${form.apellido.toUpperCase().trim()} con documento ${rutFinal}.`
+        }])
+      }
+
+      setExito(true)
+      toast.success("Paciente registrado correctamente")
+      setTimeout(() => router.push('/pacientes'), 2000)
+
+    } catch (error: any) {
+      console.error("Error completo:", error)
+      toast.error("Error al guardar", {
+          description: error.message || "No se pudo conectar con el servidor"
+      })
+      setCargando(false)
+    }
+  }
 
       const { error: errorInsert } = await supabase
         .from('pacientes')
