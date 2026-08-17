@@ -73,16 +73,24 @@ export default function RecetasPage() {
 
       const { data: perfiles } = await supabase.from('perfiles').select('id, rut');
 
-      const listaProfesionales = (profs || []).map(p => ({
-        user_id: p.user_id,
-        nombre_completo: `Dr/a. ${p.nombre} ${p.apellido}`,
-        especialidad: p.especialidades?.nombre || 'Dentista'
-      }));
+      // ✅ CORRECCIÓN 1: Manejo de arreglo en la lista de profesionales para el selector
+      const listaProfesionales = (profs || []).map((p: any) => {
+        const esp = Array.isArray(p.especialidades) ? p.especialidades[0] : p.especialidades;
+        
+        return {
+          user_id: p.user_id,
+          nombre_completo: `Dr/a. ${p.nombre} ${p.apellido}`,
+          especialidad: esp?.nombre || 'Dentista'
+        };
+      });
       setProfesionales(listaProfesionales);
 
+      // ✅ CORRECCIÓN 2: Manejo de arreglo al armar la tarjeta de las recetas
       const recetasCompletas = (recsRes.data || []).map((receta: any) => {
         const prof = profs?.find((p: any) => p.user_id === receta.profesional_id) as any;
         const perf = perfiles?.find((p: any) => p.id === receta.profesional_id) as any;
+        
+        const esp = Array.isArray(prof?.especialidades) ? prof.especialidades[0] : prof?.especialidades;
         
         return {
           ...receta,
@@ -90,7 +98,7 @@ export default function RecetasPage() {
             nombre: prof?.nombre || 'Especialista',
             apellido: prof?.apellido || '',
             rut: perf?.rut || '---',
-            especialidad_nombre: prof?.especialidades?.nombre || 'Dentista',
+            especialidad_nombre: esp?.nombre || 'Dentista',
             firma_base64: prof?.firma_base64 || null
           }
         };
