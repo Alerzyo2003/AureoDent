@@ -396,11 +396,10 @@ export default function AgendaPage() {
     } catch (error) { toast.error("Error al escanear la agenda global"); } finally { setCargandoHuerfanas(false); }
   }
 
-  // --- MODIFICADO: VALIDAR CITA ONLINE (CON REDIRECCIÓN A WHATSAPP) ---
+  // --- MODIFICADO: Envía el nuevo link en WhatsApp de confirmación ---
   const validarCitaOnline = async (cita: any) => {
     setCargandoAccion(true);
     try {
-        // La marcamos como programada y con link 'enviado' para que el paciente la confirme
         await supabase.from('citas').update({ 
             estado_confirmacion: 'enviado',
             estado: 'programada' 
@@ -415,9 +414,8 @@ export default function AgendaPage() {
             const fechaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
             const horaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
             
-            // Generamos el link de confirmación y lo agregamos al mensaje
             const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
-            const mensaje = `Hola ${cita.pacientes?.nombre}, tu solicitud de hora para el día ${fechaFormat} a las ${horaFormat} hrs ha sido validada y agendada con éxito.\n\nPor favor confirma tu asistencia haciendo clic en el siguiente enlace: ${link}\n\n¡Te esperamos en Clínica Dignidad!`;
+            const mensaje = `Hola ${cita.pacientes?.nombre}, tu solicitud de hora para el día ${fechaFormat} a las ${horaFormat} hrs ha sido validada y agendada con éxito.\n\nPor favor confirma tu asistencia haciendo clic en el siguiente enlace:\n${link}\n\n¡Te esperamos en Clínica Dignidad!`;
             
             window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
         } else {
@@ -486,7 +484,6 @@ export default function AgendaPage() {
       const [bloqueosRes, dispoRes, citasRes] = await Promise.all([
         supabase.from('bloqueos_agenda').select('fecha, hora_inicio, hora_fin').eq('profesional_id', nuevoEspecialista).gte('fecha', inicioSemanaStr).lte('fecha', finSemanaStr),
         supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', nuevoEspecialista),
-        // Modificado: Agregado estado_confirmacion y motivo
         supabase.from('citas').select('inicio, fin, estado_confirmacion, motivo').eq('profesional_id', nuevoEspecialista).gte('inicio', `${inicioSemanaStr}T00:00:00`).lte('inicio', `${finSemanaStr}T23:59:59`).neq('estado', 'cancelada')
       ]);
 
@@ -500,7 +497,6 @@ export default function AgendaPage() {
         const dispoDia = dispoRes.data?.filter(d => (d.dia_semana === diaSemanaNum && !d.fecha_especifica) || d.fecha_especifica === dateStr) || [];
         if (dispoDia.length === 0) return { date: dateStr, dateObj, status: 'sin_horario', slots: [] };
 
-        // Modificado: Excluir online pendientes
         const citasDia = citasRes.data?.filter(c => c.inicio.startsWith(dateStr) && !(c.estado_confirmacion === 'pendiente' && c.motivo?.includes('Online'))).map(c => ({
           inicio: getMinsFromDateStr(c.inicio), fin: getMinsFromDateStr(c.fin)
         })) || [];
@@ -671,16 +667,18 @@ export default function AgendaPage() {
     toast.success("Estado actualizado"); await fetchCitasAgenda();
   }
 
+  // --- MODIFICADO: Usa el nuevo link en los recordatorios ---
   const enviarRecordatorioConLink = (cita: any) => {
-  const telefono = cita.pacientes?.telefono;
-  if (!telefono) return toast.error("Paciente sin teléfono");
-  const num = telefono.replace(/\D/g, '');
-  const hora = new Date(cita.inicio).toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Santiago'});
-  const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
-  const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de la clínica para recordar tu cita de hoy a las ${hora} hrs. Por favor confirma tu asistencia aquí: ${link}`;
-  window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
-}
+      const telefono = cita.pacientes?.telefono;
+      if (!telefono) return toast.error("Paciente sin teléfono");
+      const num = telefono.replace(/\D/g, '');
+      const hora = new Date(cita.inicio).toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Santiago'});
+      const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
+      const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de Clínica Dignidad para recordar tu cita de hoy a las ${hora} hrs.\n\nPor favor confirma tu asistencia aquí:\n${link}`;
+      window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
+  }
   
+  // --- MODIFICADO: Incluye el link de Agendamiento Online en los Presupuestos ---
   const generarYMostrarResumen = async (presupuestoId: string, cita: any) => {
     const toastId = toast.loading("Generando resumen del tratamiento...");
     try {
@@ -707,6 +705,7 @@ export default function AgendaPage() {
         if (abonado > 0) detalleText += `\n✅ *Abonado:* $${abonado.toLocaleString('es-CL')}`;
         if (total - abonado > 0) detalleText += `\n🔴 *Saldo Pendiente:* ${(total - abonado).toLocaleString('es-CL')}`;
 
+        detalleText += `\n\n🗓️ *Agenda tus próximas sesiones online aquí:*\nhttps://confirmar-cita-dignidad.vercel.app/agendar`;
         detalleText += `\n\nCualquier consulta, estamos a tu disposición. ¡Saludos! 🦷`;
 
         setModalEnvioPresupuesto({ abierto: true, cita, texto: detalleText });
@@ -809,13 +808,11 @@ export default function AgendaPage() {
       } catch (e) { toast.error("Error al bloquear el horario."); } finally { setCargandoAccion(false); }
   }
 
-  // --- MODIFICADO: Ignorar citas online pendientes en tu disponibilidad ---
   async function fetchCitasOcupadas() {
     const dias = getDiasLunesSabado(semanaInicio);
     const inicioSemana = new Date(dias[0].getFullYear(), dias[0].getMonth(), dias[0].getDate(), 0, 0, 0).toISOString();
     const finSemana = new Date(dias[5].getFullYear(), dias[5].getMonth(), dias[5].getDate(), 23, 59, 59).toISOString();
     
-    // Traemos también estado_confirmacion y motivo
     const { data } = await supabase.from('citas')
       .select('id, inicio, fin, estado_confirmacion, motivo')
       .eq('profesional_id', filtro.profesional_id)
@@ -823,7 +820,6 @@ export default function AgendaPage() {
       .neq('estado', 'cancelada');
       
     let filtradas = citaEnReprogramacion ? (data || []).filter(c => c.id !== citaEnReprogramacion.id) : (data || []);
-    // Ignorar las que están pendientes y provienen de online
     filtradas = filtradas.filter(c => !(c.estado_confirmacion === 'pendiente' && c.motivo?.includes('Online')));
     
     setCitasOcupadas(filtradas);
@@ -906,6 +902,7 @@ export default function AgendaPage() {
     setNuevoTratamientoNombre(citaEnReprogramacion ? citaEnReprogramacion.motivo : ''); 
   };
 
+  // --- MODIFICADO: Retornar ID de cita para WhatsApp automático ---
   const handleGuardar = async () => {
     if (cargandoAccion) return;
     if (modoNuevoPaciente && (!nuevoPaciente.nombre || !nuevoPaciente.apellido)) {
@@ -956,6 +953,8 @@ export default function AgendaPage() {
         return { inicio: `${fechaStr}T${horaStr}:00`, fin: `${fechaStr}T${finH}:${finM}:00` };
       };
 
+      let citaIdParaConfirmacion = null;
+
       if (citaEnReprogramacion) {
         const s = horasSeleccionadas[0];
         const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
@@ -970,6 +969,8 @@ export default function AgendaPage() {
             modificado_por: usuarioLogueado
           })
           .eq('id', citaEnReprogramacion.id);
+
+        citaIdParaConfirmacion = citaEnReprogramacion.id;
 
         await supabase.from('auditoria_clinica').insert([{
           usuario_id: usuarioLogueado,
@@ -991,7 +992,12 @@ export default function AgendaPage() {
             creado_por: usuarioLogueado
           };
         });
-        await supabase.from('citas').insert(nuevasCitas);
+        
+        // Aquí insertamos y guardamos el ID para el link de WhatsApp
+        const { data: citasCreadas } = await supabase.from('citas').insert(nuevasCitas).select('id');
+        if (citasCreadas && citasCreadas.length > 0) {
+            citaIdParaConfirmacion = citasCreadas[0].id;
+        }
 
         const detallesCitas = nuevasCitas.map(c => `Cita para ${pNombreFull} el ${c.inicio.split('T')[0]} a las ${c.inicio.split('T')[1].substring(0,5)}`).join('; ');
         await supabase.from('auditoria_clinica').insert([{
@@ -1005,7 +1011,8 @@ export default function AgendaPage() {
       setCitaConfirmadaData({
         paciente: pNombreFull.toUpperCase(),
         citas: horasSeleccionadas,
-        telefono: pTelefono
+        telefono: pTelefono,
+        citaId: citaIdParaConfirmacion // <-- Lo guardamos aquí
       });
       setMostrarTicket(true);
       await fetchCitasAgenda();
@@ -1237,7 +1244,6 @@ export default function AgendaPage() {
 
   const calcularDeudaTotalCaja = () => deudasPaciente.reduce((acc, curr) => acc + curr.deuda, 0);
 
-  // --- MODIFICADO: Las citas online pendientes no generan sobrecupo visual ---
   const checkIsSobrecupo = (c: any) => {
     if (!c.profesional_id) return false;
     
@@ -1246,7 +1252,6 @@ export default function AgendaPage() {
         if (!otra.profesional_id) return false;
         if (String(otra.profesional_id) !== String(c.profesional_id)) return false; 
         
-        // REGLA: Si la cita es online y pendiente, no la contamos para sobrecupo
         if (otra.estado_confirmacion === 'pendiente' && otra.motivo?.includes('Online')) return false;
         if (c.estado_confirmacion === 'pendiente' && c.motivo?.includes('Online')) return false;
         
@@ -1266,7 +1271,6 @@ export default function AgendaPage() {
     });
   }
 
-  // --- Renderización Principal ---
   const GOLD = '#C9A24B'
   const NAVY = '#0E1B2E'
   const GOLD_LIGHT = '#E8CD8A'
@@ -1334,7 +1338,6 @@ export default function AgendaPage() {
         </div>
       </div>
 
-      {/* CONTROLES / FILTROS */}
       <div className="flex flex-col md:flex-row items-stretch md:items-center justify-start gap-3 md:gap-4 mb-8">
         
         <div className="bg-white border border-slate-200 rounded-full px-4 md:px-5 py-3 md:py-2 shadow-sm flex items-center gap-2 w-full md:w-auto justify-between md:justify-start">
@@ -1400,7 +1403,6 @@ export default function AgendaPage() {
          </div>
       </div>
 
-      {/* TIMELINE DE CITAS */}
       {vistaAgenda === 'dia' && (
         <div className="relative pl-0 md:pl-[140px] pt-4 pb-20 mt-4 md:mt-0">
           
@@ -1439,13 +1441,11 @@ export default function AgendaPage() {
                         key={c.id} 
                         className="relative mb-6 z-10 flex md:block flex-col gap-2 group"
                     >
-                    {/* Tiempos en la izquierda */}
                     <div className="md:absolute md:-left-[140px] md:top-4 md:w-[80px] text-left md:text-right flex md:block items-center justify-between md:justify-start gap-2 mb-2 md:mb-0 px-2 md:px-0">
                         <p className="text-xl md:text-xl font-black text-[#0A111F] leading-none tracking-tight group-hover:text-[#C9A24B] transition-colors">{hInicio}</p>
                         <p className="text-xs font-semibold text-slate-400 mt-1">{hFin}</p>
                     </div>
 
-                    {/* Círculo en la línea */}
                     <motion.div 
                         initial={{ scale: 0 }} 
                         animate={{ scale: 1 }} 
@@ -1453,7 +1453,6 @@ export default function AgendaPage() {
                         className={`hidden md:block absolute -left-[45px] top-5 w-3 h-3 rounded-full bg-white border-[3px] shadow-[0_0_0_6px_#FBF8F2] z-20 group-hover:scale-125 transition-transform ${isSobrecupo ? 'border-red-500' : 'border-[#C9A24B]'}`} 
                     />
 
-                    {/* Tarjeta de Cita */}
                     <div className={`bg-white rounded-2xl shadow-sm hover:shadow-md transition-all border border-l-4 ${theme.border} p-5 md:p-6 w-full flex flex-col gap-4 hover:-translate-y-0.5 ${isSobrecupo ? 'border-red-100 shadow-[0_4px_12px_rgba(239,68,68,0.08)]' : 'border-slate-100'}`}>
                         <div className="flex flex-col sm:flex-row sm:justify-between items-start gap-4 sm:gap-0">
                         <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -2173,14 +2172,18 @@ export default function AgendaPage() {
                       <button
                         onClick={() => {
                           if (!citaConfirmadaData) return;
-                          const { paciente, citas, telefono } = citaConfirmadaData;
+                          const { paciente, citas, telefono, citaId } = citaConfirmadaData;
                           if (!telefono) {
                             toast.error("El paciente no tiene un número de teléfono registrado.");
                             return;
                           }
                           const fecha = new Date(citas[0].fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
                           const hora = citas[0].hora;
-                          const mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs. ¡Te esperamos en Clínica Dignidad!`;
+                          let mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs.\n\n`;
+                          if (citaId) {
+                              mensaje += `Por favor confirma tu asistencia aquí:\nhttps://confirmar-cita-dignidad.vercel.app/confirmar/${citaId}\n\n`;
+                          }
+                          mensaje += `¡Te esperamos en Clínica Dignidad!`;
                           const numLimpio = telefono.replace(/\D/g, '');
                           const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
                           window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
