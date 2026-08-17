@@ -576,7 +576,14 @@ export default function DetalleTratamientoPage() {
 
   const aprobarPlanManualmente = async () => {
     const { error } = await supabase.from('presupuestos').update({ aprobado: true }).eq('id', idURL);
-    if (!error) { setPresupuestoData({ ...presupuestoData, isAprobado: true }); toast.success("Plan de tratamiento aprobado"); }
+    if (!error) { setPresupuestoData({ ...presupuestoData, isAprobado: true }); toast.success("Plan de tratamiento aprobado");
+                 await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado?.id,
+            accion: 'UPDATE / APROBACION',
+            tabla: 'presupuestos',
+            detalles: `Aprobó manualmente el presupuesto #${idURL} sin registro de pago previo.`
+        }]);
+    }
   }
 
   const handleCrearSeccion = async () => {
@@ -817,7 +824,17 @@ export default function DetalleTratamientoPage() {
         nuevaObs = nuevaObs.replace(/ \| Zona: [^|]+/g, '');
     }
 
-    if (id) await supabase.from('presupuesto_items').update({ diente_id: dId, zona: null, observacion: nuevaObs, nombre_prestacion: nuevaObs }).eq('id', id);
+    if (id) {
+        await supabase.from('presupuesto_items').update({ diente_id: dId, zona: null, observacion: nuevaObs, nombre_prestacion: nuevaObs }).eq('id', id);
+        
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado?.id,
+            accion: 'UPDATE / PIEZA DENTAL',
+            tabla: 'presupuesto_items',
+            detalles: `Reasignó la prestación a la pieza: ${dId || 'General'}.`
+        }]);
+    }
+    
     setAcciones(prev => prev.map(a => (a.id === id || a.tempId === tempId) ? { ...a, diente_id: dId, zona: null, texto_db: nuevaObs } : a)); 
     toast.success("Pieza actualizada");
   }
@@ -946,9 +963,21 @@ export default function DetalleTratamientoPage() {
             costo_laboratorio: costoLabAuto,
             lab_pagado_por_dr: false
         }));
+        
         setAcciones(prev => [...prev, ...nuevosItems]);
         toast.success(`Prestación agregada exitosamente ${inserts.length > 1 ? `(${inserts.length} piezas)` : ''}`);
-    } else toast.error("Error al guardar en base de datos.");
+
+        // 👇 LA AUDITORÍA QUE FALTABA
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado?.id,
+            accion: 'INSERT / PRESTACIÓN',
+            tabla: 'presupuesto_items',
+            detalles: `Agregó la prestación "${prestacion.display_nombre}" al presupuesto #${idURL}.`
+        }]);
+
+    } else {
+        toast.error("Error al guardar en base de datos.");
+    }
   };
 
   const abrirModalPack = (pack: any) => {
@@ -1089,10 +1118,18 @@ export default function DetalleTratamientoPage() {
         setModalPack({abierto: false, pack: null, configuraciones: {}});
         setPanelAgregarAbierto(false); setDientesSeleccionados([]); 
         toast.success(`Pack "${pack.nombre}" agregado respetando sus secciones`);
+
+        // 👇 CÓDIGO DE AUDITORÍA AQUÍ 👇
+        await supabase.from('auditoria_clinica').insert([{
+            usuario_id: usuarioLogueado?.id,
+            accion: 'INSERT / PACK',
+            tabla: 'presupuesto_items',
+            detalles: `Agregó el pack "${pack.nombre}" con ${nuevosItems.length} prestaciones al presupuesto #${idURL}.`
+        }]);
+
     } else {
         toast.error("Error al guardar el pack en el presupuesto.");
     }
-  }
 
   const abrirModalEvolucion = (itemIds: string[], avanceInicial: number) => {
     if (itemIds.length === 0) return;
@@ -1268,7 +1305,19 @@ export default function DetalleTratamientoPage() {
       }));
       toast.success(`${itemsAEvolucionar.length} prestaciones actualizadas.`);
       setModalAjustesMulti(false); setItemsAEvolucionar([]);
-    } catch (error) { toast.error("Error al actualizar una o más prestaciones."); } finally { setGuardandoMulti(false); }
+
+      // 👇 CÓDIGO DE AUDITORÍA AQUÍ 👇
+      await supabase.from('auditoria_clinica').insert([{
+          usuario_id: usuarioLogueado?.id,
+          accion: 'UPDATE / AJUSTES MULTIPLES',
+          tabla: 'presupuesto_items',
+          detalles: `Modificó ${itemsAEvolucionar.length} prestaciones en lote. Descuento aplicado: ${dctoMulti}%. Costo Lab: ${costoLabMulti !== '' ? costoLabMulti : 'Sin cambios'}.`
+      }]);
+
+  } catch (error) { 
+      toast.error("Error al actualizar una o más prestaciones."); 
+  } finally { 
+      setGuardandoMulti(false); 
   }
 
   const handleGuardarIcono = async (iconoId: string | null) => {
