@@ -31,7 +31,7 @@ export default function PagosPacientePage() {
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [cajaActivaId, setCajaActivaId] = useState<string | null>(null);
 
-  // 🔥 NUEVOS ESTADOS PARA PAGO SELECTIVO 🔥
+  // 🔥 ESTADOS PARA PAGO SELECTIVO
   const [pagosSeleccionados, setPagosSeleccionados] = useState<Record<string, number>>({})
   const [metodoPago, setMetodoPago] = useState('Transferencia')
   const [numeroOperacion, setNumeroOperacion] = useState('')
@@ -152,14 +152,13 @@ export default function PagosPacientePage() {
     }
   }
 
-  // 🔥 FUNCIONES PAGO SELECTIVO 🔥
   const toggleSeleccionPago = (itemId: string, deudaMaxima: number) => {
     setPagosSeleccionados(prev => {
         const nuevos = { ...prev };
         if (nuevos[itemId] !== undefined) {
-            delete nuevos[itemId]; // Deseleccionar
+            delete nuevos[itemId];
         } else {
-            nuevos[itemId] = deudaMaxima; // Seleccionar pagando el total por defecto
+            nuevos[itemId] = deudaMaxima;
         }
         return nuevos;
     });
@@ -168,7 +167,7 @@ export default function PagosPacientePage() {
   const handleMontoParcialChange = (itemId: string, monto: number, deudaMaxima: number) => {
     setPagosSeleccionados(prev => ({
         ...prev,
-        [itemId]: Math.min(Math.max(0, monto), deudaMaxima) // Evitar que paguen más de la deuda o valores negativos
+        [itemId]: Math.min(Math.max(0, monto), deudaMaxima)
     }));
   }
 
@@ -231,7 +230,7 @@ export default function PagosPacientePage() {
     }
   }
 
-  // 🔥 LÓGICA DE PAGO SELECTIVO ACTUALIZADA 🔥
+  // 🔥 LÓGICA DE PAGO SELECTIVO CONSOLIDADA 🔥
   const procesarPagoCaja = async () => {
     if (!cajaActivaId) {
       return toast.error("No se puede procesar el pago: No hay caja abierta.");
@@ -274,20 +273,21 @@ export default function PagosPacientePage() {
             };
             detallesDelPago.push(detalleItem);
 
-            await supabase.from('pagos').insert([{
-                paciente_id: paciente_id,
-                monto: aAbonar,
-                metodo_pago: metodoPago,
-                numero_boleta: numeroOperacion.trim() || 'S/N', 
-                profesional_id: itemInfo.profesional_id,
-                item_id: itemInfo.id,
-                fecha_pago: new Date().toISOString(),
-                comentario: JSON.stringify([detalleItem]),
-                caja_id: cajaActivaId
-            }]);
-
             await supabase.from('presupuesto_items').update({ abonado: Number(itemInfo.abonado) + aAbonar }).eq('id', itemInfo.id);
         }
+
+        // 🔥 INSERTAR UN ÚNICO PAGO CONSOLIDADO EN LA BASE DE DATOS 🔥
+        await supabase.from('pagos').insert([{
+            paciente_id: paciente_id,
+            monto: montoTotalAPagar,
+            metodo_pago: metodoPago,
+            numero_boleta: numeroOperacion.trim() || 'S/N', 
+            profesional_id: usuarioLogueado?.id,
+            item_id: null, // Queda nulo porque agrupa múltiples items
+            fecha_pago: new Date().toISOString(),
+            comentario: JSON.stringify(detallesDelPago),
+            caja_id: cajaActivaId
+        }]);
 
         let nuevoSaldoAFavor = saldoActual;
 
@@ -300,7 +300,7 @@ export default function PagosPacientePage() {
             toast.success(`Pago de tratamientos procesado con éxito.`);
         }
 
-        const detalleAuditoriaPago = `Registró un pago selectivo de $${montoTotalAPagar.toLocaleString('es-CL')} para ${pacienteInfo?.nombre} ${pacienteInfo?.apellido}. Método: ${metodoPago}. Deuda cubierta en ${detallesDelPago.length} item(s).`;
+        const detalleAuditoriaPago = `Registró un pago consolidado de $${montoTotalAPagar.toLocaleString('es-CL')} para ${pacienteInfo?.nombre} ${pacienteInfo?.apellido}. Método: ${metodoPago}. Cubre ${detallesDelPago.length} item(s).`;
         
         await supabase.from('auditoria_clinica').insert([{
             usuario_id: usuarioLogueado?.id,
@@ -333,18 +333,22 @@ export default function PagosPacientePage() {
     }
   }
 
+  // 🔥 LÓGICA DE REVERSO ADAPTADA PARA MÚLTIPLES ITEMS 🔥
   const reversarPago = async (pago: any) => {
     if (perfil?.rol !== 'ADMIN' && perfil?.rol !== 'RECEPCIONISTA') {
       return toast.error('No tienes permisos para anular pagos.')
     }
 
-    const esAbonoLibre = !pago.item_id;
+    const detallesPago = getDetalles(pago.comentario);
+    const itemsAsociados = detallesPago.filter((d: any) => d.id); 
+    const esAbonoLibre = itemsAsociados.length === 0;
+
     const mensajeConfirmacion = esAbonoLibre
       ? `Estás a punto de anular un INGRESO MANUAL a la billetera por $${Number(pago.monto).toLocaleString('es-CL')}.\n\n` +
         `Al presionar "ACEPTAR", el pago se anulará y el monto se DESCONTARÁ del Saldo a Favor del paciente.\n\n` +
         `Si presionas "CANCELAR", no se realizará ninguna acción.`
-      : `Estás a punto de anular un PAGO A TRATAMIENTO por $${Number(pago.monto).toLocaleString('es-CL')}.\n\n` +
-        `Al presionar "ACEPTAR", el pago se anulará, la deuda del tratamiento se restaurará y el monto se AGREGARÁ al Saldo a Favor (Billetera Virtual) del paciente.\n\n` +
+      : `Estás a punto de anular un PAGO CONSOLIDADO por $${Number(pago.monto).toLocaleString('es-CL')}.\n\n` +
+        `Al presionar "ACEPTAR", se restaurará la deuda de los ${itemsAsociados.length} tratamiento(s) pagados y el monto se AGREGARÁ al Saldo a Favor del paciente.\n\n` +
         `Si presionas "CANCELAR", no se realizará ninguna acción.`;
 
     const enviarASaldo = window.confirm(mensajeConfirmacion);
@@ -359,22 +363,25 @@ export default function PagosPacientePage() {
     try {
       const montoReversado = Number(pago.monto);
 
-      if (pago.item_id) {
-        const { data: itemActual } = await supabase
-          .from('presupuesto_items')
-          .select('abonado, presupuesto_id')
-          .eq('id', pago.item_id)
-          .single();
-        
-        if (itemActual) {
-          const nuevoAbonoItem = Math.max(0, Number(itemActual.abonado || 0) - montoReversado);
-          await supabase.from('presupuesto_items').update({ abonado: nuevoAbonoItem }).eq('id', pago.item_id);
+      if (!esAbonoLibre) {
+        // Revertimos cada item de este pago consolidado
+        for (const item of itemsAsociados) {
+          const { data: itemActual } = await supabase
+            .from('presupuesto_items')
+            .select('abonado, presupuesto_id')
+            .eq('id', item.id)
+            .single();
+          
+          if (itemActual) {
+            const nuevoAbonoItem = Math.max(0, Number(itemActual.abonado || 0) - Number(item.abonado_ahora || 0));
+            await supabase.from('presupuesto_items').update({ abonado: nuevoAbonoItem }).eq('id', item.id);
 
-          if (itemActual.presupuesto_id) {
-            const { data: presActual } = await supabase.from('presupuestos').select('total_abonado').eq('id', itemActual.presupuesto_id).single();
-            if (presActual) {
-              const nuevoTotalAbonado = Math.max(0, Number(presActual.total_abonado || 0) - montoReversado);
-              await supabase.from('presupuestos').update({ total_abonado: nuevoTotalAbonado }).eq('id', itemActual.presupuesto_id);
+            if (itemActual.presupuesto_id) {
+              const { data: presActual } = await supabase.from('presupuestos').select('total_abonado').eq('id', itemActual.presupuesto_id).single();
+              if (presActual) {
+                const nuevoTotalAbonado = Math.max(0, Number(presActual.total_abonado || 0) - Number(item.abonado_ahora || 0));
+                await supabase.from('presupuestos').update({ total_abonado: nuevoTotalAbonado }).eq('id', itemActual.presupuesto_id);
+              }
             }
           }
         }
@@ -384,9 +391,9 @@ export default function PagosPacientePage() {
       let nuevoSaldo;
       let detallesAuditoria;
 
-      if (pago.item_id) {
+      if (!esAbonoLibre) {
         nuevoSaldo = saldoActual + montoReversado;
-        detallesAuditoria = `Anuló un pago a tratamiento de $${pago.monto.toLocaleString('es-CL')}. Destino: SALDO A FAVOR`;
+        detallesAuditoria = `Anuló un pago consolidado de $${pago.monto.toLocaleString('es-CL')}. Destino: SALDO A FAVOR`;
       } else {
         nuevoSaldo = Math.max(0, saldoActual - montoReversado);
         detallesAuditoria = `Anuló un ingreso manual de $${pago.monto.toLocaleString('es-CL')}. Se descuenta de SALDO A FAVOR`;
@@ -620,7 +627,7 @@ export default function PagosPacientePage() {
               </div>
             </div>
 
-            {/* DETALLE DE LO QUE SE DEBE - SELECCIONABLE 🔥 */}
+            {/* DETALLE DE LO QUE SE DEBE - SELECCIONABLE */}
             {deudas.length > 0 && (
               <div className="bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] border border-white/60 shadow-xl">
                    <div className="flex justify-between items-center mb-6">
@@ -734,7 +741,6 @@ export default function PagosPacientePage() {
                     </div>
                   </div>
                   
-                  {/* 🔥 AHORA ESTE CAMPO ES AUTOMÁTICO SEGÚN LO SELECCIONADO 🔥 */}
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest pl-1">Monto Total a Pagar</label>
                     <div className="relative">
@@ -818,7 +824,6 @@ export default function PagosPacientePage() {
                                     const isExpanded = expandedRow === pago.id;
                                     const dt = getDetalles(pago.comentario);
                                     const isAnulado = pago.estado === 'Anulado';
-                                    const receptor = pago.receptor ? pago.receptor.nombre_completo : 'Sistema';
 
                                     return (
                                         <React.Fragment key={pago.id}>
