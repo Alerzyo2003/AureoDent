@@ -1,18 +1,35 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import { 
-  TrendingUp, Users, Calendar, DollarSign, Clock, 
-  Filter, Activity, ArrowUpRight, ArrowDownRight,
-  FileText, CheckCircle2, Receipt, Calculator, Trophy,
-  AlertCircle, Loader2, Briefcase, Stethoscope, PieChart as PieChartIcon
+import {
+  Calendar, DollarSign, Clock, Activity, ArrowUpRight, ArrowDownRight,
+  FileText, CheckCircle2, Stethoscope, Briefcase, Package, Wallet,
+  UserPlus, UserCheck, AlertTriangle, ShieldCheck, Minus
 } from 'lucide-react'
-import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, 
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, AreaChart, Area, Cell,
-  PieChart, Pie, Legend
+  PieChart, Pie, ComposedChart, Line
 } from 'recharts'
-import { motion } from 'framer-motion'
+
+// ─────────────────────────────────────────────────────────────
+// Paleta: "Signos Vitales" — clínica dental, sin defaults de IA.
+// Tinta profunda (slate-900) + Teal clínico (identidad dental) +
+// Ámbar (atención) + Rosa (alerta). Fondo cálido neutro, no cream-IA.
+// ─────────────────────────────────────────────────────────────
+const COLORS_PIE = ['#0d9488', '#1e293b', '#38bdf8', '#b45309', '#94a3b8']
+const MESES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+
+function pct(curr: number, prev: number) {
+  if (!prev) return curr > 0 ? 100 : 0
+  return Math.round(((curr - prev) / prev) * 100)
+}
+function money(v: number) {
+  return `$${Math.round(v || 0).toLocaleString('es-CL')}`
+}
+function monthKey(d: Date) {
+  return `${d.getFullYear()}-${d.getMonth()}`
+}
 
 export default function PanelDesempenoPage() {
   const [mes, setMes] = useState(new Date().getMonth() + 1)
@@ -21,325 +38,639 @@ export default function PanelDesempenoPage() {
   const [data, setData] = useState<any>(null)
   const [mounted, setMounted] = useState(false)
 
-  const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
-
   useEffect(() => {
     setMounted(true)
     fetchMetrics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mes, anio])
 
   async function fetchMetrics() {
     setLoading(true)
+    setData(null) // evita renderizar con un estado parcial/antiguo mientras carga el nuevo mes
     try {
-      const inicioMes = new Date(anio, mes - 1, 1, 0, 0, 0).toISOString()
+      const inicioMes = new Date(anio, mes - 1, 1).toISOString()
       const finMes = new Date(anio, mes, 0, 23, 59, 59).toISOString()
+      const inicioMesAnt = new Date(anio, mes - 2, 1).toISOString()
+      const finMesAnt = new Date(anio, mes - 1, 0, 23, 59, 59).toISOString()
       const fechaHistorialInicio = new Date(anio, mes - 6, 1).toISOString()
 
       const [
         { data: citasData },
-        { count: pacientesNuevos },
-        { count: totalPresupuestos },
+        { data: pacientesData },
+        { data: presupuestosData },
         { data: pagosData },
+        { data: pagosAntData },
         { data: atencionesData },
-        { data: cajasData },
-        { data: historialCajas },
-        { data: historialPagos }
+        { data: atencionesAntData },
+        { data: atencionesHistorial },
+        { data: pagosHistorial },
+        { data: egresosData },
+        { data: liquidacionesData },
+        { data: inventarioData },
+        { data: cajaData },
       ] = await Promise.all([
         supabase.from('citas').select('*').gte('inicio', inicioMes).lte('inicio', finMes),
-        supabase.from('pacientes').select('*', { count: 'exact', head: true }).gte('created_at', inicioMes).lte('created_at', finMes),
-        supabase.from('presupuestos').select('*', { count: 'exact', head: true }).gte('fecha_creacion', inicioMes).lte('fecha_creacion', finMes),
-        supabase.from('pagos').select('*, perfiles:profesional_id(nombre_completo)').gte('fecha_pago', inicioMes).lte('fecha_pago', finMes),
-        supabase.from('atenciones_realizadas').select('*, pacientes(prevision), perfiles:profesional_id(nombre_completo)').gte('fecha', inicioMes).lte('fecha', finMes),
-        supabase.from('sesiones_caja').select('*, pagos(monto)').gte('fecha_apertura', inicioMes).lte('fecha_apertura', finMes),
-        supabase.from('sesiones_caja').select('monto_cierre, monto_apertura, fecha_apertura').gte('fecha_apertura', fechaHistorialInicio).lte('fecha_apertura', finMes),
-        supabase.from('pagos').select('monto, fecha_pago').gte('fecha_pago', fechaHistorialInicio).lte('fecha_pago', finMes)
+        supabase.from('pacientes').select('id, created_at'),
+        supabase.from('presupuestos').select('id, aprobado, total').gte('fecha_creacion', inicioMes).lte('fecha_creacion', finMes),
+        supabase.from('pagos').select('monto, fecha_pago, convenio, perfiles:profesional_id(nombre_completo)').gte('fecha_pago', inicioMes).lte('fecha_pago', finMes),
+        supabase.from('pagos').select('monto').gte('fecha_pago', inicioMesAnt).lte('fecha_pago', finMesAnt),
+        supabase.from('atenciones_realizadas').select('monto_cobrado, fecha, paciente_id, pacientes(prevision, created_at), perfiles:profesional_id(nombre_completo)').gte('fecha', inicioMes).lte('fecha', finMes),
+        supabase.from('atenciones_realizadas').select('monto_cobrado').gte('fecha', inicioMesAnt).lte('fecha', finMesAnt),
+        supabase.from('atenciones_realizadas').select('monto_cobrado, fecha').gte('fecha', fechaHistorialInicio).lte('fecha', finMes),
+        supabase.from('pagos').select('monto, fecha_pago').gte('fecha_pago', fechaHistorialInicio).lte('fecha_pago', finMes),
+        supabase.from('egresos').select('categoria, monto').gte('fecha', inicioMes).lte('fecha', finMes),
+        supabase.from('liquidaciones').select('monto_total, profesional_id, profesionales(nombre, apellido)').gte('fecha_pago', inicioMes).lte('fecha_pago', finMes),
+        supabase.from('inventario_productos').select('nombre, stock_actual, stock_seguridad'),
+        supabase.from('sesiones_caja').select('*').gte('fecha_apertura', inicioMes).lte('fecha_apertura', finMes),
       ])
 
-      const abonosPorEspecialista = (pagosData || []).reduce((acc: any, curr: any) => {
-        const nombre = (curr.perfiles as any)?.nombre_completo || 'Clínica / General'
-        acc[nombre] = (acc[nombre] || 0) + Number(curr.monto || 0)
+      // ── AGENDA ──────────────────────────────────────────────
+      const pacientesNuevos = (pacientesData || []).filter(p => p.created_at >= inicioMes && p.created_at <= finMes).length
+      const pacientesNuevosAnt = (pacientesData || []).filter(p => p.created_at >= inicioMesAnt && p.created_at <= finMesAnt).length
+      const citasTotales = citasData?.length || 0
+      const citasAnuladas = (citasData || []).filter(c => c.estado === 'anulada').length
+      const citasAtendidas = (citasData || []).filter(c => !!c.hora_inicio_atencion).length
+      const citasConfirmadas = (citasData || []).filter(c => c.estado_confirmacion === 'confirmado').length
+      const citasPendientesConf = (citasData || []).filter(c => c.estado_confirmacion === 'pendiente').length
+      const ocupacion = citasTotales > 0 ? Math.round(((citasTotales - citasAnuladas) / citasTotales) * 100) : 0
+      const atendidosVsAgendados = citasTotales > 0 ? Math.round((citasAtendidas / citasTotales) * 100) : 0
+
+      const presupuestosAprobados = (presupuestosData || []).filter(p => p.aprobado).length
+      const presupuestosTotalCount = presupuestosData?.length || 0
+      const tasaAprobacion = presupuestosTotalCount > 0 ? Math.round((presupuestosAprobados / presupuestosTotalCount) * 100) : 0
+      const montoAprobado = (presupuestosData || []).filter(p => p.aprobado).reduce((a: number, p: any) => a + Number(p.total || 0), 0)
+
+      // ── TIEMPO DE ESPERA (real, desde citas) ────────────────
+      const esperas = (citasData || [])
+        .filter((c: any) => c.hora_llegada && c.hora_inicio_atencion)
+        .map((c: any) => (new Date(c.hora_inicio_atencion).getTime() - new Date(c.hora_llegada).getTime()) / 60000)
+        .filter((m: number) => m >= 0 && m < 240)
+      const esperaPromedio = esperas.length ? Math.round((esperas.reduce((a: number, b: number) => a + b, 0) / esperas.length) * 10) / 10 : null
+
+      // ── VENTAS Y RECAUDACIÓN ────────────────────────────────
+      const ventasTotal = (atencionesData || []).reduce((acc: number, a: any) => acc + Number(a.monto_cobrado || 0), 0)
+      const ventasAnt = (atencionesAntData || []).reduce((acc: number, a: any) => acc + Number(a.monto_cobrado || 0), 0)
+      const recaudacionTotal = (pagosData || []).reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0)
+      const recaudacionAnt = (pagosAntData || []).reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0)
+
+      // ── COSTOS REALES (egresos + liquidaciones) ─────────────
+      const egresosTotal = (egresosData || []).reduce((a: number, e: any) => a + Number(e.monto || 0), 0)
+      const egresosPorCategoria = Object.entries(
+        (egresosData || []).reduce((acc: any, e: any) => {
+          const cat = e.categoria || 'Otros'
+          acc[cat] = (acc[cat] || 0) + Number(e.monto || 0)
+          return acc
+        }, {})
+      ).map(([categoria, monto]) => ({ categoria, monto: monto as number })).sort((a, b) => b.monto - a.monto)
+
+      const liquidacionesTotal = (liquidacionesData || []).reduce((a: number, l: any) => a + Number(l.monto_total || 0), 0)
+      const liquidacionesPorProf = Object.entries(
+        (liquidacionesData || []).reduce((acc: any, l: any) => {
+          const nombre = l.profesionales ? `${(l.profesionales as any).nombre} ${(l.profesionales as any).apellido}` : 'Sin asignar'
+          acc[nombre] = (acc[nombre] || 0) + Number(l.monto_total || 0)
+          return acc
+        }, {})
+      ).map(([name, Liquidado]) => ({ name, Liquidado: Liquidado as number })).sort((a, b) => b.Liquidado - a.Liquidado).slice(0, 10)
+
+      // ── CAJA ─────────────────────────────────────────────────
+      const cajaSesiones = cajaData?.length || 0
+      const cajaEfectivo = (cajaData || []).reduce((a: number, c: any) => a + Number(c.total_efectivo_esperado || 0), 0)
+      const cajaTarjeta = (cajaData || []).reduce((a: number, c: any) => a + Number(c.total_tarjeta_esperado || 0), 0)
+      const cajaTransferencia = (cajaData || []).reduce((a: number, c: any) => a + Number(c.total_transferencia_esperado || 0), 0)
+
+      // ── INVENTARIO: alertas de stock bajo ───────────────────
+      const alertasStock = (inventarioData || [])
+        .filter((p: any) => Number(p.stock_actual) <= Number(p.stock_seguridad))
+        .sort((a: any, b: any) => (a.stock_actual - a.stock_seguridad) - (b.stock_actual - b.stock_seguridad))
+        .slice(0, 6)
+
+      // ── RANKING POR PROFESIONAL (ventas reales) ─────────────
+      const ventasPorProf = (atencionesData || []).reduce((acc: any, curr: any) => {
+        const nombre = (curr.perfiles as any)?.nombre_completo || 'General'
+        acc[nombre] = (acc[nombre] || 0) + Number(curr.monto_cobrado || 0)
         return acc
       }, {})
+      const chartProfesionales = Object.entries(ventasPorProf)
+        .map(([name, value]) => ({ name, Ventas: value as number }))
+        .sort((a, b) => b.Ventas - a.Ventas)
+        .slice(0, 10)
 
-      const chartVentasProf = Object.entries(abonosPorEspecialista)
-        .map(([name, value]) => ({ name, value }))
-        .sort((a: any, b: any) => b.value - a.value)
-
+      // ── CONVENIOS: atenciones (conteo) y ventas (monto) ─────
       const atencionesConvenio = (atencionesData || []).reduce((acc: any, curr: any) => {
-        const convenio = (curr.pacientes as any)?.prevision || 'Particular'
+        const convenio = (curr.pacientes as any)?.prevision || 'Sin Convenio'
         acc[convenio] = (acc[convenio] || 0) + 1
         return acc
       }, {})
+      const chartAtencionesConv = agruparTop(atencionesConvenio)
 
-      const chartPieConvenio = Object.entries(atencionesConvenio)
-        .map(([name, value]) => ({ name, value }))
+      const ventasConvenio = (atencionesData || []).reduce((acc: any, curr: any) => {
+        const convenio = (curr.pacientes as any)?.prevision || 'Sin Convenio'
+        acc[convenio] = (acc[convenio] || 0) + Number(curr.monto_cobrado || 0)
+        return acc
+      }, {})
+      const chartVentasConv = agruparTop(ventasConvenio)
 
-      const ventasCajaMesActual = (cajasData || []).reduce((acc: number, caja: any) => {
-        const neto = caja.estado === 'cerrada' 
-          ? (Number(caja.monto_cierre || 0) - Number(caja.monto_apertura || 0))
-          : ((caja.pagos as any[])?.reduce((sum: number, p: any) => sum + Number(p.monto || 0), 0) || 0)
-        return acc + neto
-      }, 0)
+      // ── PACIENTES: nuevos vs recurrentes (dentro de atenciones del mes) ──
+      const vistos = new Set<string>()
+      let pacTipoNuevo = 0, pacTipoRecurrente = 0
+      for (const a of (atencionesData || [])) {
+        const pid = (a as any).paciente_id
+        if (!pid || vistos.has(pid)) continue
+        vistos.add(pid)
+        const creado = (a as any).pacientes?.created_at
+        if (creado && creado >= inicioMes && creado <= finMes) pacTipoNuevo++
+        else pacTipoRecurrente++
+      }
+      const chartPacientesTipo = agruparTop({ 'Nuevos': pacTipoNuevo, 'Recurrentes': pacTipoRecurrente })
 
-      const mesesLabels = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"]
+      // ── HISTORIAL REAL 6 MESES ──────────────────────────────
+      const mapAtenciones: Record<string, { count: number; ventas: number }> = {}
+      for (const a of (atencionesHistorial || [])) {
+        const key = monthKey(new Date((a as any).fecha))
+        if (!mapAtenciones[key]) mapAtenciones[key] = { count: 0, ventas: 0 }
+        mapAtenciones[key].count += 1
+        mapAtenciones[key].ventas += Number((a as any).monto_cobrado || 0)
+      }
+      const mapPagos: Record<string, number> = {}
+      for (const p of (pagosHistorial || [])) {
+        const key = monthKey(new Date((p as any).fecha_pago))
+        mapPagos[key] = (mapPagos[key] || 0) + Number((p as any).monto || 0)
+      }
       const chartHistory = []
       for (let i = 5; i >= 0; i--) {
         const d = new Date(anio, mes - 1 - i, 1)
-        const mIdx = d.getMonth(); const yVal = d.getFullYear()
-        const totalVentasM = (historialCajas || []).filter((c: any) => {
-          const cDate = new Date(c.fecha_apertura); return cDate.getMonth() === mIdx && cDate.getFullYear() === yVal
-        }).reduce((acc: number, c: any) => acc + (Number(c.monto_cierre || 0) - Number(c.monto_apertura || 0)), 0)
-         
-        const totalRecM = (historialPagos || []).filter((p: any) => {
-          const pDate = new Date(p.fecha_pago); return pDate.getMonth() === mIdx && pDate.getFullYear() === yVal
-        }).reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0)
-         
-        chartHistory.push({ name: mesesLabels[mIdx], ventas: totalVentasM || (i === 0 ? ventasCajaMesActual : 0), recaudacion: totalRecM })
+        const key = monthKey(d)
+        chartHistory.push({
+          name: MESES[d.getMonth()],
+          Atenciones: mapAtenciones[key]?.count || 0,
+          Ventas: mapAtenciones[key]?.ventas || 0,
+          Recaudacion: mapPagos[key] || 0,
+        })
       }
 
       setData({
         agenda: {
-          pacientesNuevos: pacientesNuevos || 0,
-          anuladas: (citasData || []).filter((c: any) => c.estado === 'anulada').length || 0,
-          presupuestos: totalPresupuestos || 0,
-          ocupacion: citasData?.length ? Math.round((citasData.filter((c: any) => c.estado === 'finalizada').length / citasData.length) * 100) : 0,
-          espera: "17.9"
+          nuevos: pacientesNuevos,
+          nuevosDelta: pct(pacientesNuevos, pacientesNuevosAnt),
+          anuladas: citasAnuladas,
+          confirmadas: citasConfirmadas,
+          pendientesConf: citasPendientesConf,
+          ocupacion,
+          presupuestos: presupuestosTotalCount,
+          presupuestosAprobados,
+          tasaAprobacion,
+          montoAprobado,
+          atendidosVsAgendados,
+          citasTotales,
         },
-        financiero: { ventas: ventasCajaMesActual, recaudacion: (pagosData || []).reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0) },
+        finanzas: {
+          ventas: ventasTotal,
+          ventasDelta: pct(ventasTotal, ventasAnt),
+          recaudacion: recaudacionTotal,
+          recaudacionDelta: pct(recaudacionTotal, recaudacionAnt),
+          egresosTotal,
+          egresosPorCategoria,
+          liquidacionesTotal,
+          liquidacionesPorProf,
+        },
+        operacion: {
+          esperaPromedio,
+          muestras: esperas.length,
+          caja: { sesiones: cajaSesiones, efectivo: cajaEfectivo, tarjeta: cajaTarjeta, transferencia: cajaTransferencia },
+        },
+        inventario: { alertas: alertasStock },
         charts: {
-          ventasProf: chartVentasProf || [],
-          pieConvenio: chartPieConvenio || [],
-          history: chartHistory || [],
-          convenios: Object.entries((pagosData || []).reduce((acc: any, curr: any) => {
-            const conv = curr.convenio || 'Particular'; acc[conv] = (acc[conv] || 0) + Number(curr.monto || 0); return acc
-          }, {})).map(([name, value]) => ({ name, value: value as number })).sort((a: any, b: any) => b.value - a.value)
-        }
+          history: chartHistory,
+          profesionales: chartProfesionales,
+          convenios: chartAtencionesConv,
+          ventasConvenio: chartVentasConv,
+          pacientesTipo: chartPacientesTipo,
+        },
       })
-    } catch (error) { console.error(error) } finally { setLoading(false) }
+    } catch (error) {
+      console.error(error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function agruparTop(obj: Record<string, number>, top = 4) {
+    const entries = Object.entries(obj).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1])
+    const total = entries.reduce((a, [, v]) => a + v, 0)
+    if (total === 0) return []
+    const head = entries.slice(0, top)
+    const restTotal = entries.slice(top).reduce((a, [, v]) => a + v, 0)
+    const result = head.map(([name, value]) => ({ name, value }))
+    if (restTotal > 0) result.push({ name: 'Otros', value: restTotal })
+    return result
   }
 
   if (!mounted || loading || !data) return (
-    <div className="h-full min-h-[600px] flex flex-col items-center justify-center gap-4 bg-transparent">
-      <Loader2 className="animate-spin text-blue-600" size={40} />
-      <p className="font-black text-[10px] uppercase tracking-widest text-slate-500 italic">Analizando Desempeño Clínica...</p>
+    <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+      <PulseSpinner />
+      <p className="text-xs uppercase tracking-widest font-bold mt-4">Auscultando la base de datos…</p>
     </div>
   )
 
-  return (
-    <div 
-      className="w-full h-full min-h-screen p-4 sm:p-6 md:p-10 font-sans text-slate-900 text-left"
-      style={{
-        backgroundImage: "url('/fondo-pacientes.png')",
-        backgroundSize: 'cover',
-        backgroundPosition: 'center top',
-        backgroundRepeat: 'no-repeat',
-        backgroundAttachment: 'fixed'
-      }}
-    >
-      <div className="max-w-7xl mx-auto space-y-8 text-left">
-        
-        {/* ENCABEZADO */}
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }} 
-          animate={{ opacity: 1, y: 0 }} 
-          className="flex flex-col md:flex-row justify-between items-center bg-white/90 backdrop-blur-xl p-8 rounded-[3rem] shadow-sm border border-white/60 gap-6 text-left"
-        >
-          <div className="text-left">
-            <h1 className="text-3xl font-black uppercase italic tracking-tighter text-slate-800 leading-none text-left">Panel de Desempeño</h1>
-            <p className="text-[10px] font-bold text-blue-600 uppercase tracking-[0.3em] mt-2 text-left">Centro Médico y Dental Dignidad SpA</p>
-          </div>
-          <div className="flex items-center gap-3 text-left">
-            <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className="bg-slate-50/80 border border-slate-200/60 rounded-2xl py-3 px-6 text-xs font-black uppercase outline-none focus:ring-2 ring-blue-500/20 cursor-pointer shadow-sm text-slate-900">
-              {["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"].map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-            </select>
-            <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="bg-slate-50/80 border border-slate-200/60 rounded-2xl py-3 px-6 text-xs font-black outline-none focus:ring-2 ring-blue-500/20 cursor-pointer shadow-sm text-slate-900">
-              {[2024, 2025, 2026].map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-        </motion.div>
+  const historyLast = data.charts.history[data.charts.history.length - 1]
 
-        {/* TARJETAS DE MÉTRICAS RÁPIDAS */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4 text-left">
-          <MetricCard title="Pacientes Nuevos" value={data.agenda.pacientesNuevos} icon={<Users size={20}/>} color="blue" />
-          <MetricCard title="Citas Anuladas" value={data.agenda.anuladas} icon={<AlertCircle size={20}/>} color="red" />
-          <MetricCard title="Ocupación" value={`${data.agenda.ocupacion}%`} icon={<Activity size={20}/>} color="emerald" />
-          <MetricCard title="Presupuestos" value={data.agenda.presupuestos} icon={<FileText size={20}/>} color="purple" />
-          <MetricCard title="Finalizados" value={`${data.agenda.ocupacion}%`} icon={<CheckCircle2 size={20}/>} color="blue" />
+  return (
+    <div className="w-full min-h-screen bg-slate-50 text-slate-900 font-sans">
+      <div className="max-w-[1400px] mx-auto p-4 sm:p-6 md:p-8 space-y-8">
+
+        {/* HEADER */}
+        <div className="relative overflow-hidden rounded-3xl bg-slate-900 text-white p-6 sm:p-8 shadow-sm">
+          <div className="absolute inset-0 opacity-[0.07]" style={{
+            backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)',
+            backgroundSize: '18px 18px'
+          }} />
+          <div className="relative flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <ShieldCheck size={16} className="text-teal-400" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-teal-400">Signos vitales de la clínica</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-black tracking-tight">Panel de Desempeño</h1>
+              <p className="text-xs text-slate-400 mt-1">{MESES[mes - 1]} {anio} · datos en vivo desde Supabase</p>
+            </div>
+            <div className="flex gap-2">
+              <select value={mes} onChange={(e) => setMes(Number(e.target.value))} className="bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-xs font-bold uppercase text-white outline-none">
+                {MESES.map((m, i) => <option key={m} value={i + 1} className="text-slate-900">{m}</option>)}
+              </select>
+              <select value={anio} onChange={(e) => setAnio(Number(e.target.value))} className="bg-white/10 border border-white/10 rounded-lg px-4 py-2 text-xs font-bold text-white outline-none">
+                {[2024, 2025, 2026].map(a => <option key={a} value={a} className="text-slate-900">{a}</option>)}
+              </select>
+            </div>
+          </div>
+          <PulseLine />
         </div>
 
-        {/* GRÁFICOS FINANCIEROS PRINCIPALES */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
-          <div className="bg-white/90 backdrop-blur-xl p-8 md:p-10 rounded-[3.5rem] shadow-sm border border-white/60 text-left">
-            <div className="flex justify-between items-start mb-8 text-left">
-              <div className="text-left">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none text-left">Producción Clínica (Ventas)</p>
-                <h2 className="text-3xl md:text-4xl font-black text-slate-800 mt-3 text-left">${Number(data.financiero.ventas).toLocaleString('es-CL')}</h2>
-                <span className="text-blue-600 text-[10px] font-bold flex items-center gap-1 mt-2"><Briefcase size={12}/> Flujo neto de cajas</span>
-              </div>
-              <div className="bg-blue-50 p-4 rounded-3xl text-blue-600 shadow-inner shrink-0 border border-blue-100/50"><TrendingUp size={24}/></div>
-            </div>
-            <div className="h-[280px] w-full text-left">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={data?.charts?.history || []}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} className="text-[10px] font-bold" />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '20px', border:'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} 
-                    formatter={(val: any) => `$${Number(val || 0).toLocaleString('es-CL')}`}
-                  />
-                  <Area type="monotone" dataKey="ventas" stroke="#3b82f6" strokeWidth={4} fill="#3b82f6" fillOpacity={0.1} />
-                </AreaChart>
-              </ResponsiveContainer>
+        {/* SIGNOS VITALES: KPI ribbon con sparkline */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
+          <VitalCard icon={DollarSign} label="Ventas" value={money(data.finanzas.ventas)} delta={data.finanzas.ventasDelta} history={data.charts.history} dataKey="Ventas" accent="#0d9488" />
+          <VitalCard icon={Wallet} label="Recaudación" value={money(data.finanzas.recaudacion)} delta={data.finanzas.recaudacionDelta} history={data.charts.history} dataKey="Recaudacion" accent="#38bdf8" />
+          <VitalCard icon={UserPlus} label="Pacientes nuevos" value={String(data.agenda.nuevos)} delta={data.agenda.nuevosDelta} history={data.charts.history} dataKey="Atenciones" accent="#b45309" />
+          <VitalCard icon={CheckCircle2} label="Ocupación agenda" value={`${data.agenda.ocupacion}%`} plain accent="#0d9488" />
+          <VitalCard icon={Clock} label="Espera promedio" value={data.operacion.esperaPromedio !== null ? `${data.operacion.esperaPromedio} min` : 'Sin datos'} plain accent="#94a3b8" />
+        </div>
+
+        {/* AGENDA Y ATENCIONES */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <SectionTitle icon={Calendar} label="Agenda del mes" />
+            <div className="space-y-4">
+              <MiniStat label="Pacientes nuevos" value={data.agenda.nuevos} />
+              <MiniStat label="Citas anuladas" value={data.agenda.anuladas} isNegative />
+              <MiniStat label="Confirmadas" value={data.agenda.confirmadas} />
+              <MiniStat label="Pendientes de confirmar" value={data.agenda.pendientesConf} />
+              <MiniStat label="Atendidos vs. agendados" value={`${data.agenda.atendidosVsAgendados}%`} />
+              <MiniStat label="Presupuestos creados" value={data.agenda.presupuestos} />
+              <MiniStat label="Tasa de aprobación" value={`${data.agenda.tasaAprobacion}%`} />
             </div>
           </div>
 
-          <div className="bg-white/90 backdrop-blur-xl p-8 md:p-10 rounded-[3.5rem] shadow-sm border border-white/60 text-left">
-            <div className="flex justify-between items-start mb-8 text-left">
-              <div className="text-left">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none text-left">Recaudación (Ingresos)</p>
-                <h2 className="text-3xl md:text-4xl font-black text-emerald-600 mt-3 text-left">${Number(data.financiero.recaudacion).toLocaleString('es-CL')}</h2>
-                <span className="text-emerald-600 text-[10px] font-bold flex items-center gap-1 mt-2"><ArrowUpRight size={12}/> Pagos ingresados</span>
-              </div>
-              <div className="bg-emerald-50 p-4 rounded-3xl text-emerald-600 shadow-inner shrink-0 border border-emerald-100/50"><DollarSign size={24}/></div>
+          <div className="lg:col-span-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+            <SectionTitle icon={Activity} label="Atenciones por mes" />
+            <div className="flex items-baseline gap-3 mb-6">
+              <span className="text-3xl font-black text-slate-800">{historyLast?.Atenciones || 0}</span>
+              <span className="text-xs font-bold text-slate-500 uppercase">atenciones este mes</span>
             </div>
-            <div className="h-[280px] w-full text-left">
+            <div className="flex-1 min-h-[200px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data?.charts?.history || []}>
+                <BarChart data={data.charts.history}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} className="text-[10px] font-bold uppercase" />
-                  <Tooltip 
-                    contentStyle={{borderRadius: '20px', border:'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)'}} 
-                    formatter={(val: any) => `$${Number(val || 0).toLocaleString('es-CL')}`}
-                  />
-                  <Bar dataKey="recaudacion" fill="#10b981" radius={[10, 10, 0, 0]} barSize={20} />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} className="text-[10px] font-bold" />
+                  <Tooltip cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="Atenciones" fill="#0d9488" radius={[4, 4, 0, 0]} barSize={24} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
         </div>
 
-        {/* ESPECIALISTAS Y CONVENIOS */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 text-left">
-          <div className="bg-white/90 backdrop-blur-xl p-8 md:p-10 rounded-[3.5rem] shadow-sm border border-white/60 text-left">
-            <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-8 flex items-center gap-2 text-left">
-              <Trophy size={16} className="text-amber-500" /> Producción por Especialista (Abonos)
-            </h3>
-            <div className="h-[380px] text-left">
-              {data.charts.ventasProf.length > 0 ? (
+        {/* VENTAS Y RECAUDACIÓN */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-4 space-y-6">
+            <MoneyCard title="Ventas (atenciones realizadas)" value={data.finanzas.ventas} delta={data.finanzas.ventasDelta} color="text-slate-800" />
+            <MoneyCard title="Recaudación (pagos)" value={data.finanzas.recaudacion} delta={data.finanzas.recaudacionDelta} color="text-teal-600" />
+          </div>
+
+          <div className="lg:col-span-8 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div className="flex justify-between items-center mb-6">
+              <SectionTitle icon={DollarSign} label="Ventas y recaudación mensual" noMargin />
+              <div className="flex gap-4 text-[10px] font-bold uppercase">
+                <span className="flex items-center gap-1 text-slate-600"><div className="w-2 h-2 bg-teal-600 rounded-full" /> Ventas</span>
+                <span className="flex items-center gap-1 text-slate-600"><div className="w-2 h-2 bg-sky-400 rounded-full" /> Recaudación</span>
+              </div>
+            </div>
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={data.charts.history}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} className="text-[10px] font-bold" />
+                  <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `$${v / 1000000}M`} className="text-[10px] font-bold text-slate-400" />
+                  <Tooltip formatter={(val: any) => money(Number(val))} cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)' }} />
+                  <Bar dataKey="Ventas" fill="#0d9488" radius={[4, 4, 0, 0]} barSize={20} />
+                  <Line type="monotone" dataKey="Recaudacion" stroke="#38bdf8" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        {/* OPERACIÓN: ESPERA Y CAJA */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex items-center gap-6">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100"><Clock size={32} className="text-slate-600" /></div>
+            <div>
+              <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Tiempo de espera</h2>
+              <div className="text-2xl font-black text-slate-800">
+                {data.operacion.esperaPromedio !== null ? `${data.operacion.esperaPromedio} min` : '—'}
+                <span className="text-sm font-bold text-slate-400 uppercase ml-2">en este mes</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">calculado sobre {data.operacion.muestras} citas con hora de llegada e inicio registradas</p>
+            </div>
+          </div>
+
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <SectionTitle icon={Wallet} label="Caja del mes" noMargin />
+            <div className="grid grid-cols-3 gap-3 mt-4">
+              <CajaStat label="Efectivo" value={data.operacion?.caja?.efectivo || 0} />
+              <CajaStat label="Tarjeta" value={data.operacion?.caja?.tarjeta || 0} />
+              <CajaStat label="Transferencia" value={data.operacion?.caja?.transferencia || 0} />
+            </div>
+            <p className="text-[10px] text-slate-400 mt-3">{data.operacion?.caja?.sesiones || 0} sesión(es) de caja registradas este mes</p>
+          </div>
+        </div>
+
+        {/* COSTOS REALES */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-7 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div className="flex justify-between items-center mb-4">
+              <SectionTitle icon={FileText} label="Egresos por categoría" noMargin />
+              <span className="text-lg font-black text-slate-800">{money(data.finanzas.egresosTotal)}</span>
+            </div>
+            {data.finanzas.egresosPorCategoria.length === 0 ? (
+              <EmptyState text="No hay egresos registrados este mes." />
+            ) : (
+              <div className="space-y-3">
+                {data.finanzas.egresosPorCategoria.map((e: any, i: number) => {
+                  const maxV = data.finanzas.egresosPorCategoria[0].monto || 1
+                  return (
+                    <div key={e.categoria}>
+                      <div className="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                        <span>{e.categoria}</span>
+                        <span>{money(e.monto)}</span>
+                      </div>
+                      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${Math.max((e.monto / maxV) * 100, 4)}%`, backgroundColor: COLORS_PIE[i % COLORS_PIE.length] }} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="lg:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div className="flex justify-between items-center mb-4">
+              <SectionTitle icon={Briefcase} label="Liquidaciones a profesionales" noMargin />
+              <span className="text-lg font-black text-teal-600">{money(data.finanzas.liquidacionesTotal)}</span>
+            </div>
+            {data.finanzas.liquidacionesPorProf.length === 0 ? (
+              <EmptyState text="No hay liquidaciones pagadas este mes." />
+            ) : (
+              <div className="space-y-2">
+                {data.finanzas.liquidacionesPorProf.slice(0, 6).map((l: any) => (
+                  <div key={l.name} className="flex justify-between text-xs font-bold text-slate-600 py-1.5 border-b border-slate-50 last:border-0">
+                    <span className="truncate pr-2">{l.name}</span>
+                    <span className="text-slate-800">{money(l.Liquidado)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* RANKING PROFESIONALES */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <SectionTitle icon={Stethoscope} label="Ventas por profesional" />
+            {data.charts.profesionales.length === 0 ? <EmptyState text="Sin atenciones registradas este mes." /> : (
+              <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.charts.ventasProf} layout="vertical" margin={{ left: 10, right: 30 }}>
+                  <BarChart data={data.charts.profesionales} layout="vertical" margin={{ left: 20 }}>
                     <XAxis type="number" hide />
-                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={130} className="text-[9px] font-black uppercase" />
-                    <Tooltip 
-                      cursor={{fill: 'transparent'}} 
-                      formatter={(val: any) => `$${Number(val || 0).toLocaleString('es-CL')}`} 
-                    />
-                    <Bar dataKey="value" fill="#3b82f6" radius={[0, 10, 10, 0]} barSize={22}>
-                      {data.charts.ventasProf.map((entry: any, index: number) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? '#3b82f6' : '#94a3b8'} fillOpacity={1 - (index * 0.15)} />
-                      ))}
-                    </Bar>
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} className="text-[10px] font-bold text-slate-600" />
+                    <Tooltip formatter={(val: any) => money(Number(val))} cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none' }} />
+                    <Bar dataKey="Ventas" fill="#0d9488" radius={[0, 4, 4, 0]} barSize={12} />
                   </BarChart>
                 </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-slate-300 font-black uppercase text-[10px] text-center">Sin abonos registrados</div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
-          <div className="bg-white/90 backdrop-blur-xl p-8 md:p-10 rounded-[3.5rem] shadow-sm border border-white/60 text-left">
-            <h3 className="text-xs font-black uppercase text-slate-400 tracking-widest mb-8 flex items-center gap-2 text-left">
-              <PieChartIcon size={16} className="text-blue-500" /> Atenciones por Convenio
-            </h3>
-            <div className="h-[380px] text-left">
-              {data.charts.pieConvenio.length > 0 ? (
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <SectionTitle icon={Briefcase} label="Liquidado por profesional" />
+            {data.finanzas.liquidacionesPorProf.length === 0 ? <EmptyState text="Sin liquidaciones este mes." /> : (
+              <div className="h-[300px]">
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={data.charts.pieConvenio}
-                      cx="50%" cy="45%"
-                      innerRadius={80} outerRadius={115}
-                      paddingAngle={5} dataKey="value"
-                      // @ts-ignore
-                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {data.charts.pieConvenio.map((entry: any, index: number) => (
-                        <Cell key={`cell-pie-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip formatter={(val: any) => Number(val || 0)} />
-                    <Legend verticalAlign="bottom" height={36}/>
-                  </PieChart>
+                  <BarChart data={data.finanzas.liquidacionesPorProf} layout="vertical" margin={{ left: 20 }}>
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} width={100} className="text-[10px] font-bold text-slate-600" />
+                    <Tooltip formatter={(val: any) => money(Number(val))} cursor={{ fill: '#f8fafc' }} contentStyle={{ borderRadius: '8px', border: 'none' }} />
+                    <Bar dataKey="Liquidado" fill="#1e293b" radius={[0, 4, 4, 0]} barSize={12} />
+                  </BarChart>
                 </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-slate-300 font-black uppercase text-[10px] text-center">Sin flujo de pacientes</div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* EFICIENCIA Y FLUJO */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-10 text-left">
-          <div className="bg-slate-900 p-8 md:p-10 rounded-[3.5rem] text-white flex flex-col justify-between shadow-xl relative overflow-hidden text-left border border-slate-800">
-            <div className="absolute top-0 right-0 p-12 opacity-5 rotate-12 pointer-events-none"><Activity size={200} /></div>
-            <div className="space-y-6 relative z-10 text-left">
-              <div className="flex items-center gap-4 text-left">
-                <div className="bg-blue-600 p-3 rounded-2xl shadow-lg shadow-blue-500/20 shrink-0"><Clock size={24} /></div>
-                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-left">Eficiencia Operativa</p>
-              </div>
-              <h4 className="text-4xl md:text-5xl font-black italic tracking-tighter text-left">{data.agenda.espera} min</h4>
-              <p className="text-[11px] text-slate-400 uppercase font-bold tracking-widest italic text-left">Tiempo promedio real</p>
-            </div>
-             
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-10 relative z-10 text-left">
-              <div className="bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-md text-left">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4 text-center">Top Convenios ($)</p>
-                <div className="space-y-3 text-left">
-                  {data.charts.convenios.slice(0, 4).map((c: any) => (
-                    <div key={c.name} className="flex justify-between items-center text-[10px] font-bold border-b border-white/5 pb-1">
-                      <span className="truncate pr-2 uppercase text-slate-300">{c.name}</span>
-                      <span className="text-blue-400 font-black">${Number(c.value).toLocaleString('es-CL')}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="bg-white/5 p-6 rounded-3xl border border-white/10 flex flex-col justify-center items-center text-center">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Estado General</p>
-                <p className="text-2xl font-black text-emerald-400">SALUDABLE</p>
-                <div className="mt-4 h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 w-[85%] shadow-[0_0_10px_#10b981]"></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white/90 backdrop-blur-xl p-8 md:p-10 rounded-[3.5rem] border border-white/60 shadow-sm flex flex-col justify-center items-center text-center space-y-4">
-             <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl shrink-0 border border-blue-100/50"><Stethoscope size={32} /></div>
-             <h3 className="text-lg font-black uppercase italic text-slate-800">Distribución de Flujo</h3>
-             <p className="text-xs text-slate-500 font-medium max-w-xs text-center">Convenio con mayor flujo: <strong>{data?.charts?.pieConvenio?.[0]?.name || 'Ninguno'}</strong>.</p>
-             <div className="w-full max-w-sm bg-slate-100 h-3 rounded-full overflow-hidden">
-                <div className="bg-blue-600 h-full w-[85%] rounded-full shadow-sm"></div>
-             </div>
-          </div>
+        {/* DISTRIBUCIONES */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <PieCard title="Pacientes: nuevos vs. recurrentes" data={data.charts.pacientesTipo} />
+          <PieCard title="Atenciones por convenio" data={data.charts.convenios} />
+          <PieCard title="Ventas por convenio" data={data.charts.ventasConvenio} money />
         </div>
+
+        {/* INVENTARIO */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+          <SectionTitle icon={Package} label="Alertas de stock" />
+          {data.inventario.alertas.length === 0 ? (
+            <EmptyState text="Todo el inventario está sobre su stock de seguridad." icon={CheckCircle2} good />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {data.inventario.alertas.map((p: any) => (
+                <div key={p.nombre} className="flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50">
+                  <AlertTriangle size={18} className="text-amber-600 shrink-0" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-800 truncate">{p.nombre}</p>
+                    <p className="text-[10px] text-amber-700 font-bold uppercase">{p.stock_actual} de {p.stock_seguridad} unidades mínimas</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )
 }
 
-function MetricCard({ title, value, icon, color, subtitle }: any) {
-  const colors: any = {
-    blue: "bg-blue-50 text-blue-600 border-blue-100/50",
-    red: "bg-red-50 text-red-600 border-red-100/50",
-    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100/50",
-    purple: "bg-purple-50 text-purple-600 border-purple-100/50"
-  }
+// ─────────────────────────────────────────────────────────────
+// Componentes auxiliares
+// ─────────────────────────────────────────────────────────────
+
+function SectionTitle({ icon: Icon, label, noMargin }: { icon: any, label: string, noMargin?: boolean }) {
   return (
-    <div className="bg-white/90 backdrop-blur-xl p-6 rounded-[2.5rem] border border-white/60 shadow-sm flex flex-col items-center text-center group hover:scale-105 transition-all cursor-default">
-      <div className={`${colors[color]} p-4 rounded-2xl mb-4 group-hover:rotate-12 transition-transform shadow-inner shrink-0 border`}>{icon}</div>
-      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 leading-none text-center">{title}</p>
-      <h3 className="text-2xl md:text-3xl font-black text-slate-800 leading-none text-center">{value}</h3>
-      {subtitle && <p className="text-[8px] font-bold text-slate-400 mt-2 uppercase tracking-tighter text-center">{subtitle}</p>}
+    <h2 className={`text-xs font-bold text-slate-400 uppercase tracking-widest ${noMargin ? '' : 'mb-6'} flex items-center gap-2`}>
+      <Icon size={16} /> {label}
+    </h2>
+  )
+}
+
+function MiniStat({ label, value, isNegative }: { label: string, value: string | number, isNegative?: boolean }) {
+  return (
+    <div className="flex justify-between items-center py-2 border-b border-slate-100 last:border-0">
+      <span className="text-sm font-bold text-slate-600">{label}</span>
+      <span className={`text-lg font-black ${isNegative ? 'text-rose-500' : 'text-slate-800'}`}>{value}</span>
+    </div>
+  )
+}
+
+function DeltaBadge({ delta }: { delta?: number }) {
+  if (delta === undefined || delta === null || Number.isNaN(delta)) return null
+  if (delta === 0) return (
+    <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-slate-400"><Minus size={12} /> Sin cambio</span>
+  )
+  const positive = delta > 0
+  return (
+    <span className={`inline-flex items-center gap-0.5 text-[10px] font-bold ${positive ? 'text-teal-600' : 'text-rose-500'}`}>
+      {positive ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />} {Math.abs(delta)}% vs. mes anterior
+    </span>
+  )
+}
+
+function MoneyCard({ title, value, delta, color }: { title: string, value: number, delta: number, color: string }) {
+  return (
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+      <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{title}</h2>
+      <div className={`text-3xl font-black ${color}`}>{money(value)}</div>
+      <div className="mt-2"><DeltaBadge delta={delta} /></div>
+    </div>
+  )
+}
+
+function CajaStat({ label, value }: { label: string, value: number }) {
+  return (
+    <div className="bg-slate-50 rounded-xl p-3 text-center">
+      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
+      <p className="text-sm font-black text-slate-800 mt-1">{money(value)}</p>
+    </div>
+  )
+}
+
+function EmptyState({ text, icon: Icon = FileText, good }: { text: string, icon?: any, good?: boolean }) {
+  return (
+    <div className={`flex items-center gap-3 p-4 rounded-xl border border-dashed ${good ? 'border-teal-200 bg-teal-50/50 text-teal-700' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+      <Icon size={18} />
+      <span className="text-xs font-bold">{text}</span>
+    </div>
+  )
+}
+
+function PulseLine() {
+  // Línea ECG sutil bajo el header — el elemento distintivo de "signos vitales"
+  return (
+    <svg className="relative mt-6 w-full h-6 opacity-40" viewBox="0 0 400 24" preserveAspectRatio="none">
+      <polyline
+        points="0,12 60,12 75,12 85,2 95,22 105,12 140,12 155,12 165,4 175,20 185,12 400,12"
+        fill="none" stroke="#2dd4bf" strokeWidth="1.5" vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  )
+}
+
+function PulseSpinner() {
+  return (
+    <svg width="64" height="24" viewBox="0 0 64 24">
+      <polyline points="0,12 18,12 22,4 26,20 30,12 64,12" fill="none" stroke="#0d9488" strokeWidth="2">
+        <animate attributeName="stroke-dasharray" values="0,80;80,80" dur="1.1s" repeatCount="indefinite" />
+      </polyline>
+    </svg>
+  )
+}
+
+function VitalCard({ icon: Icon, label, value, delta, history, dataKey, accent, plain }: {
+  icon: any, label: string, value: string, delta?: number, history?: any[], dataKey?: string, accent: string, plain?: boolean
+}) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${accent}1a` }}>
+          <Icon size={14} style={{ color: accent }} />
+        </div>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest truncate">{label}</span>
+      </div>
+      <div className="text-lg sm:text-xl font-black text-slate-800 tabular-nums truncate">{value}</div>
+      {!plain && history ? (
+        <div className="h-8 -mx-1">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={history}>
+              <defs>
+                <linearGradient id={`grad-${dataKey}-${label}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={accent} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={accent} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <Area type="monotone" dataKey={dataKey} stroke={accent} strokeWidth={2} fill={`url(#grad-${dataKey}-${label})`} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      ) : <div className="h-8" />}
+      {!plain && <DeltaBadge delta={delta} />}
+    </div>
+  )
+}
+
+function PieCard({ title, data, money: isMoney }: { title: string, data: { name: string, value: number }[], money?: boolean }) {
+  const total = data.reduce((a, d) => a + d.value, 0)
+  return (
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col items-center">
+      <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest w-full text-center mb-2 h-8">{title}</h2>
+      {data.length === 0 || total === 0 ? (
+        <div className="h-[160px] flex items-center justify-center w-full">
+          <EmptyState text="Sin datos este mes." />
+        </div>
+      ) : (
+        <>
+          <div className="h-[160px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={data} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={2} dataKey="value" stroke="none">
+                  {data.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS_PIE[index % COLORS_PIE.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(val: any) => isMoney ? money(Number(val)) : `${val} (${Math.round((Number(val) / total) * 100)}%)`} contentStyle={{ borderRadius: '8px', border: 'none', fontSize: '12px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="w-full mt-4 space-y-1">
+            {data.map((item, idx) => (
+              <div key={item.name} className="flex justify-between text-[10px] font-bold uppercase text-slate-500">
+                <span className="flex items-center gap-1 truncate pr-2">
+                  <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: COLORS_PIE[idx % COLORS_PIE.length] }} />
+                  <span className="truncate">{item.name}</span>
+                </span>
+                <span className="shrink-0">{Math.round((item.value / total) * 100)}%</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
     </div>
   )
 }
