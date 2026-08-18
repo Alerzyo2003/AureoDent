@@ -625,7 +625,7 @@ function VitalCard({ icon: Icon, label, value, delta, history, dataKey, accent, 
                   <stop offset="100%" stopColor={accent} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <Area type="monotone" dataKey={dataKey} stroke={accent} strokeWidth={2} fill={`url(#grad-${dataKey}-${label})`} isAnimationActive={false} />
+              <Area type="monotone" dataKey={dataKey || ""} stroke={accent} strokeWidth={2} fill={`url(#grad-${dataKey}-${label})`} isAnimationActive={false} />
             </AreaChart>
           </ResponsiveContainer>
         </div>
