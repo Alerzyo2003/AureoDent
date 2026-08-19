@@ -90,6 +90,9 @@ export default function DetalleTratamientoPage() {
   
   const [dientesSeleccionados, setDientesSeleccionados] = useState<number[]>([])
   const [editandoDienteId, setEditandoDienteId] = useState<string | null>(null)
+  const [editandoPrecioId, setEditandoPrecioId] = useState<string | null>(null)
+  const [editandoSeccion, setEditandoSeccion] = useState<string | null>(null)
+  const [seccionEditName, setSeccionEditName] = useState('')
   const [vistaTemporal, setVistaTemporal] = useState(false) 
   
   const [panelColapsado, setPanelColapsado] = useState(true)
@@ -576,14 +579,7 @@ export default function DetalleTratamientoPage() {
 
   const aprobarPlanManualmente = async () => {
     const { error } = await supabase.from('presupuestos').update({ aprobado: true }).eq('id', idURL);
-    if (!error) { setPresupuestoData({ ...presupuestoData, isAprobado: true }); toast.success("Plan de tratamiento aprobado");
-                 await supabase.from('auditoria_clinica').insert([{
-            usuario_id: usuarioLogueado?.id,
-            accion: 'UPDATE / APROBACION',
-            tabla: 'presupuestos',
-            detalles: `Aprobó manualmente el presupuesto #${idURL} sin registro de pago previo.`
-        }]);
-    }
+    if (!error) { setPresupuestoData({ ...presupuestoData, isAprobado: true }); toast.success("Plan de tratamiento aprobado"); }
   }
 
   const handleCrearSeccion = async () => {
@@ -607,6 +603,77 @@ export default function DetalleTratamientoPage() {
     } else {
       toast.success("Nueva fase clínica creada y guardada.");
     }
+  }
+
+  const handleRenombrarSeccion = async (oldName: string, newNameStr: string) => {
+    setEditandoSeccion(null);
+    const newName = newNameStr.trim();
+    if (!newName || newName === oldName) return;
+
+    const nuevaLista = listaSecciones.map(s => s === oldName ? newName : s);
+    setListaSecciones(Array.from(new Set(nuevaLista)));
+    await supabase.from('presupuestos').update({ secciones: JSON.stringify(Array.from(new Set(nuevaLista))) }).eq('id', idURL);
+
+    const updates = acciones.filter(a => a.seccion_nombre === oldName).map(item => {
+        let nuevaObs = item.texto_db || item.display_nombre || '';
+        if (/\|\s*Fase:\s*[^|]+/.test(nuevaObs)) {
+            nuevaObs = nuevaObs.replace(/\|\s*Fase:\s*[^|]+/, `| Fase: ${newName}`);
+        } else {
+            nuevaObs += ` | Fase: ${newName}`;
+        }
+
+        const payload = { observacion: nuevaObs, nombre_prestacion: nuevaObs };
+        if (item.id) {
+            if (item.presupuesto_id) return supabase.from('presupuesto_items').update(payload).eq('id', item.id);
+            else return supabase.from('temp_items').update(payload).eq('id', item.id);
+        }
+        return Promise.resolve();
+    });
+    
+    await Promise.all(updates);
+
+    setAcciones(prev => prev.map(a => {
+        if (a.seccion_nombre === oldName) {
+            let nuevaObs = a.texto_db || a.display_nombre || '';
+            if (/\|\s*Fase:\s*[^|]+/.test(nuevaObs)) {
+                nuevaObs = nuevaObs.replace(/\|\s*Fase:\s*[^|]+/, `| Fase: ${newName}`);
+            } else {
+                nuevaObs += ` | Fase: ${newName}`;
+            }
+            return { ...a, seccion_nombre: newName, texto_db: nuevaObs };
+        }
+        return a;
+    }));
+    if (seccionInput === oldName) setSeccionInput(newName);
+    toast.success("Fase renombrada correctamente");
+  }
+
+  const handleCambiarPrecio = async (tempId: string, id: string | null, nuevoPrecioStr: string) => {
+    setEditandoPrecioId(null);
+    const val = nuevoPrecioStr.trim();
+    if (val === '') return;
+    const nuevoPrecio = Number(val);
+    if (isNaN(nuevoPrecio) || nuevoPrecio < 0) return toast.error("Precio inválido");
+
+    const item = acciones.find(a => a.tempId === tempId);
+    if (!item) return;
+
+    const dcto = item.descuento || 0;
+    const nuevoPactado = nuevoPrecio * (1 - (dcto / 100));
+
+    if (id) {
+        if (item.presupuesto_id) await supabase.from('presupuesto_items').update({ precio_pactado: nuevoPactado }).eq('id', id);
+        else await supabase.from('temp_items').update({ precio_pactado: nuevoPactado }).eq('id', id);
+    }
+    
+    setAcciones(prev => prev.map(a => (a.tempId === tempId) ? { 
+        ...a, 
+        precio_base: nuevoPrecio, 
+        precio_pactado: nuevoPactado, 
+        display_pactado: nuevoPactado, 
+        display_saldo: nuevoPactado - a.display_abonado 
+    } : a));
+    toast.success("Precio actualizado");
   }
   
   const abrirPanelAgregar = (dientePreseleccionado: number | null = null, cara: string = '', zona: string = '') => {
@@ -824,17 +891,7 @@ export default function DetalleTratamientoPage() {
         nuevaObs = nuevaObs.replace(/ \| Zona: [^|]+/g, '');
     }
 
-    if (id) {
-        await supabase.from('presupuesto_items').update({ diente_id: dId, zona: null, observacion: nuevaObs, nombre_prestacion: nuevaObs }).eq('id', id);
-        
-        await supabase.from('auditoria_clinica').insert([{
-            usuario_id: usuarioLogueado?.id,
-            accion: 'UPDATE / PIEZA DENTAL',
-            tabla: 'presupuesto_items',
-            detalles: `Reasignó la prestación a la pieza: ${dId || 'General'}.`
-        }]);
-    }
-    
+    if (id) await supabase.from('presupuesto_items').update({ diente_id: dId, zona: null, observacion: nuevaObs, nombre_prestacion: nuevaObs }).eq('id', id);
     setAcciones(prev => prev.map(a => (a.id === id || a.tempId === tempId) ? { ...a, diente_id: dId, zona: null, texto_db: nuevaObs } : a)); 
     toast.success("Pieza actualizada");
   }
@@ -963,21 +1020,9 @@ export default function DetalleTratamientoPage() {
             costo_laboratorio: costoLabAuto,
             lab_pagado_por_dr: false
         }));
-        
         setAcciones(prev => [...prev, ...nuevosItems]);
         toast.success(`Prestación agregada exitosamente ${inserts.length > 1 ? `(${inserts.length} piezas)` : ''}`);
-
-        // 👇 LA AUDITORÍA QUE FALTABA
-        await supabase.from('auditoria_clinica').insert([{
-            usuario_id: usuarioLogueado?.id,
-            accion: 'INSERT / PRESTACIÓN',
-            tabla: 'presupuesto_items',
-            detalles: `Agregó la prestación "${prestacion.display_nombre}" al presupuesto #${idURL}.`
-        }]);
-
-    } else {
-        toast.error("Error al guardar en base de datos.");
-    }
+    } else toast.error("Error al guardar en base de datos.");
   };
 
   const abrirModalPack = (pack: any) => {
@@ -1118,19 +1163,10 @@ export default function DetalleTratamientoPage() {
         setModalPack({abierto: false, pack: null, configuraciones: {}});
         setPanelAgregarAbierto(false); setDientesSeleccionados([]); 
         toast.success(`Pack "${pack.nombre}" agregado respetando sus secciones`);
-
-        // 👇 CÓDIGO DE AUDITORÍA AQUÍ 👇
-        await supabase.from('auditoria_clinica').insert([{
-            usuario_id: usuarioLogueado?.id,
-            accion: 'INSERT / PACK',
-            tabla: 'presupuesto_items',
-            detalles: `Agregó el pack "${pack.nombre}" con ${nuevosItems.length} prestaciones al presupuesto #${idURL}.`
-        }]);
-
     } else {
         toast.error("Error al guardar el pack en el presupuesto.");
     }
-  }; // <--- ¡AQUÍ ESTÁ! AGREGA ESTO Y GUARDA.
+  }
 
   const abrirModalEvolucion = (itemIds: string[], avanceInicial: number) => {
     if (itemIds.length === 0) return;
@@ -1306,20 +1342,7 @@ export default function DetalleTratamientoPage() {
       }));
       toast.success(`${itemsAEvolucionar.length} prestaciones actualizadas.`);
       setModalAjustesMulti(false); setItemsAEvolucionar([]);
-
-      // 👇 CÓDIGO DE AUDITORÍA AQUÍ 👇
-      await supabase.from('auditoria_clinica').insert([{
-          usuario_id: usuarioLogueado?.id,
-          accion: 'UPDATE / AJUSTES MULTIPLES',
-          tabla: 'presupuesto_items',
-          detalles: `Modificó ${itemsAEvolucionar.length} prestaciones en lote. Descuento aplicado: ${dctoMulti}%. Costo Lab: ${costoLabMulti !== '' ? costoLabMulti : 'Sin cambios'}.`
-      }]);
-
-  } catch (error) { 
-      toast.error("Error al actualizar una o más prestaciones."); 
-  } finally { 
-      setGuardandoMulti(false); 
-  }
+    } catch (error) { toast.error("Error al actualizar una o más prestaciones."); } finally { setGuardandoMulti(false); }
   }
 
   const handleGuardarIcono = async (iconoId: string | null) => {
@@ -1701,7 +1724,7 @@ export default function DetalleTratamientoPage() {
             {/* PIE DE PÁGINA */}
             <div style={{ textAlign: 'center', fontSize: 10, color: '#64748b', marginTop: 'auto', paddingTop: '20px', borderTop: '1px solid #e2e8f0', pageBreakInside: 'avoid' }}>
               <p style={{ fontWeight: 700, color: '#1e293b', fontSize: 12 }}>Centro Médico y Dental Dignidad SpA</p>
-              <p>Ubicación: Av. Venancia Leiva 1871, La Pintana | Teléfono: +56 9 6646 7641</p>
+              <p>Ubicación: Av. Observatorio 1500, La Pintana | Teléfono: +56 9 1234 5678</p>
               <p style={{ marginTop: '12px', fontStyle: 'italic', fontWeight: 600 }}>
                 Al iniciar este tratamiento declaro que acepto la política de privacidad de la clínica y la plataforma establecida.
               </p>
@@ -1921,9 +1944,26 @@ export default function DetalleTratamientoPage() {
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, seccion)}
               >
-                <h3 className="px-6 py-4 bg-slate-50 border-l-4 border-blue-500 font-black text-xs uppercase text-slate-700 tracking-widest rounded-r-2xl mb-4 flex justify-between items-center pointer-events-none">
+                <h3 className="px-6 py-4 bg-slate-50 border-l-4 border-blue-500 font-black text-xs uppercase text-slate-700 tracking-widest rounded-r-2xl mb-4 flex justify-between items-center group">
                   <div className="flex items-center gap-3">
-                    <Layers className="text-blue-500" size={16}/> {seccion}
+                    <Layers className="text-blue-500" size={16}/>
+                    {editandoSeccion === seccion ? (
+                      <input
+                        autoFocus
+                        className="border border-slate-300 px-2 py-1 rounded text-slate-800 text-xs font-black uppercase outline-none focus:border-blue-500"
+                        value={seccionEditName}
+                        onChange={e => setSeccionEditName(e.target.value)}
+                        onBlur={() => handleRenombrarSeccion(seccion, seccionEditName)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleRenombrarSeccion(seccion, seccionEditName);
+                          if (e.key === 'Escape') setEditandoSeccion(null);
+                        }}
+                      />
+                    ) : (
+                      <span className="cursor-pointer hover:text-blue-600 transition-colors" onDoubleClick={() => { setEditandoSeccion(seccion); setSeccionEditName(seccion); }} title="Doble clic para editar nombre de fase">
+                        {seccion}
+                      </span>
+                    )}
                   </div>
                   {puedeVerFinanzas && (
                     <span className="text-[10px] text-slate-400 font-bold">Subtotal: ${totalPorSeccion(seccion).toLocaleString('es-CL')}</span>
@@ -2027,7 +2067,25 @@ export default function DetalleTratamientoPage() {
 
                             {puedeVerFinanzas && (
                                 <>
-                                    <td className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]">${Number(item.display_pactado).toLocaleString('es-CL')}</td>
+                                    <td className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]" onDoubleClick={() => setEditandoPrecioId(item.tempId)}>
+                                        {editandoPrecioId === item.tempId ? (
+                                            <input
+                                                type="number"
+                                                autoFocus
+                                                className="w-20 px-2 py-1 border border-slate-300 rounded text-right text-slate-900 outline-none focus:border-blue-500"
+                                                defaultValue={item.precio_base || item.precio_pactado || item.display_pactado}
+                                                onBlur={(e) => handleCambiarPrecio(item.tempId, item.id, e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleCambiarPrecio(item.tempId, item.id, e.currentTarget.value);
+                                                    if (e.key === 'Escape') setEditandoPrecioId(null);
+                                                }}
+                                            />
+                                        ) : (
+                                            <span className="cursor-pointer hover:text-blue-600 transition-colors" title="Doble clic para editar precio original">
+                                                ${Number(item.display_pactado).toLocaleString('es-CL')}
+                                            </span>
+                                        )}
+                                    </td>
                                     <td className="px-6 py-5 text-right font-bold text-emerald-600 text-[11px]">${Number(item.display_abonado).toLocaleString('es-CL')}</td>
                                     <td className="px-6 py-5 text-right font-black text-slate-900 text-[11px]">${Number(item.display_saldo).toLocaleString('es-CL')}</td>
                                 </>
@@ -2554,11 +2612,22 @@ export default function DetalleTratamientoPage() {
                           <p className="text-sm font-bold text-slate-800">{modalConfirmarPrestacion.prestacion?.display_nombre}</p>
                        </div>
                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200">
-                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Aplicar en</p>
-                          <p className="text-sm font-bold text-slate-800">
-                            {zonaInput ? `Zona: ${zonaInput}` : `Pieza(s): ${dienteInput}`}
-                            {caraInput && `, Cara(s): ${caraInput}`}
-                          </p>
+                          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Aplicar en</p>
+                          {zonaInput ? (
+                              <p className="text-sm font-bold text-slate-800">Zona: {zonaInput} {caraInput && `, Cara(s): ${caraInput}`}</p>
+                          ) : (
+                              <div className="flex items-center gap-2">
+                                  <span className="text-sm font-bold text-slate-800">Pieza(s):</span>
+                                  <input
+                                      type="text"
+                                      value={dienteInput}
+                                      onChange={(e) => setDienteInput(e.target.value)}
+                                      placeholder="Ej: 18, 17 o en blanco para General"
+                                      className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm font-bold text-slate-800 outline-none focus:border-blue-500 flex-1"
+                                  />
+                                  {caraInput && <span className="text-sm font-bold text-slate-800 ml-2">Cara(s): {caraInput}</span>}
+                              </div>
+                          )}
                        </div>
                        <div>
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 block mb-2">Guardar en Fase Clínica</label>
