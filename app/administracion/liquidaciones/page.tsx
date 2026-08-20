@@ -63,8 +63,9 @@ export default function LiquidacionesPage() {
         .from('pagos')
         .select(`
           id, monto, fecha_pago, profesional_id, item_id,
-          presupuesto_items ( profesional_id, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto )
+          presupuesto_items ( profesional_id, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
         `)
+        // 👆 Agregamos 'porcentaje_forzado' al select de presupuesto_items
         .gte('fecha_pago', inicioRango)
         .lte('fecha_pago', finRango)
         .not('estado', 'eq', 'Anulado');
@@ -117,7 +118,17 @@ export default function LiquidacionesPage() {
             const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
 
             const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
-            const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr);
+const valorForzado = Number(pago.presupuesto_items?.porcentaje_forzado || 0) / 100;
+
+let pctDrItem = porcentajeDr; // Valor por defecto ('general')
+
+if (tipoReparto === 'doctor') {
+    pctDrItem = 1;
+} else if (tipoReparto === 'clinica') {
+    pctDrItem = 0;
+} else if (tipoReparto === 'forzado') {
+    pctDrItem = valorForzado; // 👈 Toma el % específico que definiste, ej: 0.15 para 15%
+}
             const pctClinicaItem = 1 - pctDrItem;
 
             const costoLab = Number(pago.presupuesto_items?.costo_laboratorio || 0);
