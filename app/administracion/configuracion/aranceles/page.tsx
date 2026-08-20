@@ -30,12 +30,13 @@ export default function ArancelesCategoriasPage() {
   const [eliminandoId, setEliminandoId] = useState<string | null>(null)
   
   // Estados para el reparto de categorías
-  const [tipoRepartoNuevaCat, setTipoRepartoNuevaCat] = useState<'general'|'doctor'|'clinica'>('general')
+  const [tipoRepartoNuevaCat, setTipoRepartoNuevaCat] = useState<'general'|'doctor'|'clinica'|'forzado'>('general')
   const [profesionalRepartoNuevaCat, setProfesionalRepartoNuevaCat] = useState('')
+  const [porcentajeForzadoNuevaCat, setPorcentajeForzadoNuevaCat] = useState<number | ''>('') // 👈 NUEVO ESTADO
   
   const [modalEditarCatAbierto, setModalEditarCatAbierto] = useState(false)
-  const [catAEditar, setCatAEditar] = useState<{nombre: string, tipo_reparto: string, profesional_id?: string | null} | null>(null)
-  
+  // 👇 MODIFICADO PARA INCLUIR porcentaje_forzado
+  const [catAEditar, setCatAEditar] = useState<{nombre: string, tipo_reparto: string, profesional_id?: string | null, porcentaje_forzado?: number | null} | null>(null)
   // Estado para los Portals
   const [isMounted, setIsMounted] = useState(false)
 
@@ -59,10 +60,10 @@ export default function ArancelesCategoriasPage() {
       setProfesionales(profsData || [])
 
       // 3. Obtener el tipo de reparto y doctor vinculado (reglas de categoría)
-      const { data: catsData } = await supabase.from('categorias_prestaciones').select('nombre, tipo_reparto, profesional_id')
+      const { data: catsData } = await supabase.from('categorias_prestaciones').select('nombre, tipo_reparto, profesional_id, porcentaje_forzado') // 👈 AGREGAMOS porcentaje_forzado
       const map: Record<string, any> = {}
       catsData?.forEach(c => { 
-        map[c.nombre] = { tipo: c.tipo_reparto, profesional_id: c.profesional_id } 
+        map[c.nombre] = { tipo: c.tipo_reparto, profesional_id: c.profesional_id, porcentaje_forzado: c.porcentaje_forzado } // 👈 LO MAPEAMOS AQUÍ
       })
 
       // 4. Unir categorías de prestaciones y categorías con reglas para no omitir ninguna
@@ -74,7 +75,8 @@ export default function ArancelesCategoriasPage() {
       const categoriasFinal = todasLasCategoriasNombres.map(c => ({ 
         nombre: c,
         tipo_reparto: map[c]?.tipo || 'general',
-        profesional_id: map[c]?.profesional_id || null
+        profesional_id: map[c]?.profesional_id || null,
+        porcentaje_forzado: map[c]?.porcentaje_forzado || null // 👈 AGREGAMOS ESTA LÍNEA
       })).sort((a, b) => a.nombre.localeCompare(b.nombre));
 
       setCategorias(categoriasFinal)
@@ -89,6 +91,8 @@ export default function ArancelesCategoriasPage() {
   const handleCrearCategoria = async () => {
     if (!nombreNuevaCat.trim()) return toast.error("Escribe un nombre para la categoría")
     if (tipoRepartoNuevaCat === 'doctor' && !profesionalRepartoNuevaCat) return toast.error("Debes seleccionar un doctor")
+    // 👇 Agregamos esta seguridad para que no envíe porcentajes vacíos
+    if (tipoRepartoNuevaCat === 'forzado' && (!porcentajeForzadoNuevaCat || Number(porcentajeForzadoNuevaCat) <= 0)) return toast.error("Debes ingresar un porcentaje válido")
     
     setCreando(true)
     try {
@@ -101,17 +105,22 @@ export default function ArancelesCategoriasPage() {
       if (error) throw error
       
       // Guardar en la base de datos la regla y el doctor
-      await supabase.from('categorias_prestaciones').upsert({
+      const { error: reglaError } = await supabase.from('categorias_prestaciones').upsert({
         nombre: nombreNuevaCat.trim(),
         tipo_reparto: tipoRepartoNuevaCat,
-        profesional_id: tipoRepartoNuevaCat === 'doctor' ? profesionalRepartoNuevaCat : null
+        profesional_id: tipoRepartoNuevaCat === 'doctor' ? profesionalRepartoNuevaCat : null,
+        porcentaje_forzado: tipoRepartoNuevaCat === 'forzado' ? Number(porcentajeForzadoNuevaCat) : null 
       }, { onConflict: 'nombre' })
+
+      // 👇 ¡AQUÍ ESTABA EL SECRETO! Antes, si fallaba, el sistema se quedaba callado. Ahora lanzará el error.
+      if (reglaError) throw reglaError
 
       toast.success("Categoría creada con éxito.")
       setModalAbierto(false)
       setNombreNuevaCat('')
       setTipoRepartoNuevaCat('general')
       setProfesionalRepartoNuevaCat('')
+      setPorcentajeForzadoNuevaCat('') // 👈 Limpiamos el estado
       fetchData() 
     } catch (err: any) {
       toast.error("Error al crear la categoría: " + err.message)
@@ -128,7 +137,8 @@ export default function ArancelesCategoriasPage() {
       const { error } = await supabase.from('categorias_prestaciones').upsert({
         nombre: catAEditar.nombre,
         tipo_reparto: catAEditar.tipo_reparto,
-        profesional_id: catAEditar.tipo_reparto === 'doctor' ? catAEditar.profesional_id : null
+        profesional_id: catAEditar.tipo_reparto === 'doctor' ? catAEditar.profesional_id : null,
+        porcentaje_forzado: catAEditar.tipo_reparto === 'forzado' ? Number(catAEditar.porcentaje_forzado) : null // 👈 NUEVO
       }, { onConflict: 'nombre' });
       
       if (error) throw error;
@@ -361,9 +371,13 @@ export default function ArancelesCategoriasPage() {
                               <span className={`text-[9px] font-black uppercase px-2.5 py-1 rounded-md tracking-wider ${
                                 cat.tipo_reparto === 'doctor' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
                                 cat.tipo_reparto === 'clinica' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                                cat.tipo_reparto === 'forzado' ? 'bg-amber-50 text-amber-700 border border-amber-100' : // 👈 NUEVO COLOR
                                 'bg-slate-50 text-slate-600 border border-slate-200'
                               }`}>
-                                {cat.tipo_reparto === 'doctor' ? `100% Dr. ${profVinculado ? profVinculado.apellido : ''}` : cat.tipo_reparto === 'clinica' ? '100% Clínica' : 'General (%)'}
+                                {cat.tipo_reparto === 'doctor' ? `100% Dr. ${profVinculado ? profVinculado.apellido : ''}` : 
+                                 cat.tipo_reparto === 'clinica' ? '100% Clínica' : 
+                                 cat.tipo_reparto === 'forzado' ? `${cat.porcentaje_forzado}% Fijo Doctor` : // 👈 EL TEXTO QUE VERÁS
+                                 'General (%)'}
                               </span>
                             </div>
                           </motion.div>
@@ -460,9 +474,25 @@ export default function ArancelesCategoriasPage() {
                         <option value="general">General (según % contrato del doctor)</option>
                         <option value="doctor">100% Doctor</option>
                         <option value="clinica">100% Clínica</option>
+                        <option value="forzado">% Personalizado Fijo</option>
                       </select>
                     </div>
-
+                    {tipoRepartoNuevaCat === 'forzado' && (
+                      <div className="space-y-2 text-left">
+                        <label className="text-[10px] font-black text-[#C9A24B] uppercase tracking-widest ml-2 block">Porcentaje para el Doctor (%)</label>
+                        <div className="relative">
+                          <input 
+                            type="number" 
+                            min="0" max="100"
+                            placeholder="Ej: 15"
+                            className="w-full p-4 bg-[#C9A24B]/10 text-[#0A111F] rounded-2xl font-bold text-xs border border-[#C9A24B]/30 outline-none uppercase shadow-sm"
+                            value={porcentajeForzadoNuevaCat}
+                            onChange={(e) => setPorcentajeForzadoNuevaCat(Number(e.target.value))}
+                          />
+                          <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-[#C9A24B]">%</span>
+                        </div>
+                      </div>
+                    )}
                     {tipoRepartoNuevaCat === 'doctor' && (
                       <div className="space-y-2 text-left">
                         <label className="text-[10px] font-black text-[#C9A24B] uppercase tracking-widest ml-2 block">Seleccionar Doctor</label>
@@ -546,6 +576,7 @@ export default function ArancelesCategoriasPage() {
                         <option value="general">General (según % contrato del doctor)</option>
                         <option value="doctor">100% Doctor</option>
                         <option value="clinica">100% Clínica</option>
+                        <option value="forzado">% Personalizado Fijo</option>
                       </select>
                     </div>
 
