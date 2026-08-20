@@ -514,10 +514,10 @@ export default function DetalleTratamientoPage() {
         setLaboratoriosDB(map);
     }
     
-    const { data: catsData } = await supabase.from('categorias_prestaciones').select('nombre, tipo_reparto, profesional_id');
+    const { data: catsData } = await supabase.from('categorias_prestaciones').select('nombre, tipo_reparto, profesional_id, porcentaje_forzado'); // 👈 AGREGAR porcentaje_forzado AQUÍ
     const mapCategorias: Record<string, any> = {};
     catsData?.forEach(c => {
-        mapCategorias[c.nombre] = { tipo: c.tipo_reparto, prof_id: c.profesional_id };
+        mapCategorias[c.nombre] = { tipo: c.tipo_reparto, prof_id: c.profesional_id, porcentaje_forzado: c.porcentaje_forzado }; // 👈 Y AQUÍ
     });
 
     let allPrests: any[] = [];
@@ -535,6 +535,7 @@ export default function DetalleTratamientoPage() {
         const catRegla = mapCategorias[curr["Nombre Categoria"]];
         curr.tipo_reparto_resuelto = curr.tipo_reparto || (catRegla ? catRegla.tipo : 'general');
         curr.prof_reparto_resuelto = catRegla ? catRegla.prof_id : null;
+        curr.porcentaje_forzado_resuelto = catRegla ? catRegla.porcentaje_forzado : null; // 👈 AGREGA ESTA LÍNEA
 
         const cat = (curr["Nombre Categoria"] || "OTROS").trim();
         if (!acc[cat]) acc[cat] = [];
@@ -1000,6 +1001,7 @@ export default function DetalleTratamientoPage() {
         cara: caraInput || null,
         zona: zonaInput || null,
         tipo_reparto: tipoRepartoFinal,
+        porcentaje_forzado: prestacion.porcentaje_forzado_resuelto || null, // 👈 AGREGA ESTA LÍNEA
         costo_laboratorio: costoLabAuto,
         lab_pagado_por_dr: false
     };
@@ -1124,7 +1126,8 @@ export default function DetalleTratamientoPage() {
                 observacion: observacionFinal,
                 cara: caraInput || null,
                 zona: zonaInput || null,
-                tipo_reparto: tipoRepartoFinal,
+               tipo_reparto: tipoRepartoFinal,
+                porcentaje_forzado: prestacion.porcentaje_forzado_resuelto || null, // 👈 AGREGA ESTA LÍNEA
                 costo_laboratorio: config.costoLab,
                 lab_pagado_por_dr: false
             };
