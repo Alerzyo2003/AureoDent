@@ -202,31 +202,55 @@ export default function DetalleArancelPage() {
 
   // FUNCIÓN PARA ELIMINAR PRESTACIÓN
   async function handleEliminarPrestacion(id: string, nombre: string) {
-    if (!window.confirm(`¿Estás seguro de que quieres eliminar "${nombre}" de forma permanente? Esta acción no se puede deshacer.`)) {
-      return;
-    }
-
-    setActualizandoId(id);
+    // 1. Verificamos si esta prestación ya ha sido utilizada en presupuestos o pagos
     try {
-      const { error } = await supabase
+      const { count, error: countError } = await supabase
+        .from('presupuesto_items')
+        .select('*', { count: 'exact', head: true })
+        .eq('prestacion_id', id);
+
+      if (countError) throw countError;
+
+      // 2. Si tiene registros asociados, solo la deshabilitamos para proteger las liquidaciones
+      if (count && count > 0) {
+        const confirmarDesactivacion = window.confirm(
+          `⚠️ La prestación "${nombre}" ya está siendo utilizada en ${count} presupuesto(s) o liquidación(es).\n\n` +
+          `Para proteger tus cierres de caja e historial financiero, NO se puede eliminar por completo. ¿Deseas DESHABILITARLA en su lugar? (Dejará de aparecer en los aranceles nuevos pero mantendrá el historial intacto).`
+        );
+
+        if (!confirmarDesactivacion) return;
+
+        setActualizandoId(id);
+        const { error: updateError } = await supabase
+          .from('prestaciones')
+          .update({ "Habilitado": "no" })
+          .eq('id', id);
+
+        if (updateError) throw updateError;
+
+        toast.success("Prestación deshabilitada con éxito para proteger los registros financieros.");
+        fetchItems(); // Recarga la lista
+        return;
+      }
+
+      // 3. Si NUNCA ha sido usada en ningún lado, se puede eliminar sin peligro
+      if (!window.confirm(`¿Estás seguro de que quieres eliminar "${nombre}" de forma permanente? Esta acción no se puede deshacer.`)) {
+        return;
+      }
+
+      setActualizandoId(id);
+      const { error: deleteError } = await supabase
         .from('prestaciones')
         .delete()
         .eq('id', id);
 
-      if (error) throw error;
-
-      const { data: { user } } = await supabase.auth.getUser()
-      await supabase.from('auditoria_clinica').insert([{
-          usuario_id: user?.id,
-          accion: 'DELETE / PRESTACION',
-          tabla: 'prestaciones',
-          detalles: `Eliminó permanentemente la prestación "${nombre}" (ID: ${id}).`
-      }])
+      if (deleteError) throw deleteError;
 
       toast.success("Prestación eliminada correctamente.");
-      setItems(items.filter(item => item.id !== id));
+      setItems(prev => prev.filter(item => item.id !== id));
+
     } catch (err: any) {
-      toast.error("Error al eliminar la prestación");
+      toast.error("Error al procesar la solicitud: " + err.message);
     } finally {
       setActualizandoId(null);
     }
