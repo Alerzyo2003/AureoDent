@@ -71,7 +71,7 @@ export default function DetalleLiquidacionPage() {
         .select(`
           id, monto, fecha_pago, profesional_id,
           pacientes ( nombre, apellido ),
-          presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto )
+          presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
         `)
         .gte('fecha_pago', inicioMes)
         .lte('fecha_pago', finMes)
@@ -115,7 +115,17 @@ export default function DetalleLiquidacionPage() {
         if (montoImponible < 0) montoImponible = 0;
 
         const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
-        const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr);
+        const valorForzado = Number(pago.presupuesto_items?.porcentaje_forzado || 0) / 100;
+
+        let pctDrItem = porcentajeDr; // General por defecto
+
+        if (tipoReparto === 'doctor') {
+            pctDrItem = 1;
+        } else if (tipoReparto === 'clinica') {
+            pctDrItem = 0;
+        } else if (tipoReparto === 'forzado') {
+            pctDrItem = valorForzado; // 👈 Aquí aplicará tu 70% (0.7)
+        }
 
         const comision = estaTerminado ? (montoImponible * pctDrItem) : 0;
         const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
