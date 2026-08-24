@@ -59,13 +59,13 @@ export default function LiquidacionesPage() {
         .lte('fecha', finRango)
 
       // 3. Obtener pagos/abonos cobrados estrictamente en el mes seleccionado
+      // 🔥 SE AGREGÓ: cantidad y abonado 🔥
       const { data: abonosData } = await supabase
         .from('pagos')
         .select(`
           id, monto, fecha_pago, profesional_id, item_id,
-          presupuesto_items ( profesional_id, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
+          presupuesto_items ( profesional_id, precio_pactado, cantidad, abonado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
         `)
-        // 👆 Agregamos 'porcentaje_forzado' al select de presupuesto_items
         .gte('fecha_pago', inicioRango)
         .lte('fecha_pago', finRango)
         .not('estado', 'eq', 'Anulado');
@@ -105,9 +105,23 @@ export default function LiquidacionesPage() {
         let reembolsosDoctor = 0;
         let utilidadAbonos = 0;
         
+        // 🔥 FILTRO CORREGIDO CON PRIORIDAD DE DOCTOR Y VALIDACIÓN DEL 100% PAGADO 🔥
         const abonosDelDoc = abonosItems.filter(pago => {
-            const docId = pago.profesional_id || pago.presupuesto_items?.profesional_id;
-            return docId === p.user_id;
+            const docId = pago.presupuesto_items?.profesional_id || pago.profesional_id || null;
+            if (docId !== p.user_id) return false;
+
+            if (pago.presupuesto_items) {
+                const precio = Number(pago.presupuesto_items.precio_pactado || 0);
+                const cant = Number(pago.presupuesto_items.cantidad || 1);
+                const totalPactado = precio * cant;
+                const abonado = Number(pago.presupuesto_items.abonado || 0);
+                
+                if (Math.round(abonado) < Math.round(totalPactado)) {
+                    return false; 
+                }
+            }
+
+            return true;
         });
 
         abonosDelDoc.forEach(pago => {
@@ -118,21 +132,26 @@ export default function LiquidacionesPage() {
             const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
 
             const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
-const valorForzado = Number(pago.presupuesto_items?.porcentaje_forzado || 0) / 100;
+            const valorForzado = Number(pago.presupuesto_items?.porcentaje_forzado || 0) / 100;
 
-let pctDrItem = porcentajeDr; // Valor por defecto ('general')
+            let pctDrItem = porcentajeDr; // Valor por defecto ('general')
 
-if (tipoReparto === 'doctor') {
-    pctDrItem = 1;
-} else if (tipoReparto === 'clinica') {
-    pctDrItem = 0;
-} else if (tipoReparto === 'forzado') {
-    pctDrItem = valorForzado; // 👈 Toma el % específico que definiste, ej: 0.15 para 15%
-}
+            if (tipoReparto === 'doctor') {
+                pctDrItem = 1;
+            } else if (tipoReparto === 'clinica') {
+                pctDrItem = 0;
+            } else if (tipoReparto === 'forzado') {
+                pctDrItem = valorForzado; 
+            }
+            
             const pctClinicaItem = 1 - pctDrItem;
 
             const costoLab = Number(pago.presupuesto_items?.costo_laboratorio || 0);
-            const precioPactado = Number(pago.presupuesto_items?.precio_pactado || montoPago || 1);
+            
+            const precioUnidad = Number(pago.presupuesto_items?.precio_pactado || montoPago || 1);
+            const cant = Number(pago.presupuesto_items?.cantidad || 1);
+            const precioPactado = precioUnidad * cant;
+
             const pagadoPorDr = Boolean(pago.presupuesto_items?.lab_pagado_por_dr);
 
             let fraccionPago = montoPago / precioPactado;
