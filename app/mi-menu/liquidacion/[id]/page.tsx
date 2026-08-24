@@ -43,9 +43,7 @@ export default function MiDetalleLiquidacionPage() {
       const ultimoDiaNum = new Date(Number(year), Number(month), 0).getDate();
       const ultimoDia = String(ultimoDiaNum).padStart(2, '0');
 
-      const inicioMes = `${year}-${month}-01 00:00:00`;
       const finMes = `${year}-${month}-${ultimoDia} 23:59:59`
-      const fechaCortaInicio = `${year}-${month}-01`;
       const fechaCortaFin = `${year}-${month}-${ultimoDia}`;
 
       // 1. Obtener datos del profesional (siempre el dueño de la sesión)
@@ -60,47 +58,51 @@ export default function MiDetalleLiquidacionPage() {
 
       const porcentajeDr = Number(prof.porcentaje_comision || 40) / 100;
 
-      // 2. Obtener Liquidaciones Cerradas del mes
-      const { data: liqsData } = await supabase
-        .from('liquidaciones')
-        .select('*')
-        .eq('profesional_id', prof.id)
-        .gte('periodo_desde', fechaCortaInicio)
-        .lte('periodo_hasta', fechaCortaFin)
-        .eq('estado', 'Finalizada')
-        .order('fecha_pago', { ascending: true });
+      // 2. Obtener TODA la historia contable hasta el mes seleccionado para la cascada
+      let todasLasAtenciones: any[] = [];
+      let fetchMoreAt = true;
+      let fromAt = 0;
+      while (fetchMoreAt) {
+        const { data } = await supabase.from('atenciones_realizadas')
+          .select(`id, fecha, monto_cobrado, profesional_id, paciente_id, pacientes(id, nombre, apellido), prestaciones!atenciones_realizadas_prestacion_id_fkey(id, "Nombre Accion")`)
+          .eq('profesional_id', prof.user_id)
+          .lte('fecha', finMes)
+          .range(fromAt, fromAt + 999);
+        if (data?.length) { todasLasAtenciones.push(...data); fromAt += 1000; } else { fetchMoreAt = false; }
+      }
 
-      const liqsCerradas = liqsData || [];
+      let todosLosPagos: any[] = [];
+      let fetchMorePagos = true;
+      let fromPagos = 0;
+      while (fetchMorePagos) {
+        const { data } = await supabase.from('pagos')
+          .select(`
+            id, monto, fecha_pago, profesional_id, paciente_id,
+            pacientes ( id, nombre, apellido ),
+            presupuesto_items ( id, presupuesto_id, profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado, progreso, abonado )
+          `)
+          .not('estado', 'eq', 'Anulado')
+          .lte('fecha_pago', finMes)
+          .range(fromPagos, fromPagos + 999);
+        if (data?.length) { todosLosPagos.push(...data); fromPagos += 1000; } else { fetchMorePagos = false; }
+      }
 
-      // 3. Obtener Atenciones (solo del mes actual)
-      const { data: atenciones } = await supabase
-        .from('atenciones_realizadas')
-        .select(`id, fecha, monto_cobrado, profesional_id, paciente_id, pacientes(id, nombre, apellido), prestaciones!atenciones_realizadas_prestacion_id_fkey(id, "Nombre Accion")`)
-        .eq('profesional_id', prof.user_id)
-        .gte('fecha', inicioMes)
-        .lte('fecha', finMes);
+      let todasLasLiqs: any[] = [];
+      let fetchMoreLq = true;
+      let fromLq = 0;
+      while (fetchMoreLq) {
+        const { data } = await supabase.from('liquidaciones')
+          .select('*')
+          .eq('profesional_id', prof.id)
+          .eq('estado', 'Finalizada')
+          .lte('periodo_hasta', fechaCortaFin)
+          .order('fecha_pago', { ascending: true })
+          .range(fromLq, fromLq + 999);
+        if (data?.length) { todasLasLiqs.push(...data); fromLq += 1000; } else { fetchMoreLq = false; }
+      }
 
-      // 4. Obtener Pagos
-      const { data: pagos, error: errPagos } = await supabase
-        .from('pagos')
-        .select(`
-          id, monto, fecha_pago, profesional_id, paciente_id,
-          pacientes ( id, nombre, apellido ),
-          presupuesto_items ( id, presupuesto_id, profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, progreso, abonado )
-        `)
-        .gte('fecha_pago', inicioMes)
-        .lte('fecha_pago', finMes)
-        .not('estado', 'eq', 'Anulado');
-
-      if (errPagos) throw errPagos;
-
-      const pagosDelDoctor = (pagos || []).filter((pago: any) => {
-        const docId = pago.profesional_id || pago.presupuesto_items?.profesional_id || null;
-        return docId === prof.user_id;
-      });
-
-      // 5. Formatear Datos
-      const atencionesFormateadas = (atenciones || []).map((a: any) => ({
+      // 3. Formatear y Aplicar Regla del 100% Pagado
+      const atencionesFormateadas = todasLasAtenciones.map((a: any) => ({
         id_origen: a.id,
         fecha: a.fecha,
         paciente: a.pacientes ? `${a.pacientes.nombre} ${a.pacientes.apellido}` : 'Paciente no encontrado',
@@ -120,71 +122,69 @@ export default function MiDetalleLiquidacionPage() {
         pagadoTotalPrestacion: Number(a.monto_cobrado)
       }));
 
-      const abonosFormateados = pagosDelDoctor.map((pago: any) => {
+      const abonosFormateados = todosLosPagos.filter((pago: any) => {
+        const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
+        const docId = pago.profesional_id || pItem.profesional_id || null;
+        if (docId !== prof.user_id) return false;
+
+        const precioPactado = Number(pItem.precio_pactado || 0);
+        const abonadoTotal = Number(pItem.abonado || 0);
+        
+        // REGLA INQUEBRANTABLE
+        return precioPactado > 0 && abonadoTotal >= precioPactado;
+      }).map((pago: any) => {
+        const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
+        
         const montoPago = Number(pago.monto || 0);
-        const costoLab = Number(pago.presupuesto_items?.costo_laboratorio || 0);
-        const precioPactado = Number(pago.presupuesto_items?.precio_pactado || montoPago || 1);
-        const pagadoPorDr = Boolean(pago.presupuesto_items?.lab_pagado_por_dr);
+        const costoLab = Number(pItem.costo_laboratorio || 0);
+        const precioPactado = Number(pItem.precio_pactado || montoPago || 1);
+        const pagadoPorDr = Boolean(pItem.lab_pagado_por_dr);
+        const totalAbonado = Number(pItem.abonado || 0);
 
-        // Regla de negocio: solo se paga comisión si el tratamiento está 100% terminado.
-        const itemEstado = pago.presupuesto_items?.estado?.toLowerCase() || '';
+        const itemEstado = pItem.estado?.toLowerCase() || '';
         const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
-
-        const progreso = Number(pago.presupuesto_items?.progreso || 0);
-        const totalAbonado = Number(pago.presupuesto_items?.abonado || 0);
-        const estaEvolucionado = estaTerminado || progreso > 0 || totalAbonado > 0;
-
-        let paymentStatus = 'unpaid';
-        if (totalAbonado > 0 && totalAbonado < precioPactado) {
-          paymentStatus = 'partially-paid';
-        } else if (totalAbonado >= precioPactado) {
-          paymentStatus = 'paid';
-        }
 
         let fraccionPago = montoPago / precioPactado;
         if (fraccionPago > 1) fraccionPago = 1;
 
         const labAplicado = costoLab * fraccionPago;
-        let montoImponible = montoPago; // Nunca se descuenta el laboratorio del imponible para la comisión.
+        let montoImponible = montoPago;
         if (montoImponible < 0) montoImponible = 0;
 
-        const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
-        const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr);
+        const tipoReparto = pItem.tipo_reparto || 'general';
+        let pctDrItem = porcentajeDr;
+        if (tipoReparto === 'doctor') pctDrItem = 1;
+        else if (tipoReparto === 'clinica') pctDrItem = 0;
+        else if (tipoReparto === 'forzado') pctDrItem = Number(pItem.porcentaje_forzado || 0) / 100;
 
-        // Si no está terminado, el honorario es cero para el doctor.
         const comision = estaTerminado ? (montoImponible * pctDrItem) : 0;
         const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
-        const totalAlDoctor = comision + reembolso;
 
         return {
           id_origen: pago.id,
           fecha: pago.fecha_pago,
           paciente: pago.pacientes ? `${pago.pacientes.nombre} ${pago.pacientes.apellido}` : 'Paciente',
-          prestacion: pago.presupuesto_items?.nombre_prestacion || 'Abono Plan',
+          prestacion: pItem.nombre_prestacion || 'Abono Plan',
           montoPago: montoPago,
           descuentoLab: labAplicado,
           esReembolso: pagadoPorDr,
           imponible: montoImponible,
-          honorario: totalAlDoctor,
+          honorario: comision + reembolso,
           tipo: 'Abono Plan',
           paciente_id: pago.paciente_id,
-          presupuesto_id: pago.presupuesto_items?.presupuesto_id,
-          tratamiento_id: pago.presupuesto_items?.id,
-          estaEvolucionado,
-          paymentStatus,
+          presupuesto_id: pItem.presupuesto_id,
+          tratamiento_id: pItem.id,
+          estaEvolucionado: estaTerminado,
+          paymentStatus: 'paid',
           costoTotalPrestacion: precioPactado,
           pagadoTotalPrestacion: totalAbonado
         }
       });
 
+      // 4. Unificar y Aplicar Cascada de Tiempo
       const produccionCombinada = [...atencionesFormateadas, ...abonosFormateados]
-        .sort((a, b) => {
-          const tA = new Date(a.fecha?.replace(' ', 'T') || 0).getTime();
-          const tB = new Date(b.fecha?.replace(' ', 'T') || 0).getTime();
-          return tA - tB;
-        });
+        .sort((a, b) => new Date(a.fecha?.replace(' ', 'T') || 0).getTime() - new Date(b.fecha?.replace(' ', 'T') || 0).getTime());
 
-      // 6. Asignación de producción a liquidaciones (soporta cortes y pagos parciales)
       let poolProduccion = produccionCombinada.map(p => ({
         ...p,
         honorario_restante: p.honorario
@@ -192,15 +192,23 @@ export default function MiDetalleLiquidacionPage() {
 
       const cierresList: any[] = [];
 
-      liqsCerradas.forEach((liq, index) => {
+      todasLasLiqs.forEach((liq, index) => {
         let montoARepartir = Number(liq.monto_total);
         let itemsDeEstaLiq = [];
+
+        // Escudo de Tiempo
+        let fechaLimite = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
+        fechaLimite.setHours(23, 59, 59, 999);
 
         for (let i = 0; i < poolProduccion.length; i++) {
           let item = poolProduccion[i];
 
           if (item.honorario_restante <= 0) continue;
           if (montoARepartir <= 0) break;
+
+          // Si el tratamiento se realizó DESPUÉS del cierre de caja, se ignora
+          let fechaItem = new Date(item.fecha ? item.fecha.replace(' ', 'T') : 0);
+          if (fechaItem > fechaLimite) continue;
 
           let aDescontar = Math.min(item.honorario_restante, montoARepartir);
 
@@ -213,15 +221,19 @@ export default function MiDetalleLiquidacionPage() {
           montoARepartir -= aDescontar;
         }
 
-        cierresList.push({
-          id: liq.id,
-          titulo: `Cierre #${index + 1} • Pagado el ${new Date(liq.fecha_pago || liq.periodo_hasta).toLocaleDateString('es-CL')}`,
-          items: itemsDeEstaLiq,
-          montoTotal: liq.monto_total
-        });
+        // Solo mostrar los cierres que corresponden a ESTE MES en la vista
+        let fLiq = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
+        if (fLiq.getFullYear() === Number(year) && fLiq.getMonth() === (Number(month) - 1)) {
+          cierresList.push({
+            id: liq.id,
+            titulo: `Cierre #${index + 1} • Pagado el ${fLiq.toLocaleDateString('es-CL')}`,
+            items: itemsDeEstaLiq,
+            montoTotal: liq.monto_total
+          });
+        }
       });
 
-      // 7. Separar lo que quedó pendiente
+      // 5. Separar lo que quedó pendiente a pagar
       const pendientesFinal = poolProduccion
         .filter(p => p.honorario_restante > 0)
         .map(p => ({
@@ -229,51 +241,42 @@ export default function MiDetalleLiquidacionPage() {
           honorario: p.honorario_restante
         }));
 
-      setItemsPendientes(pendientesFinal);
-
-      // 8. Resumen del mes
+      // 6. Resumen de contabilidad estrictamente del mes consultado
       const produccionDelMes = produccionCombinada.filter(p => {
         const fechaItem = new Date(p.fecha?.replace(' ', 'T') || 0);
         return fechaItem.getFullYear() === Number(year) && fechaItem.getMonth() === (Number(month) - 1);
       });
       const totalMes = produccionDelMes.reduce((acc, curr) => acc + curr.honorario, 0);
 
-      const liqsDelMes = liqsCerradas.filter(l => {
-        const fechaLiq = new Date(l.fecha_pago || l.periodo_hasta);
+      const liqsDelMes = todasLasLiqs.filter(l => {
+        const fechaLiq = new Date((l.fecha_pago || l.periodo_hasta).replace(' ', 'T'));
         return fechaLiq.getFullYear() === Number(year) && fechaLiq.getMonth() === (Number(month) - 1);
       });
       const totalPagado = liqsDelMes.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
-
       const saldoPendiente = pendientesFinal.reduce((acc, curr) => acc + curr.honorario, 0);
 
       setResumenMes({ totalMes, totalPagado, saldoPendiente });
 
-      // 9. Obtener items en seguimiento (evolucionados o con abonos parciales)
-      const { data: itemsEnSeguimientoData, error: itemsSeguimientoError } = await supabase
+      // 7. Obtener items en seguimiento (evolucionados o con abonos parciales no liquidados)
+      const { data: itemsEnSeguimientoData } = await supabase
         .from('presupuesto_items')
         .select('*, presupuestos(paciente_id, pacientes(id, nombre, apellido))')
         .eq('profesional_id', user.id)
         .or('progreso.gt.0,abonado.gt.0');
-
-      if (itemsSeguimientoError) {
-        console.error("Error fetching tracking items:", itemsSeguimientoError);
-        toast.error("Error al buscar tratamientos en seguimiento.");
-      }
 
       const itemsDeSeguimiento = (itemsEnSeguimientoData || [])
         .map((item: any) => {
             const precioPactado = Number(item.precio_pactado || 0);
             const totalAbonado = Number(item.abonado || 0);
 
-            // Ignorar si ya está pagado completo
+            // Ignorar si ya está pagado completo (porque ya está arriba en la cascada)
             if (totalAbonado >= precioPactado) return null;
             
-            // Ignorar si ya está en la lista de pendientes que generan comisión este mes
+            // Ignorar si por alguna razón está duplicado
             if (pendientesFinal.some(p => p.tratamiento_id === item.id)) return null;
 
             const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(item.estado?.toLowerCase() || '');
             const progreso = Number(item.progreso || 0);
-            // Un item se considera "evolucionado" para mostrar su estado si tiene progreso clínico O financiero.
             const estaEvolucionado = estaTerminado || progreso > 0 || totalAbonado > 0;
 
             let paymentStatus = 'unpaid';
@@ -288,7 +291,7 @@ export default function MiDetalleLiquidacionPage() {
               paciente: pacienteData ? `${pacienteData.nombre} ${pacienteData.apellido}` : 'Paciente',
               prestacion: item.nombre_prestacion || 'Prestación sin nombre',
               montoPago: totalAbonado,
-              honorario: 0, // No genera honorario pendiente aún
+              honorario: 0, // No genera honorario líquido pendiente aún
               tipo: 'Seguimiento',
               paciente_id: item.presupuestos?.paciente_id,
               presupuesto_id: item.presupuesto_id,
