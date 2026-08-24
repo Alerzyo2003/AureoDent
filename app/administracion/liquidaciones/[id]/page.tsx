@@ -65,13 +65,13 @@ export default function DetalleLiquidacionPage() {
         .gte('fecha', inicioMes)
         .lte('fecha', finMes);
 
-      // 4. Obtener Pagos
+      // 4. Obtener Pagos (Se agregaron cantidad y abonado)
       const { data: pagos, error: errPagos } = await supabase
         .from('pagos')
         .select(`
           id, monto, fecha_pago, profesional_id,
           pacientes ( nombre, apellido ),
-          presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
+          presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, cantidad, abonado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto )
         `)
         .gte('fecha_pago', inicioMes)
         .lte('fecha_pago', finMes)
@@ -79,9 +79,27 @@ export default function DetalleLiquidacionPage() {
 
       if (errPagos) throw errPagos;
 
+      // ACÁ APLICAMOS EL FILTRO PARA SOLO PRESTACIONES COMPLETAMENTE PAGADAS
       const pagosDelDoctor = (pagos || []).filter((pago: any) => {
-         const docId = pago.profesional_id || pago.presupuesto_items?.profesional_id || null;
-         return docId === prof.user_id;
+         // Damos prioridad al ID del doctor que hizo la prestación, no al admin que cobró
+         const docId = pago.presupuesto_items?.profesional_id || pago.profesional_id || null;
+         
+         if (docId !== prof.user_id) return false;
+
+         // Filtramos para asegurar que el ítem esté 100% abonado
+         if (pago.presupuesto_items) {
+             const precio = Number(pago.presupuesto_items.precio_pactado || 0);
+             const cant = Number(pago.presupuesto_items.cantidad || 1);
+             const totalPactado = precio * cant;
+             const abonado = Number(pago.presupuesto_items.abonado || 0);
+             
+             // Si lo abonado es menor a lo pactado, ocultamos el pago
+             if (Math.round(abonado) < Math.round(totalPactado)) {
+                 return false; 
+             }
+         }
+
+         return true;
       });
 
       // 5. Formatear Datos
@@ -115,17 +133,7 @@ export default function DetalleLiquidacionPage() {
         if (montoImponible < 0) montoImponible = 0;
 
         const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
-        const valorForzado = Number(pago.presupuesto_items?.porcentaje_forzado || 0) / 100;
-
-        let pctDrItem = porcentajeDr; // General por defecto
-
-        if (tipoReparto === 'doctor') {
-            pctDrItem = 1;
-        } else if (tipoReparto === 'clinica') {
-            pctDrItem = 0;
-        } else if (tipoReparto === 'forzado') {
-            pctDrItem = valorForzado; // 👈 Aquí aplicará tu 70% (0.7)
-        }
+        const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr);
 
         const comision = estaTerminado ? (montoImponible * pctDrItem) : 0;
         const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
@@ -351,7 +359,6 @@ export default function DetalleLiquidacionPage() {
               </div>
             </div>
             
-            {/* NUEVA BOTONERA AQUI */}
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto mt-4 md:mt-0">
               <button 
                 onClick={descargarExcel} 
