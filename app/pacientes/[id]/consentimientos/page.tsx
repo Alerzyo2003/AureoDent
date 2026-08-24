@@ -305,60 +305,100 @@ export default function ConsentimientosPacientePage() {
       </div>
 
       {/* Modal Nuevo Registro */}
-      {mounted && typeof document !== 'undefined' && createPortal(
-        <AnimatePresence>
-          {modalAbierto && (
-            <div className="fixed inset-0 flex items-center justify-center p-4 md:p-6" style={{ zIndex: 999999 }}>
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalAbierto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
-              <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white w-full max-w-lg rounded-[2.5rem] md:rounded-[3.5rem] shadow-2xl relative overflow-hidden p-6 md:p-10 space-y-6 md:space-y-8 text-left">
-                  <div className="flex justify-between items-start text-left">
-                    <div className="text-left pr-4">
-                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">Nuevo Registro</h3>
-                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">AureoDent Legal System</p>
-                    </div>
-                    <button onClick={() => setModalAbierto(false)} className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl md:rounded-2xl hover:text-red-500 hover:bg-red-50 transition-all shrink-0"><X size={20}/></button>
-                  </div>
-
-                  <div className="space-y-5 md:space-y-6 text-left">
-                    <div className="space-y-2 text-left">
-                      <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Plantilla de Consentimiento</label>
-                      <select value={form.tipo_id} onChange={(e) => setForm({...form, tipo_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
-                        <option value="">Selecciona plantilla...</option>
-                        {tiposConsentimientos.map(t => <option key={t.id} value={t.id}>{t.nombre.toUpperCase()}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="space-y-2 text-left">
-                      <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Especialista</label>
-                      <select value={form.especialista_id} onChange={(e) => setForm({...form, especialista_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
-                        <option value="">Selecciona especialista...</option>
-                        {profesionales.map(p => <option key={p.id} value={p.id}>{p.nombre.toUpperCase()} {p.apellido.toUpperCase()}</option>)}
-                      </select>
-                    </div>
-
-                    <div className="space-y-2 text-left">
-                      <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Presupuesto (Opcional)</label>
-                      <select value={form.presupuesto_id} onChange={(e) => setForm({...form, presupuesto_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
-                        <option value="">Sin presupuesto asociado</option>
-                        {presupuestos.map(pr => <option key={pr.id} value={pr.id}>{pr.nombre_tratamiento.toUpperCase()}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  <button 
-                    onClick={handleCrearConsentimiento} 
-                    disabled={creando} 
-                    className="w-full bg-slate-900 text-white py-5 md:py-6 rounded-[1.5rem] md:rounded-[2rem] font-black text-[10px] md:text-xs uppercase tracking-widest md:tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2 md:gap-3 disabled:opacity-50"
-                  >
-                    {creando ? <Loader2 className="animate-spin" size={18} /> : <FileCheck size={18} />}
-                    {creando ? 'Generando...' : 'Crear Documento Legal'}
-                  </button>
-              </motion.div>
+{mounted && typeof document !== 'undefined' && createPortal(
+  <AnimatePresence>
+    {modalAbierto && (
+      <div className="fixed inset-0 flex items-center justify-center p-4 md:p-6" style={{ zIndex: 999999 }}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalAbierto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+        <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white w-full max-w-lg rounded-[2.5rem] md:rounded-[3.5rem] shadow-2xl relative overflow-hidden p-6 md:p-10 space-y-6 md:space-y-8 text-left">
+            <div className="flex justify-between items-start text-left">
+              <div className="text-left pr-4">
+                <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">Nuevo Registro</h3>
+                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">AureoDent Legal System</p>
+              </div>
+              <button onClick={() => setModalAbierto(false)} className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl md:rounded-2xl hover:text-red-500 hover:bg-red-50 transition-all shrink-0"><X size={20}/></button>
             </div>
-          )}
-        </AnimatePresence>,
-        document.body
-      )}
+
+            <div className="space-y-5 md:space-y-6 text-left">
+              <div className="space-y-2 text-left">
+                <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Plantilla de Consentimiento</label>
+                <select value={form.tipo_id} onChange={(e) => setForm({...form, tipo_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
+                  <option value="">Selecciona plantilla...</option>
+                  {tiposConsentimientos.map(t => <option key={t.id} value={t.id}>{String(t.nombre || '').toUpperCase()}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2 text-left">
+                <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Especialista</label>
+                <select value={form.especialista_id} onChange={(e) => setForm({...form, especialista_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
+                  <option value="">Selecciona especialista...</option>
+                  {profesionales.map(p => <option key={p.id} value={p.id}>{String(p.nombre || '').toUpperCase()} {String(p.apellido || '').toUpperCase()}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2 text-left">
+                <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Presupuesto (Opcional)</label>
+                <select value={form.presupuesto_id} onChange={(e) => setForm({...form, presupuesto_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
+                  <option value="">Sin presupuesto asociado</option>
+                  {presupuestos.map(pr => <option key={pr.id} value={pr.id}>{String(pr.nombre_tratamiento || 'Tratamiento').toUpperCase()}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleCrearConsentimiento} 
+              disabled={creando} 
+              className="w-full bg-slate-900 text-white py-5 md:py-6 rounded-[1.5rem] md:rounded-[2rem] font-black text-[10px] md:text-xs uppercase tracking-widest md:tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2 md:gap-3 disabled:opacity-50"
+            >
+              {creando ? <Loader2 className="animate-spin" size={18} /> : <FileCheck size={18} />}
+              {creando ? 'Generando...' : 'Crear Documento Legal'}
+            </button>
+        </motion.div>
+      </div>
+    )}
+  </AnimatePresence>,
+  document.body
+)}
+
+{/* Modal Editar Especialista - Portal */}
+{mounted && typeof document !== 'undefined' && createPortal(
+  <AnimatePresence>
+    {modalEditarAbierto && (
+      <div className="fixed inset-0 flex items-center justify-center p-4 md:p-6" style={{ zIndex: 999999 }}>
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalEditarAbierto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+        <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white w-full max-w-sm rounded-[2.5rem] md:rounded-[3.5rem] shadow-2xl relative overflow-hidden p-6 md:p-10 space-y-6 md:space-y-8 text-left">
+            <div className="flex justify-between items-start text-left">
+              <div className="text-left pr-4">
+                <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">Reasignar</h3>
+                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cambiar Especialista</p>
+              </div>
+              <button onClick={() => setModalEditarAbierto(false)} className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl md:rounded-2xl hover:text-red-500 hover:bg-red-50 transition-all shrink-0"><X size={20}/></button>
+            </div>
+
+            <div className="space-y-5 md:space-y-6 text-left">
+              <div className="space-y-2 text-left">
+                <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Especialista a Cargo</label>
+                <select value={docAEditar.especialista_id} onChange={(e) => setDocAEditar({...docAEditar, especialista_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
+                  <option value="">Selecciona especialista...</option>
+                  {profesionales.map(p => <option key={p.id} value={p.id}>{String(p.nombre || '').toUpperCase()} {String(p.apellido || '').toUpperCase()}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <button 
+              onClick={handleGuardarEdicion} 
+              disabled={editando} 
+              className="w-full bg-blue-600 text-white py-5 md:py-6 rounded-[1.5rem] md:rounded-[2rem] font-black text-[10px] md:text-xs uppercase tracking-widest md:tracking-[0.2em] shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2 md:gap-3 disabled:opacity-50"
+            >
+              {editando ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
+              {editando ? 'Guardando...' : 'Guardar Cambios'}
+            </button>
+        </motion.div>
+      </div>
+    )}
+  </AnimatePresence>,
+  document.body
+)}
 
       {/* Modal Editar Especialista - Portal */}
       {mounted && typeof document !== 'undefined' && createPortal(
