@@ -3,7 +3,7 @@
 import { useParams, useSearchParams } from 'next/navigation'
 import React, { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, Calculator, ArrowUpRight, History, AlertCircle, FileText, Download } from 'lucide-react'
+import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, History, AlertCircle, Download } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 
@@ -30,11 +30,6 @@ export default function DetalleLiquidacionPage() {
       const ultimoDiaNum = new Date(Number(year), Number(month), 0).getDate();
       const ultimoDia = String(ultimoDiaNum).padStart(2, '0');
       
-      const inicioMes = `${year}-${month}-01 00:00:00`;
-      const finMes = `${year}-${month}-${ultimoDia} 23:59:59`
-      const fechaCortaInicio = `${year}-${month}-01`;
-      const fechaCortaFin = `${year}-${month}-${ultimoDia}`;
-
       // 1. Obtener datos del profesional
       const { data: prof, error: errProf } = await supabase.from('profesionales').select('*').eq('user_id', id).single()
       if (errProf) throw errProf;
@@ -55,13 +50,7 @@ export default function DetalleLiquidacionPage() {
 
       const liqsCerradas = liqsData || [];
 
-      // 3. Obtener Atenciones (sin límite de fecha para calcular historial completo)
-      const { data: atenciones } = await supabase
-        .from('atenciones_realizadas')
-        .select(`id, fecha, monto_cobrado, profesional_id, pacientes(nombre, apellido), prestaciones!atenciones_realizadas_prestacion_id_fkey(id, "Nombre Accion")`)
-        .eq('profesional_id', prof.user_id);
-
-      // 4. Obtener Pagos con Paginación
+      // 3. Obtener Pagos Históricos con Paginación
       let todosLosPagos: any[] = [];
       let fetchMorePagos = true;
       let fromPagos = 0;
@@ -71,9 +60,13 @@ export default function DetalleLiquidacionPage() {
         const { data: pagosChunk, error: errPagos } = await supabase
           .from('pagos')
           .select(`
-            id, monto, fecha_pago, profesional_id,
+            id, monto, fecha_pago, profesional_id, item_id,
             pacientes ( nombre, apellido ),
-            presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
+            presupuesto_items!pagos_item_id_fkey ( 
+              id, profesional_id, nombre_prestacion, precio_pactado, 
+              abonado, costo_laboratorio, lab_pagado_por_dr, 
+              estado, tipo_reparto, porcentaje_forzado, diente_id, cara 
+            )
           `)
           .not('estado', 'eq', 'Anulado')
           .range(fromPagos, fromPagos + step - 1);
@@ -87,52 +80,26 @@ export default function DetalleLiquidacionPage() {
           fetchMorePagos = false;
         }
       }
-      
-      // ==========================================
-      // 🐛 INICIO BLOQUE DEBUG 🐛
-      // ==========================================
-      console.log("=== DEBUG LIQUIDACIONES ===");
-      console.log("1. ID del Doctor actual (prof.user_id):", prof.user_id);
-      console.log("2. Total de pagos crudos extraídos de BD:", todosLosPagos.length);
 
+      // Filtro estricto: Pertenece al doctor Y el ítem está 100% pagado (abonado >= precio_pactado)
       const pagosDelDoctor = todosLosPagos.filter((pago: any) => {
          const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
          const docId = pItem.profesional_id || pago.profesional_id || null; 
          
-         if (pItem.estado === 'realizado') {
-             console.log("-> Detectado pago de tto REALIZADO (Pago ID:", pago.id.substring(0,6) + ")");
-             console.log("   - Doctor del Pago:", pago.profesional_id);
-             console.log("   - Doctor del Tratamiento:", pItem.profesional_id);
-             console.log("   - ¿Coincide con este doctor?:", docId === prof.user_id);
-         }
+         if (docId !== prof.user_id) return false;
 
-         return docId === prof.user_id;
+         const precioPactado = Number(pItem.precio_pactado || 0);
+         const abonadoTotal = Number(pItem.abonado || 0);
+
+         // REGLA INQUEBRANTABLE: Solo dejamos pasar tratamientos 100% pagados
+         return precioPactado > 0 && abonadoTotal >= precioPactado;
       });
 
-      console.log("3. Pagos que SÍ pertenecen a este doctor:", pagosDelDoctor.length);
-      console.log("=======================================");
-      // ==========================================
-      // 🐛 FIN BLOQUE DEBUG 🐛
-      // ==========================================
-
-      // 5. Formatear Datos (VERSIÓN ÚNICA Y LIMPIA)
-      const atencionesFormateadas = (atenciones || []).map((a: any) => ({
-        id_origen: a.id,
-        fecha: a.fecha,
-        paciente: a.pacientes ? `${a.pacientes.nombre} ${a.pacientes.apellido}` : 'Paciente no encontrado',
-        prestacion: a.prestaciones?.["Nombre Accion"] || 'Atención Directa',
-        montoPago: Number(a.monto_cobrado),
-        descuentoLab: 0,
-        esReembolso: false,
-        imponible: Number(a.monto_cobrado),
-        honorario: Number(a.monto_cobrado) * porcentajeDr,
-        tipo: 'Atención'
-      }));
-
-      const abonosFormateados = pagosDelDoctor.map((pago: any) => {
+      // 4. Formatear los pagos reales a comisiones
+      const produccionCombinada = pagosDelDoctor.map((pago: any) => {
         const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
-
-        const montoPago = Number(pago.monto || 0);
+        
+        const montoPago = Number(pago.monto || 0); 
         const costoLab = Number(pItem.costo_laboratorio || 0);
         const precioPactado = Number(pItem.precio_pactado || montoPago || 1);
         const pagadoPorDr = Boolean(pItem.lab_pagado_por_dr);
@@ -159,15 +126,13 @@ export default function DetalleLiquidacionPage() {
         const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
         const totalAlDoctor = comision + reembolso;
 
-        if (estaTerminado) {
-             console.log("   -> COMISIÓN CALCULADA para pago", pago.id.substring(0,6), ": $", totalAlDoctor);
-        }
+        const infoPieza = pItem.diente_id ? ` (Pza ${pItem.diente_id})` : '';
 
         return {
           id_origen: pago.id,
           fecha: pago.fecha_pago,
           paciente: pago.pacientes ? `${pago.pacientes.nombre} ${pago.pacientes.apellido}` : 'Paciente',
-          prestacion: pItem.nombre_prestacion || 'Abono Plan',
+          prestacion: `${pItem.nombre_prestacion || 'Abono Plan'}${infoPieza}`,
           montoPago: montoPago,
           descuentoLab: labAplicado,
           esReembolso: pagadoPorDr,
@@ -175,14 +140,7 @@ export default function DetalleLiquidacionPage() {
           honorario: totalAlDoctor,
           tipo: 'Abono Plan'
         }
-      });
-
-      const produccionCombinada = [...atencionesFormateadas, ...abonosFormateados]
-        .sort((a, b) => {
-          const tA = new Date(a.fecha?.replace(' ', 'T') || 0).getTime();
-          const tB = new Date(b.fecha?.replace(' ', 'T') || 0).getTime();
-          return tA - tB;
-        });
+      }).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
 
       let poolProduccion = produccionCombinada.map(p => ({
         ...p,
@@ -194,13 +152,24 @@ export default function DetalleLiquidacionPage() {
       liqsCerradas.forEach((liq, index) => {
         let montoARepartir = Number(liq.monto_total);
         let itemsDeEstaLiq = [];
+        
+        // Creamos la fecha límite: La liquidación no puede tocar pacientes después de este día
+        let fechaLimite = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
+        fechaLimite.setHours(23, 59, 59, 999); // Le damos hasta el último minuto de ese día
 
+        // Empieza a recorrer toda la producción histórica
         for(let i = 0; i < poolProduccion.length; i++) {
             let item = poolProduccion[i];
             
             if (item.honorario_restante <= 0) continue;
-            if (montoARepartir <= 0) break;
+            if (montoARepartir <= 0) break; // Si se acaba el dinero, frena
 
+            // ¡EL ESCUDO DE TIEMPO! 
+            // Si el tratamiento es de una fecha posterior a la liquidación, lo ignoramos.
+            let fechaItem = new Date(item.fecha ? item.fecha.replace(' ', 'T') : 0);
+            if (fechaItem > fechaLimite) continue;
+
+            // Descuenta lo pagado del honorario
             let aDescontar = Math.min(item.honorario_restante, montoARepartir);
             
             itemsDeEstaLiq.push({
@@ -212,6 +181,7 @@ export default function DetalleLiquidacionPage() {
             montoARepartir -= aDescontar;
         }
 
+        // Guardamos el cierre completo
         cierresList.push({
           id: liq.id,
           titulo: `Cierre #${index + 1} • Pagado el ${new Date(liq.fecha_pago || liq.periodo_hasta).toLocaleDateString('es-CL')}`,
@@ -266,18 +236,16 @@ export default function DetalleLiquidacionPage() {
       return;
     }
 
-    // 1. Cabeceras de Excel
     const encabezados = [
       'Fecha',
       'Paciente',
       'Prestacion',
-      'Ingreso Bruto',
+      'Pago Recibido',
       'Costo Lab',
       'Base Imponible',
       'A Pagar al Dr'
     ];
 
-    // 2. Formatear filas (solo items pendientes a pagar)
     const filas = itemsPendientes.map(item => {
       const fecha = item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F';
       return [
@@ -291,10 +259,8 @@ export default function DetalleLiquidacionPage() {
       ].join(';'); 
     });
 
-    // 3. Fila de Total
     filas.push(['', '', 'TOTAL PENDIENTE A PAGAR', '', '', '', Math.round(resumenMes.saldoPendiente)].join(';'));
 
-    // 4. Crear archivo y forzar descarga
     const csvContent = "\uFEFF" + encabezados.join(';') + "\n" + filas.join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -327,21 +293,16 @@ export default function DetalleLiquidacionPage() {
   return (
     <main className="min-h-screen bg-[#FBF8F2] p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
       
-      {/* IMAGEN DE FONDO GLOBAL */}
       <div 
         className="absolute top-0 right-0 w-[700px] h-[800px] bg-[url('/fondo-profesionales.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-40 mix-blend-multiply"
       ></div>
 
-      {/* ========================================================================= */}
-      {/* VISTA WEB (OCULTA AL IMPRIMIR) */}
-      {/* ========================================================================= */}
       <div className="max-w-7xl mx-auto space-y-8 relative z-10 print:hidden text-left">
         
         <Link href="/administracion/liquidaciones" className="flex items-center gap-2 text-slate-400 hover:text-[#0A111F] font-black text-[10px] uppercase tracking-widest transition-all w-fit">
           <ChevronLeft size={16}/> Volver a liquidaciones
         </Link>
 
-        {/* TARJETAS DE RESUMEN SUPERIOR */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-white/95 backdrop-blur-sm p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-center">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Total Generado (Mes)</p>
@@ -365,7 +326,6 @@ export default function DetalleLiquidacionPage() {
 
         <div className="bg-white/95 backdrop-blur-sm p-8 md:p-10 rounded-[3rem] shadow-sm border border-slate-100 text-left">
           
-          {/* HEADER DEL REPORTE */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-slate-100 pb-8 mb-8">
             <div className="text-left">
               <p className="text-[10px] font-black text-[#C9A24B] uppercase tracking-[0.2em] mb-2 text-left">Desglose de Periodo</p>
@@ -385,7 +345,6 @@ export default function DetalleLiquidacionPage() {
               </div>
             </div>
             
-            {/* NUEVA BOTONERA AQUI */}
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto mt-4 md:mt-0">
               <button 
                 onClick={descargarExcel} 
@@ -404,15 +363,12 @@ export default function DetalleLiquidacionPage() {
 
           <div className="space-y-12">
             
-            {/* ========================================================= */}
-            {/* SECCIÓN 1: PRODUCCIÓN PENDIENTE (LO QUE SE DEBE PAGAR HOY) */}
-            {/* ========================================================= */}
             <div>
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-3 bg-amber-100 text-amber-600 rounded-xl"><AlertCircle size={22} /></div>
                 <div>
                   <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Pendiente de Pago</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tratamientos realizados y abonados que aún no se liquidan al doctor</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tratamientos realizados y 100% pagados que aún no se liquidan al doctor</p>
                 </div>
               </div>
 
@@ -431,7 +387,7 @@ export default function DetalleLiquidacionPage() {
                           <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Fecha</th>
                           <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Paciente</th>
                           <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Prestación</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Ingreso Bruto</th>
+                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Pago Recibido</th>
                           <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Costo Lab</th>
                           <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Base Imponible</th>
                           <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right bg-amber-100/50">A Pagar al Dr.</th>
@@ -477,9 +433,6 @@ export default function DetalleLiquidacionPage() {
               )}
             </div>
 
-            {/* ========================================================= */}
-            {/* SECCIÓN 2: HISTORIAL DE CIERRES (LO YA PAGADO) */}
-            {/* ========================================================= */}
             {cierresCompletados.length > 0 && (
               <div className="pt-8 border-t border-slate-100">
                 <div className="flex items-center gap-3 mb-6">
@@ -513,7 +466,7 @@ export default function DetalleLiquidacionPage() {
                               <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
                               <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Paciente</th>
                               <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Prestación</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Ingreso Bruto</th>
+                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Pago Recibido</th>
                               <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Costo Lab</th>
                               <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Base Imponible</th>
                               <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Pagado al Dr.</th>
@@ -554,25 +507,18 @@ export default function DetalleLiquidacionPage() {
         </div>
       </div>
 
-      {/* ========================================================================= */}
-      {/* VISTA IMPRESIÓN (OCULTA EN WEB, VISIBLE AL IMPRIMIR) */}
-      {/* ========================================================================= */}
       <div className="hidden print:block bg-white text-black p-4 font-sans text-[11px] leading-tight max-w-[800px] mx-auto">
-        
         <div className="text-center mb-6">
           <h1 className="font-bold text-lg mb-1">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
         </div>
-
         <div className="mb-4">
           <p>Fecha Finalización: {obtenerFechaFinalizacion()}, Fecha Impresión: {fechaEmision}</p>
           <p>Liquidación Periodo: {mesSeleccionado}</p>
         </div>
-
         <div className="mb-4">
           <p className="font-bold underline mb-1">Profesional:</p>
           <p>Nombre: {profesional?.nombre} {profesional?.apellido} RUT: {profesional?.rut || ''} Sucursal: CENTRO MEDICO Y DENTAL DIGNIDAD</p>
         </div>
-
         <div className="mb-6">
           <p className="font-bold underline mb-1">Resumen de la Liquidación:</p>
           <p>Producción Mes ${Math.round(resumenMes.totalMes).toLocaleString('es-CL')}</p>
@@ -580,7 +526,6 @@ export default function DetalleLiquidacionPage() {
           <p className="font-bold mt-1">Saldo Pendiente a Pagar ${Math.round(resumenMes.saldoPendiente).toLocaleString('es-CL')}</p>
         </div>
 
-        {/* IMPRESIÓN DE PENDIENTES */}
         {itemsPendientes.length > 0 && (
           <div className="mb-6">
             <p className="font-bold underline mb-2">Detalle de Producción Pendiente de Pago:</p>
@@ -607,7 +552,6 @@ export default function DetalleLiquidacionPage() {
           </div>
         )}
 
-        {/* IMPRESIÓN DE CIERRES ANTERIORES */}
         {cierresCompletados.length > 0 && (
           <div className="mb-6">
             <p className="font-bold underline mb-2">Detalle de Historial (Cierres ya pagados este mes):</p>
@@ -638,12 +582,10 @@ export default function DetalleLiquidacionPage() {
             ))}
           </div>
         )}
-
         <div className="mt-16 text-center border-t border-black pt-4 text-[10px]">
           <p className="font-bold uppercase">CENTRO MEDICO Y DENTAL DIGNIDAD SPA</p>
           <p>Venancia Leiva 1871, Región Metropolitana, La Pintana | +56966467641 / +56994464662</p>
         </div>
-
       </div>
     </main>
   )
