@@ -55,7 +55,7 @@ export default function MisLiquidacionesPage() {
         return
       }
 
-      // 2. Perfil de profesional asociado a este usuario (nunca se recibe por URL)
+      // 2. Perfil de profesional asociado a este usuario
       const { data: prof, error: errProf } = await supabase
         .from('profesionales')
         .select('*')
@@ -70,96 +70,150 @@ export default function MisLiquidacionesPage() {
       setProfesional(prof)
       const porcentajeDr = Number(prof.porcentaje_comision || 40) / 100
 
+      // 3. Traer Historial Completo con Paginación (Para la cascada de pagos)
+      
+      let todasLasAtenciones: any[] = [];
+      let fetchMoreAt = true;
+      let fromAt = 0;
+      while (fetchMoreAt) {
+        const { data } = await supabase.from('atenciones_realizadas')
+          .select('id, fecha, monto_cobrado, profesional_id')
+          .eq('profesional_id', prof.user_id)
+          .range(fromAt, fromAt + 999);
+        if (data?.length) { todasLasAtenciones.push(...data); fromAt += 1000; } else { fetchMoreAt = false; }
+      }
+
+      let todosLosPagos: any[] = [];
+      let fetchMorePagos = true;
+      let fromPagos = 0;
+      while (fetchMorePagos) {
+        const { data } = await supabase.from('pagos')
+          .select(`
+            id, monto, fecha_pago, profesional_id,
+            presupuesto_items ( profesional_id, precio_pactado, abonado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
+          `)
+          .not('estado', 'eq', 'Anulado')
+          .range(fromPagos, fromPagos + 999);
+        if (data?.length) { todosLosPagos.push(...data); fromPagos += 1000; } else { fetchMorePagos = false; }
+      }
+
+      let todasLasLiqs: any[] = [];
+      let fetchMoreLq = true;
+      let fromLq = 0;
+      while (fetchMoreLq) {
+        const { data } = await supabase.from('liquidaciones')
+          .select('*')
+          .eq('profesional_id', prof.id)
+          .eq('estado', 'Finalizada')
+          .order('fecha_pago', { ascending: true })
+          .range(fromLq, fromLq + 999);
+        if (data?.length) { todasLasLiqs.push(...data); fromLq += 1000; } else { fetchMoreLq = false; }
+      }
+
+      // 4. Formatear y calcular comisiones aplicando REGLA 100%
+      const atencionesDoc = todasLasAtenciones.map(a => ({
+        fecha: a.fecha,
+        honorario: Number(a.monto_cobrado || 0) * porcentajeDr
+      }));
+
+      const pagosDoc = todosLosPagos.filter((p: any) => {
+        const pItem = Array.isArray(p.presupuesto_items) ? p.presupuesto_items[0] : (p.presupuesto_items || {});
+        const docId = pItem.profesional_id || p.profesional_id || null;
+        if (docId !== prof.user_id) return false;
+
+        const precioPactado = Number(pItem.precio_pactado || 0);
+        const abonadoTotal = Number(pItem.abonado || 0);
+        
+        // REGLA INQUEBRANTABLE: Solo tratamientos 100% pagados
+        return precioPactado > 0 && abonadoTotal >= precioPactado;
+      }).map(pago => {
+        const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
+        
+        const montoPago = Number(pago.monto || 0); 
+        const costoLab = Number(pItem.costo_laboratorio || 0);
+        const precioPactado = Number(pItem.precio_pactado || montoPago || 1);
+        const pagadoPorDr = Boolean(pItem.lab_pagado_por_dr);
+        
+        const itemEstado = pItem.estado?.toLowerCase() || '';
+        const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
+
+        let fraccionPago = montoPago / precioPactado;
+        if (fraccionPago > 1) fraccionPago = 1;
+
+        const labAplicado = costoLab * fraccionPago;
+        let montoImponible = montoPago;
+        if (montoImponible < 0) montoImponible = 0;
+
+        let pctDrItem = porcentajeDr; 
+        const tipoReparto = pItem.tipo_reparto || 'general';
+        if (tipoReparto === 'doctor') pctDrItem = 1;
+        else if (tipoReparto === 'clinica') pctDrItem = 0;
+        else if (tipoReparto === 'forzado') pctDrItem = Number(pItem.porcentaje_forzado || 0) / 100;
+
+        const comision = estaTerminado ? (montoImponible * pctDrItem) : 0;
+        const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
+
+        return {
+          fecha: pago.fecha_pago,
+          honorario: comision + reembolso
+        }
+      });
+
+      // 5. Unificar producción y aplicar Cascada Histórica con Escudo de Tiempo
+      const prodCombinada = [...atencionesDoc, ...pagosDoc].sort((a,b) => new Date(a.fecha||0).getTime() - new Date(b.fecha||0).getTime());
+      let pool = prodCombinada.map(x => ({ ...x, honorario_restante: x.honorario }));
+
+      todasLasLiqs.forEach(liq => {
+        let montoARepartir = Number(liq.monto_total);
+        
+        // Escudo de tiempo
+        let fechaLimite = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
+        fechaLimite.setHours(23, 59, 59, 999);
+
+        for (let i = 0; i < pool.length; i++) {
+          if (pool[i].honorario_restante <= 0) continue;
+          if (montoARepartir <= 0) break;
+
+          let fechaItem = new Date(pool[i].fecha ? pool[i].fecha.replace(' ', 'T') : 0);
+          if (fechaItem > fechaLimite) continue;
+
+          let aDescontar = Math.min(pool[i].honorario_restante, montoARepartir);
+          pool[i].honorario_restante -= aDescontar;
+          montoARepartir -= aDescontar;
+        }
+      });
+
+      // 6. Agrupar saldos ya purgados en el listado de meses para la interfaz
       const mesesLista = generarListaMeses()
-      const primerMes = `${mesesLista[mesesLista.length - 1]}-01`
-      const [ultY, ultM] = mesesLista[0].split('-')
-      const ultimoDiaNum = new Date(Number(ultY), Number(ultM), 0).getDate()
-      const ultimoMes = `${mesesLista[0]}-${String(ultimoDiaNum).padStart(2, '0')}`
+      
+      const resumenPorMes: MesResumen[] = mesesLista.map((mes) => {
+        const [y, m] = mes.split('-')
 
-      // 3. Traer toda la producción, pagos y liquidaciones del rango en un solo viaje
-      const { data: atenciones } = await supabase
-        .from('atenciones_realizadas')
-        .select('id, fecha, monto_cobrado, profesional_id')
-        .eq('profesional_id', prof.user_id)
-        .gte('fecha', `${primerMes} 00:00:00`)
-        .lte('fecha', `${ultimoMes} 23:59:59`)
+        // Filtramos solo los ítems que ocurrieron este mes específico
+        const itemsMes = pool.filter((x: any) => {
+          const f = new Date((x.fecha || '').replace(' ', 'T'))
+          return f.getFullYear() === Number(y) && f.getMonth() === Number(m) - 1
+        });
 
-      const { data: pagos } = await supabase
-        .from('pagos')
-        .select(`
-          id, monto, fecha_pago, profesional_id,
-          presupuesto_items ( profesional_id, precio_pactado, estado, tipo_reparto )
-        `)
-        .gte('fecha_pago', `${primerMes} 00:00:00`)
-        .lte('fecha_pago', `${ultimoMes} 23:59:59`)
-        .not('estado', 'eq', 'Anulado')
+        // La magia de la cascada: El "Pagado" real es la diferencia entre el honorario original y lo que le sobró a la cascada
+        const totalGenerado = itemsMes.reduce((acc, curr) => acc + curr.honorario, 0);
+        const saldoPendiente = itemsMes.reduce((acc, curr) => acc + curr.honorario_restante, 0);
+        const totalPagado = totalGenerado - saldoPendiente;
 
-      const { data: liqs } = await supabase
-        .from('liquidaciones')
-        .select('*')
-        .eq('profesional_id', prof.id)
-        .eq('estado', 'Finalizada')
-        .gte('periodo_desde', primerMes)
-        .lte('periodo_hasta', ultimoMes)
+        let estado: MesResumen['estado'] = 'Sin Movimiento'
+        if (totalGenerado > 0 || totalPagado > 0) {
+          estado = saldoPendiente > 0 ? 'Pendiente' : 'Finalizada'
+        }
 
-      const pagosDelDoctor = (pagos || []).filter((p: any) => {
-        const docId = p.profesional_id || p.presupuesto_items?.profesional_id || null
-        return docId === prof.user_id
-      })
-
-      // 4. Calcular resumen por cada mes del rango
-      const resumenPorMes: MesResumen[] = mesesLista
-        .map((mes) => {
-          const [y, m] = mes.split('-')
-
-          const totalAtenciones = (atenciones || [])
-            .filter((a: any) => {
-              const f = new Date((a.fecha || '').replace(' ', 'T'))
-              return f.getFullYear() === Number(y) && f.getMonth() === Number(m) - 1
-            })
-            .reduce((acc: number, a: any) => acc + Number(a.monto_cobrado) * porcentajeDr, 0)
-
-          const totalAbonos = pagosDelDoctor
-            .filter((p: any) => {
-              const f = new Date((p.fecha_pago || '').replace(' ', 'T'))
-              return f.getFullYear() === Number(y) && f.getMonth() === Number(m) - 1
-            })
-            .reduce((acc: number, p: any) => {
-              const montoPago = Number(p.monto || 0)
-              const itemEstado = p.presupuesto_items?.estado?.toLowerCase() || ''
-              const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado)
-              const tipoReparto = p.presupuesto_items?.tipo_reparto || 'general'
-              const pctDrItem = tipoReparto === 'doctor' ? 1 : (tipoReparto === 'clinica' ? 0 : porcentajeDr)
-              const comision = estaTerminado ? (montoPago * pctDrItem) : 0
-              return acc + comision
-            }, 0)
-
-          const totalGenerado = totalAtenciones + totalAbonos
-
-          const totalPagado = (liqs || [])
-            .filter((l: any) => {
-              const f = new Date(l.fecha_pago || l.periodo_hasta)
-              return f.getFullYear() === Number(y) && f.getMonth() === Number(m) - 1
-            })
-            .reduce((acc: number, l: any) => acc + Number(l.monto_total), 0)
-
-          const saldoPendiente = Math.max(totalGenerado - totalPagado, 0)
-
-          let estado: MesResumen['estado'] = 'Sin Movimiento'
-          if (totalGenerado > 0 || totalPagado > 0) {
-            estado = saldoPendiente > 0 ? 'Pendiente' : 'Finalizada'
-          }
-
-          return {
-            mes,
-            etiqueta: etiquetaMes(mes),
-            totalGenerado,
-            totalPagado,
-            saldoPendiente,
-            estado
-          }
-        })
-        .filter((r) => r.estado !== 'Sin Movimiento')
+        return {
+          mes,
+          etiqueta: etiquetaMes(mes),
+          totalGenerado,
+          totalPagado,
+          saldoPendiente,
+          estado
+        }
+      }).filter((r) => r.estado !== 'Sin Movimiento')
 
       setMeses(resumenPorMes)
     } catch (error: any) {
