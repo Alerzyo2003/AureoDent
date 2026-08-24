@@ -1649,81 +1649,167 @@ export default function AgendaPage() {
       {mounted && typeof document !== 'undefined' && createPortal(
         <>
           <AnimatePresence>
-            {modalOnlineAbierto && (
-              <div className="fixed inset-0 z-[99999] flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
-                <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-4xl max-h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative text-slate-900 text-left">
-                  <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left bg-blue-600" style={{ background: `linear-gradient(135deg, #1d4ed8, #1e3a8a)` }}>
-                    <div className="flex items-center gap-4 md:gap-5 text-left">
-                      <div className="p-3 rounded-2xl shadow-sm bg-white/20 border border-white/40"><Globe className="text-white" size={24} /></div>
-                      <div>
-                        <h2 className="font-display text-lg md:text-xl tracking-tight text-white leading-none text-left">Validar Agendamientos Web</h2>
-                        <p className="text-[11px] md:text-[10px] font-bold uppercase tracking-widest mt-1 text-blue-200">Revisa las solicitudes de los pacientes</p>
+            {modalAbierto && (
+              <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
+                <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-4xl max-h-[90vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden text-left">
+                   
+                   {/* HEADER DEL MODAL */}
+                   <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center shrink-0" style={{ background: `linear-gradient(135deg, ${NAVY}, #081420)` }}>
+                      <div className="flex items-center gap-4">
+                         <div className="p-3 rounded-xl shadow-sm bg-white/10 border border-white/20"><CalendarIcon size={24} className="text-[#C9A24B]"/></div>
+                         <div>
+                           <h2 className="font-display text-xl tracking-tight text-white leading-none">{citaEnReprogramacion ? 'Reprogramar Cita' : 'Agendar Nueva Cita'}</h2>
+                           <p className="text-[10px] md:text-[9px] font-bold uppercase tracking-widest mt-1 text-[#C9A24B]">Completa los datos de la atención</p>
+                         </div>
                       </div>
-                    </div>
-                    <button onClick={() => setModalOnlineAbierto(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-all text-left"><X className="md:w-[20px] md:h-[20px]" size={24} /></button>
-                  </div>
-                  
-                  <div className="flex-1 p-4 md:p-8 overflow-y-auto bg-slate-50/50 custom-scrollbar">
-                    {cargandoAccion ? (
-                      <div className="h-full py-12 flex flex-col items-center justify-center text-slate-400 gap-4">
-                        <Loader2 className="animate-spin" size={40} />
-                        <p className="text-sm md:text-xs font-black uppercase tracking-widest">Procesando...</p>
-                      </div>
-                    ) : citasOnlinePendientes.length === 0 ? (
-                      <div className="h-full py-12 flex flex-col items-center justify-center text-slate-400 gap-4 opacity-60">
-                        <CheckCircle2 className="text-emerald-500" size={60} />
-                        <p className="text-base md:text-sm font-black uppercase tracking-widest text-slate-600">Todo al día</p>
-                        <p className="text-sm font-semibold">No hay solicitudes web pendientes de validación para esta fecha.</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-4">
-                        <p className="text-sm md:text-xs font-bold text-slate-500 mb-6">Hay <span className="font-black text-blue-600">{citasOnlinePendientes.length} solicitudes</span> pendientes de revisión.</p>
-                        {citasOnlinePendientes.map(cita => {
-                            const fechaFormat = new Date(cita.inicio).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'short' });
-                            const horaFormat = new Date(cita.inicio).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
-                            const doctorObj = profesionales.find(p => p.user_id === cita.profesional_id);
+                      <button onClick={() => { setModalAbierto(false); resetEstados(); }} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X size={24} /></button>
+                   </div>
 
-                            return (
-                                <div key={cita.id} className="bg-white p-5 rounded-[2rem] border border-blue-100 shadow-sm flex flex-col hover:border-blue-300 transition-all">
-                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                      <div className="flex items-center gap-4 md:gap-5 w-full md:w-auto">
-                                          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex flex-col items-center justify-center border border-blue-100 shrink-0">
-                                              <span className="text-sm md:text-xs font-black">{horaFormat}</span>
-                                          </div>
-                                          <div className="flex-1">
-                                              <h4 className="font-black text-base md:text-sm text-slate-800 uppercase leading-none">{cita.pacientes?.nombre} {cita.pacientes?.apellido}</h4>
-                                              <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest flex items-center gap-1"><Phone size={12}/> {cita.pacientes?.telefono || 'Sin teléfono'}</p>
-                                              <div className="flex flex-wrap items-center gap-2 mt-2">
-                                                  <span className="text-[10px] md:text-[9px] font-bold text-slate-500 tracking-widest bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">
-                                                      <CalendarDays className="inline mr-1 md:w-[10px] md:h-[10px]" size={12} /> {fechaFormat}
-                                                  </span>
-                                                  <span className="text-[10px] md:text-[9px] font-bold text-slate-500 tracking-widest bg-slate-50 border border-slate-200 px-2 py-1 rounded-md">
-                                                      <User className="inline mr-1 md:w-[10px] md:h-[10px]" size={12} /> Dr/a. {doctorObj?.apellido}
-                                                  </span>
-                                              </div>
-                                          </div>
-                                      </div>
-                                      
-                                      <div className="flex gap-2 self-start md:self-auto w-full md:w-auto mt-2 md:mt-0">
-                                          <button onClick={() => validarCitaOnline(cita)} className="flex-1 md:flex-none justify-center px-4 py-3 md:py-2 bg-emerald-50 text-emerald-600 text-xs md:text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-white rounded-xl transition-all flex items-center gap-2 shadow-sm">
-                                              <CheckCircle2 className="md:w-[14px] md:h-[14px]" size={16} /> Aprobar
-                                          </button>
-                                          <button onClick={() => rechazarCitaOnline(cita.id)} className="p-3 md:p-2 bg-white border border-slate-200 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all shadow-sm" title="Rechazar y Eliminar">
-                                              <Trash2 className="md:w-[16px] md:h-[16px]" size={18} />
-                                          </button>
-                                      </div>
+                   {/* CUERPO DEL MODAL */}
+                   <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar bg-slate-50 flex flex-col gap-6">
+
+                      {/* 1. SECCIÓN PACIENTE */}
+                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                         <h3 className="text-sm font-black uppercase text-slate-800 mb-4 flex items-center gap-2"><User size={16} className="text-[#C9A24B]"/> 1. Datos del Paciente</h3>
+
+                         {!modoNuevoPaciente ? (
+                            <div className="space-y-4">
+                               <div className="relative">
+                                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                                  <input type="text" placeholder="Buscar por RUT o Nombre..." className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium focus:border-[#C9A24B] outline-none transition-all" value={busqueda} onChange={(e) => { setBusqueda(e.target.value); buscarPacientes(e.target.value); }} disabled={!!citaEnReprogramacion} />
+                               </div>
+                               
+                               {pacientesEncontrados.length > 0 && (
+                                  <div className="bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto mt-2">
+                                     {pacientesEncontrados.map(p => (
+                                        <button key={p.id} onClick={() => seleccionarPacienteExistente(p)} className="w-full text-left px-5 py-3 border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                                           <p className="font-black text-slate-800">{p.nombre} {p.apellido}</p>
+                                           <p className="text-xs font-semibold text-slate-500 mt-1">RUT: {p.rut}</p>
+                                        </button>
+                                     ))}
                                   </div>
-                                </div>
-                            )
-                        })}
+                               )}
+
+                               {!citaEnReprogramacion && !pacienteSeleccionado && (
+                                   <button onClick={() => setModoNuevoPaciente(true)} className="text-xs font-black text-blue-600 hover:text-blue-800 flex items-center gap-1 uppercase tracking-widest mt-2"><Plus size={14} /> Registrar paciente nuevo</button>
+                               )}
+
+                               {pacienteSeleccionado && (
+                                  <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl flex items-center gap-4 mt-2">
+                                     <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-black">{getInitials(pacienteSeleccionado.nombre, pacienteSeleccionado.apellido)}</div>
+                                     <div>
+                                        <p className="font-black text-emerald-900 text-sm uppercase">{pacienteSeleccionado.nombre} {pacienteSeleccionado.apellido}</p>
+                                        <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mt-0.5">RUT: {pacienteSeleccionado.rut}</p>
+                                     </div>
+                                     {!citaEnReprogramacion && (
+                                         <button onClick={() => { setPacienteSeleccionado(null); setBusqueda(''); }} className="ml-auto p-2 hover:bg-emerald-200 rounded-lg text-emerald-700 transition-colors"><X size={16}/></button>
+                                     )}
+                                  </div>
+                               )}
+                            </div>
+                         ) : (
+                            <div className="space-y-4">
+                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <input type="text" placeholder="Nombres" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#C9A24B]" value={nuevoPaciente.nombre} onChange={e => setNuevoPaciente({...nuevoPaciente, nombre: e.target.value})} />
+                                  <input type="text" placeholder="Apellidos" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#C9A24B]" value={nuevoPaciente.apellido} onChange={e => setNuevoPaciente({...nuevoPaciente, apellido: e.target.value})} />
+                                  <input type="text" placeholder="RUT (Sin puntos, con guión)" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#C9A24B]" value={nuevoPaciente.rut} onChange={e => setNuevoPaciente({...nuevoPaciente, rut: e.target.value})} />
+                                  <input type="tel" placeholder="Teléfono" className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#C9A24B]" value={nuevoPaciente.telefono} onChange={e => setNuevoPaciente({...nuevoPaciente, telefono: e.target.value})} />
+                               </div>
+                               <button onClick={() => setModoNuevoPaciente(false)} className="text-xs font-black uppercase tracking-widest text-slate-500 hover:text-slate-700 mt-2 flex items-center gap-1"><ChevronLeft size={14}/> Volver a buscar</button>
+                            </div>
+                         )}
                       </div>
-                    )}
-                  </div>
+
+                      {/* 2. SECCIÓN MOTIVO */}
+                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                         <h3 className="text-sm font-black uppercase text-slate-800 mb-4 flex items-center gap-2"><ClipboardList size={16} className="text-[#C9A24B]"/> 2. Motivo o Tratamiento</h3>
+                         <div className="space-y-3">
+                            {tratamientosPaciente.length > 0 && (
+                               <select className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:border-[#C9A24B]" value={tratamientoSeleccionadoId || 'MANUAL'} onChange={e => setTratamientoSeleccionadoId(e.target.value)}>
+                                  <option value="MANUAL">-- Ingresar motivo manualmente --</option>
+                                  {tratamientosPaciente.map(t => <option key={t.id} value={t.id}>{t.nombre_tratamiento}</option>)}
+                               </select>
+                            )}
+                            <input type="text" placeholder="Ej: Evaluación, Limpieza, Control..." className="w-full p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-[#C9A24B]" value={nuevoTratamientoNombre} onChange={e => setNuevoTratamientoNombre(e.target.value)} />
+                         </div>
+                      </div>
+
+                      {/* 3. SECCIÓN HORARIOS */}
+                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+                         <div className="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-4">
+                             <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2"><Clock size={16} className="text-[#C9A24B]"/> 3. Fecha y Hora</h3>
+                             <div className="flex items-center gap-2 w-full md:w-auto">
+                                <select className="w-full md:w-auto p-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none" value={filtro.profesional_id} onChange={e => setFiltro({...filtro, profesional_id: e.target.value})}>
+                                   {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
+                                </select>
+                                <select className="w-full md:w-auto p-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none" value={filtro.duracionDefault} onChange={e => setFiltro({...filtro, duracionDefault: Number(e.target.value)})}>
+                                   {duracionesDisponibles.map(d => <option key={d} value={d}>{d} min</option>)}
+                                </select>
+                             </div>
+                         </div>
+                         
+                         <div className="mb-4 flex items-center justify-between bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            <button onClick={() => navegarSemana('atras')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"><ChevronLeft size={18}/></button>
+                            <span className="text-xs font-black uppercase tracking-widest text-slate-700">Semana del {semanaInicio.toLocaleDateString('es-CL', {day: 'numeric', month:'short'})}</span>
+                            <button onClick={() => navegarSemana('adelante')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-500 transition-colors"><ChevronRight size={18}/></button>
+                         </div>
+
+                         <div className="grid grid-cols-6 gap-2">
+                            {getDiasLunesSabado(semanaInicio).map((dia, dIdx) => {
+                               const diaStr = getLocalDateISO(dia);
+                               return (
+                                  <div key={dIdx} className="text-center">
+                                     <div className="mb-3">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{dia.toLocaleDateString('es-CL', {weekday: 'short'})}</p>
+                                        <p className="text-base font-black text-slate-800">{dia.getDate()}</p>
+                                     </div>
+                                     <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                                        {slotsHorarios.map(hora => {
+                                           const esLaboral = esHorarioLaboral(diaStr, hora, filtro.duracionDefault);
+                                           if(!esLaboral) return null;
+                                           
+                                           const ocupado = esCitaOcupada(diaStr, hora, filtro.duracionDefault);
+                                           const seleccionado = horasSeleccionadas.some(s => s.fecha === diaStr && s.hora === hora);
+                                           
+                                           let btnClass = "py-2 text-[11px] font-black rounded-lg border transition-all ";
+                                           if(seleccionado) btnClass += "bg-emerald-500 text-white border-emerald-600 shadow-md";
+                                           else if(ocupado) btnClass += "bg-red-50 text-red-500 border-red-200 opacity-60";
+                                           else btnClass += "bg-white text-slate-600 border-slate-200 hover:border-[#C9A24B] hover:text-[#C9A24B] shadow-sm";
+
+                                           return (
+                                              <button key={hora} onClick={() => handleSlotClick(diaStr, hora)} className={btnClass}>
+                                                 {hora}
+                                              </button>
+                                           );
+                                        })}
+                                     </div>
+                                  </div>
+                               )
+                            })}
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* FOOTER MODAL */}
+                   <div className="p-6 md:p-8 border-t border-slate-100 bg-white shrink-0 flex flex-col md:flex-row items-center justify-between gap-4">
+                      <p className="text-xs font-black text-slate-500 uppercase tracking-widest">
+                         {horasSeleccionadas.length > 0 ? (
+                            <span className="text-emerald-600 flex items-center gap-1"><CheckCircle2 size={16}/> {horasSeleccionadas.length} bloque(s) seleccionado(s)</span>
+                         ) : "Selecciona un horario en el calendario"}
+                      </p>
+                      <button 
+                         onClick={handleGuardar} 
+                         disabled={cargandoAccion || horasSeleccionadas.length === 0 || (!pacienteSeleccionado && !modoNuevoPaciente)} 
+                         className="w-full md:w-auto px-8 py-4 bg-emerald-500 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all shadow-lg"
+                      >
+                         {cargandoAccion ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />} 
+                         Confirmar y Agendar
+                      </button>
+                   </div>
                 </motion.div>
               </div>
             )}
           </AnimatePresence>
-
           <AnimatePresence>
             {modalEnvioPresupuesto.abierto && (
               <div className="fixed inset-0 z-[99999] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 text-left">
