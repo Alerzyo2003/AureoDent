@@ -1183,9 +1183,7 @@ export default function DetalleTratamientoPage() {
         }
     }
 
-    if (perfil?.rol !== 'ADMIN' && perfil?.rol !== 'DENTISTA') {
-        return toast.error("No tienes permisos para evolucionar tratamientos.");
-    }
+    // ELIMINADA LA RESTRICCIÓN DE ROL: Ahora cualquier usuario puede continuar.
 
     if (perfil?.rol === 'DENTISTA') {
       const doctorLogueadoId = profesionalSeleccionado;
@@ -1204,7 +1202,9 @@ export default function DetalleTratamientoPage() {
 
     setItemsAEvolucionar(itemIds);
     setAvanceEvolucion(avanceInicial);
-    if (perfil?.rol === 'ADMIN') setProfesionalSeleccionado('');
+    
+    // Si el usuario NO es dentista (es decir, admin, recepcionista, etc), reseteamos el campo para obligarlo a elegir al doctor
+    if (perfil?.rol !== 'DENTISTA') setProfesionalSeleccionado(''); 
     setModalEvolucionAbierto(true);
   }
 
@@ -2801,11 +2801,11 @@ export default function DetalleTratamientoPage() {
                       <div className="space-y-6">
                         <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest border-b border-slate-100 pb-2">2. Registro Clínico Legal</h4>
                         <div className="space-y-4">
-                          {perfil?.rol === 'ADMIN' && (
+                          {perfil?.rol !== 'DENTISTA' && (
                             <div className="space-y-2 text-left">
                               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Profesional Actuante</label>
                               <select className="w-full p-4 rounded-xl bg-slate-50 font-bold text-xs uppercase border border-slate-200 text-slate-900 outline-none focus:border-blue-500 transition-all cursor-pointer" value={profesionalSeleccionado} onChange={(e) => setProfesionalSeleccionado(e.target.value)}>
-                                  <option value="">Seleccione su nombre...</option>
+                                  <option value="">Seleccione al profesional...</option>
                                   {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
                               </select>
                             </div>
