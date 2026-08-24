@@ -331,11 +331,19 @@ export default function DetalleTratamientoPage() {
 
       let targetID: string = idURL;
       let esNuevo = true;
-      if (pres && pres.id_dentalink) { targetID = pres.id_dentalink.toString(); esNuevo = false; }
+      
+      // Mantenemos la variable esNuevo=false para que la lógica de "Ajustes de saldo" 
+      // siga funcionando en los presupuestos antiguos.
+      if (pres && pres.id_dentalink) { 
+          targetID = pres.id_dentalink.toString(); 
+          esNuevo = false; 
+      }
 
-      let query = esNuevo 
-        ? supabase.from('presupuesto_items').select(`*, progreso, prestaciones:prestacion_id(icono_tipo, "Nombre Accion", "Nombre", "Precio")`).eq('presupuesto_id', idURL) 
-        : supabase.from('temp_items').select('*').eq('id_dentalink', targetID);
+      // 🚀 CAMBIO CLAVE: Todo está ahora oficializado en presupuesto_items.
+      let query = supabase
+        .from('presupuesto_items')
+        .select(`*, progreso, prestaciones:prestacion_id(icono_tipo, "Nombre Accion", "Nombre", "Precio")`)
+        .eq('presupuesto_id', idURL);
 
       const { data, error } = await query;
       if (error) throw error;
