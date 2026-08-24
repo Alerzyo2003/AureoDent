@@ -50,41 +50,72 @@ export default function DetalleLiquidacionPage() {
         .from('liquidaciones')
         .select('*')
         .eq('profesional_id', prof.id)
-        .gte('periodo_desde', fechaCortaInicio)
-        .lte('periodo_hasta', fechaCortaFin)
         .eq('estado', 'Finalizada')
         .order('fecha_pago', { ascending: true });
 
       const liqsCerradas = liqsData || [];
 
-      // 3. Obtener Atenciones (solo del mes actual)
+      // 3. Obtener Atenciones (sin límite de fecha para calcular historial completo)
       const { data: atenciones } = await supabase
         .from('atenciones_realizadas')
         .select(`id, fecha, monto_cobrado, profesional_id, pacientes(nombre, apellido), prestaciones!atenciones_realizadas_prestacion_id_fkey(id, "Nombre Accion")`)
-        .eq('profesional_id', prof.user_id)
-        .gte('fecha', inicioMes)
-        .lte('fecha', finMes);
+        .eq('profesional_id', prof.user_id);
 
-      // 4. Obtener Pagos
-      const { data: pagos, error: errPagos } = await supabase
-        .from('pagos')
-        .select(`
-          id, monto, fecha_pago, profesional_id,
-          pacientes ( nombre, apellido ),
-          presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
-        `)
-        .gte('fecha_pago', inicioMes)
-        .lte('fecha_pago', finMes)
-        .not('estado', 'eq', 'Anulado');
+      // 4. Obtener Pagos con Paginación
+      let todosLosPagos: any[] = [];
+      let fetchMorePagos = true;
+      let fromPagos = 0;
+      const step = 1000;
 
-      if (errPagos) throw errPagos;
+      while (fetchMorePagos) {
+        const { data: pagosChunk, error: errPagos } = await supabase
+          .from('pagos')
+          .select(`
+            id, monto, fecha_pago, profesional_id,
+            pacientes ( nombre, apellido ),
+            presupuesto_items ( profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado )
+          `)
+          .not('estado', 'eq', 'Anulado')
+          .range(fromPagos, fromPagos + step - 1);
 
-      const pagosDelDoctor = (pagos || []).filter((pago: any) => {
-         const docId = pago.profesional_id || pago.presupuesto_items?.profesional_id || null;
+        if (errPagos) throw errPagos;
+
+        if (pagosChunk && pagosChunk.length > 0) {
+          todosLosPagos = [...todosLosPagos, ...pagosChunk];
+          fromPagos += step;
+        } else {
+          fetchMorePagos = false;
+        }
+      }
+      
+      // ==========================================
+      // 🐛 INICIO BLOQUE DEBUG 🐛
+      // ==========================================
+      console.log("=== DEBUG LIQUIDACIONES ===");
+      console.log("1. ID del Doctor actual (prof.user_id):", prof.user_id);
+      console.log("2. Total de pagos crudos extraídos de BD:", todosLosPagos.length);
+
+      const pagosDelDoctor = todosLosPagos.filter((pago: any) => {
+         const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
+         const docId = pItem.profesional_id || pago.profesional_id || null; 
+         
+         if (pItem.estado === 'realizado') {
+             console.log("-> Detectado pago de tto REALIZADO (Pago ID:", pago.id.substring(0,6) + ")");
+             console.log("   - Doctor del Pago:", pago.profesional_id);
+             console.log("   - Doctor del Tratamiento:", pItem.profesional_id);
+             console.log("   - ¿Coincide con este doctor?:", docId === prof.user_id);
+         }
+
          return docId === prof.user_id;
       });
 
-      // 5. Formatear Datos
+      console.log("3. Pagos que SÍ pertenecen a este doctor:", pagosDelDoctor.length);
+      console.log("=======================================");
+      // ==========================================
+      // 🐛 FIN BLOQUE DEBUG 🐛
+      // ==========================================
+
+      // 5. Formatear Datos (VERSIÓN ÚNICA Y LIMPIA)
       const atencionesFormateadas = (atenciones || []).map((a: any) => ({
         id_origen: a.id,
         fecha: a.fecha,
@@ -99,12 +130,14 @@ export default function DetalleLiquidacionPage() {
       }));
 
       const abonosFormateados = pagosDelDoctor.map((pago: any) => {
+        const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
+
         const montoPago = Number(pago.monto || 0);
-        const costoLab = Number(pago.presupuesto_items?.costo_laboratorio || 0);
-        const precioPactado = Number(pago.presupuesto_items?.precio_pactado || montoPago || 1);
-        const pagadoPorDr = Boolean(pago.presupuesto_items?.lab_pagado_por_dr);
+        const costoLab = Number(pItem.costo_laboratorio || 0);
+        const precioPactado = Number(pItem.precio_pactado || montoPago || 1);
+        const pagadoPorDr = Boolean(pItem.lab_pagado_por_dr);
         
-        const itemEstado = pago.presupuesto_items?.estado?.toLowerCase() || '';
+        const itemEstado = pItem.estado?.toLowerCase() || '';
         const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
 
         let fraccionPago = montoPago / precioPactado;
@@ -114,28 +147,27 @@ export default function DetalleLiquidacionPage() {
         let montoImponible = montoPago;
         if (montoImponible < 0) montoImponible = 0;
 
-        const tipoReparto = pago.presupuesto_items?.tipo_reparto || 'general';
-        const valorForzado = Number(pago.presupuesto_items?.porcentaje_forzado || 0) / 100;
+        const tipoReparto = pItem.tipo_reparto || 'general';
+        const valorForzado = Number(pItem.porcentaje_forzado || 0) / 100;
 
-        let pctDrItem = porcentajeDr; // General por defecto
-
-        if (tipoReparto === 'doctor') {
-            pctDrItem = 1;
-        } else if (tipoReparto === 'clinica') {
-            pctDrItem = 0;
-        } else if (tipoReparto === 'forzado') {
-            pctDrItem = valorForzado; // 👈 Aquí aplicará tu 70% (0.7)
-        }
+        let pctDrItem = porcentajeDr; 
+        if (tipoReparto === 'doctor') pctDrItem = 1;
+        else if (tipoReparto === 'clinica') pctDrItem = 0;
+        else if (tipoReparto === 'forzado') pctDrItem = valorForzado;
 
         const comision = estaTerminado ? (montoImponible * pctDrItem) : 0;
         const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
         const totalAlDoctor = comision + reembolso;
 
+        if (estaTerminado) {
+             console.log("   -> COMISIÓN CALCULADA para pago", pago.id.substring(0,6), ": $", totalAlDoctor);
+        }
+
         return {
           id_origen: pago.id,
           fecha: pago.fecha_pago,
           paciente: pago.pacientes ? `${pago.pacientes.nombre} ${pago.pacientes.apellido}` : 'Paciente',
-          prestacion: pago.presupuesto_items?.nombre_prestacion || 'Abono Plan',
+          prestacion: pItem.nombre_prestacion || 'Abono Plan',
           montoPago: montoPago,
           descuentoLab: labAplicado,
           esReembolso: pagadoPorDr,
@@ -227,6 +259,7 @@ export default function DetalleLiquidacionPage() {
       window.print();
     }, 100);
   }
+  
   const descargarExcel = () => {
     if (itemsPendientes.length === 0) {
       toast.error("No hay producción pendiente para descargar");
@@ -249,19 +282,19 @@ export default function DetalleLiquidacionPage() {
       const fecha = item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F';
       return [
         fecha,
-        `"${item.paciente}"`, // Comillas para evitar problemas si el nombre tiene puntos o comas
+        `"${item.paciente}"`,
         `"${item.prestacion}"`,
         Math.round(item.montoPago || 0),
         Math.round(item.descuentoLab || 0),
         Math.round(item.imponible || 0),
         Math.round(item.honorario || 0)
-      ].join(';'); // Separador punto y coma para Excel en español
+      ].join(';'); 
     });
 
     // 3. Fila de Total
     filas.push(['', '', 'TOTAL PENDIENTE A PAGAR', '', '', '', Math.round(resumenMes.saldoPendiente)].join(';'));
 
-    // 4. Crear archivo y forzar descarga (BOM \uFEFF para que Excel lea los acentos)
+    // 4. Crear archivo y forzar descarga
     const csvContent = "\uFEFF" + encabezados.join(';') + "\n" + filas.join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -277,6 +310,7 @@ export default function DetalleLiquidacionPage() {
     
     toast.success("Excel descargado correctamente");
   }
+
   const obtenerFechaFinalizacion = () => {
     const [year, month] = mesSeleccionado.split('-');
     const ultimoDiaNum = new Date(Number(year), Number(month), 0).getDate();
