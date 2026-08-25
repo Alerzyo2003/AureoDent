@@ -1247,16 +1247,48 @@ export default function DetalleTratamientoPage() {
         nuevaObs = nuevaObs.replace(/ \| Avance: [0-9]+/g, ''); 
         
         const nuevoEstado = avance === 100 ? 'realizado' : item.estado;
-
         const doctorFinalParaPago = item.tipo_reparto === 'doctor' ? item.profesional_id : doctorId;
 
         if (item.presupuesto_id) {
+          // 1. Actualizamos el ítem en el presupuesto
           await supabase.from('presupuesto_items').update({ 
             observacion: nuevaObs,
             estado: nuevoEstado,
             profesional_id: doctorFinalParaPago, 
             progreso: avance
           }).eq('id', itemId);
+
+          // 2. Si llega al 100% y está pagado, registramos en liquidaciones_detalle
+          if (avance === 100) {
+            const itemActual = acciones.find(a => a.id === itemId);
+            
+            if (itemActual && Number(itemActual.display_abonado || 0) >= Number(itemActual.display_pactado || 0)) {
+              const periodoActual = new Date().toISOString().substring(0, 7); // 'YYYY-MM'
+              const baseImponible = Number(itemActual.display_pactado || 0) - Number(itemActual.costo_laboratorio || 0);
+              
+              // Buscamos el ID real de la tabla profesionales usando el user_id
+              const profEncontrado = profesionales.find(p => p.user_id === doctorFinalParaPago);
+              const profesionalRowId = profEncontrado ? profEncontrado.id : null;
+
+              if (profesionalRowId) {
+                const porcentajeDr = Number(profesional?.porcentaje_comision || 40) / 100;
+                const honorarioDoc = baseImponible * porcentajeDr;
+
+                await supabase.from('liquidaciones_detalle').insert([{
+                  profesional_id: profesionalRowId, // ID correcto de la tabla profesionales
+                  paciente_id: pacienteId,
+                  item_id: itemId,
+                  nombre_prestacion: itemActual.display_nombre,
+                  monto_pago: itemActual.display_pactado,
+                  costo_laboratorio: itemActual.costo_laboratorio || 0,
+                  base_imponible: baseImponible > 0 ? baseImponible : 0,
+                  honorario_doctor: honorarioDoc > 0 ? honorarioDoc : 0,
+                  periodo: periodoActual
+                }]);
+              }
+            }
+          }
+
         } else if (item.id_dentalink) {
           await supabase.from('temp_items').update({ 
             nombre_prestacion: nuevaObs, 
