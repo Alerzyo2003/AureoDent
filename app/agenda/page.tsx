@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { createPortal } from 'react-dom'
+import { useRouter } from 'next/navigation'
 import { 
   X, Search, ChevronLeft, ChevronRight, Loader2, Clock, 
   CalendarDays, Timer, UserCheck, Trash2, Activity, ClipboardList, 
@@ -73,6 +74,7 @@ const getMinsFromDateStr = (dtString: string) => { const timePart = dtString.inc
 const getLunes = (d: Date) => { const date = new Date(d); const day = date.getDay() || 7; date.setDate(date.getDate() - day + 1); date.setHours(0,0,0,0); return date; }
 
 export default function AgendaPage() {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [vistaAgenda, setVistaAgenda] = useState<'dia' | 'semana'>('dia')
@@ -1071,72 +1073,14 @@ export default function AgendaPage() {
 
   const resetEstados = () => { setPaso(1); setHorasSeleccionadas([]); setPacienteSeleccionado(null); setBusqueda(''); setModoNuevoPaciente(false); setNuevoTratamientoNombre(''); setCitasOcupadas([]); setCitaEnReprogramacion(null); setSemanaInicio(new Date()); setTratamientosPaciente([]); setTratamientoSeleccionadoId(null); setNuevoPaciente({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' }); setBloqueosSemana([]); setCargandoAccion(false); }
 
-  const abrirCaja = async (cita: any) => {
-    if (!cita.pacientes || !cita.pacientes.id) return toast.error("Cita no tiene paciente asignado");
+  const abrirCaja = (cita: any) => {
+    const idPaciente = cita.pacientes?.id || cita.paciente_id;
     
-    setPacientePago(cita.pacientes); 
-    setMontoIngresado(''); 
-    setMetodoPago('tarjeta'); 
-    setCodigoTransaccion('');
-    setPlanesDetalladosAgenda([]);
-    setDeudaTotalPlanAgenda(0);
-    setModalPagoAbierto(true); 
-    setCargandoDeudas(true);
-    
-    try {
-        const { data: pacData } = await supabase.from('pacientes').select('saldo_a_favor').eq('id', cita.pacientes.id).single();
-        setSaldoAFavor(Number(pacData?.saldo_a_favor || 0));
-
-        const { data: presupuestosPaciente, error: errPres } = await supabase.from('presupuestos').select('id, nombre_tratamiento').eq('paciente_id', cita.pacientes.id).eq('aprobado', true);
-        if (errPres) throw errPres;
-        
-        const idsPresupuestos = presupuestosPaciente?.map(p => p.id) || [];
-        let itemsData: any[] = [];
-        
-        if (idsPresupuestos.length > 0) {
-            const { data, error } = await supabase.from('presupuesto_items').select(`id, observacion, precio_pactado, abonado, estado, progreso, profesional_id, prestaciones:prestacion_id("Nombre Accion", "Nombre"), profesional:profesional_id(nombre, apellido)`).in('presupuesto_id', idsPresupuestos).not('estado', 'eq', 'cancelada');
-            if (error) throw error;
-            itemsData = data || [];
-        }
-        
-        const todosLosItemsMapeados = (itemsData || []).map(item => {
-            const precio = Number(item.precio_pactado || 0); 
-            const abonado = Number(item.abonado || 0); 
-            const deuda = precio - abonado;
-            
-            let nombreDisplay = item.observacion || "Tratamiento";
-            if (item.prestaciones) nombreDisplay = item.prestaciones["Nombre Accion"] || item.prestaciones["Nombre"] || nombreDisplay;
-            else if (item.observacion && item.observacion.includes('|')) nombreDisplay = item.observacion.split('|')[0].trim();
-            const doctor = item.profesional ? `Dr/a. ${item.profesional.nombre} ${item.profesional.apellido}` : 'Sin asignar';
-            return { ...item, deuda, nombreDisplay, doctor };
-        }).filter(item => item.deuda > 0);
-
-        const planesParaVista = (presupuestosPaciente || []).map(plan => {
-          const itemsDelPlan = todosLosItemsMapeados.filter(item => item.presupuesto_id === plan.id);
-          const deudaDelPlan = itemsDelPlan.reduce((acc, item) => acc + item.deuda, 0);
-          return {
-            id: plan.id,
-            nombre: plan.nombre_tratamiento || 'Tratamiento General',
-            deudaTotal: deudaDelPlan
-          };
-        }).filter(p => p.deudaTotal > 0);
-
-        setPlanesDetalladosAgenda(planesParaVista);
-        setDeudaTotalPlanAgenda(todosLosItemsMapeados.reduce((acc, item) => acc + item.deuda, 0));
-
-        const itemsConDeuda = todosLosItemsMapeados.filter(item => {
-            const estado = String(item.estado || 'pendiente').toLowerCase();
-            return ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(estado) || (item.progreso && item.progreso > 0);
-        });
-        
-        setDeudasPaciente(itemsConDeuda);
-    } catch (e) { 
-        console.error(e); 
-        toast.error("Error al cargar las deudas del paciente"); 
-        setModalPagoAbierto(false); 
-    } finally { 
-        setCargandoDeudas(false); 
+    if (!idPaciente) {
+      return toast.error("Cita no tiene paciente asignado");
     }
+    
+    router.push(`/pacientes/${idPaciente}/pagos`);
   }
 
   const procesarPagoCaja = async () => {
