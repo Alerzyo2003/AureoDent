@@ -455,6 +455,12 @@ export default function PagosPacientePage() {
     if (!window.confirm(mensajeConfirmacion)) return;
     if (pago.estado === 'Anulado') return toast.info("Esta transacción ya fue anulada.");
 
+    // 🔥 NUEVO: Pedir motivo de anulación obligatorio
+    const motivo = window.prompt("Por favor, ingresa el motivo de la anulación (Obligatorio):");
+    if (!motivo || motivo.trim() === '') {
+        return toast.info("Anulación cancelada. Es obligatorio ingresar un motivo.");
+    }
+
     setCargandoAccion(true);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -489,9 +495,10 @@ export default function PagosPacientePage() {
       await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', paciente_id);
       setPacienteInfo((prev: any) => ({ ...prev, saldo_a_favor: nuevoSaldo }));
       
+      // 🔥 NUEVO: Registrar el motivo en la auditoría clínica
       const detallesAuditoria = esAbonoLibre 
-          ? `Anuló un ingreso manual agrupado de $${pago.monto.toLocaleString('es-CL')}. Se descuenta de SALDO A FAVOR`
-          : `Anuló un pago agrupado a tratamiento de $${pago.monto.toLocaleString('es-CL')}. Destino: SALDO A FAVOR`;
+          ? `Anuló un ingreso manual agrupado de $${pago.monto.toLocaleString('es-CL')}. Se descuenta de SALDO A FAVOR. Motivo: ${motivo.trim()}`
+          : `Anuló un pago agrupado a tratamiento de $${pago.monto.toLocaleString('es-CL')}. Destino: SALDO A FAVOR. Motivo: ${motivo.trim()}`;
 
       await supabase.from('auditoria_clinica').insert([{ usuario_id: session?.user?.id, accion: 'UPDATE / ANULACIÓN PAGO GRUPAL', detalles: detallesAuditoria }]);
       
