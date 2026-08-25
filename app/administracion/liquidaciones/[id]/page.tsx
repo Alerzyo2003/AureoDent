@@ -40,7 +40,7 @@ export default function DetalleLiquidacionPage() {
       
       const porcentajeDr = Number(prof.porcentaje_comision || 40) / 100;
 
-      // 2. Obtener Liquidaciones Cerradas del mes seleccionado
+      // 2. Obtener Liquidaciones Cerradas del doctor
       const { data: liqsData } = await supabase
         .from('liquidaciones')
         .select('*')
@@ -152,9 +152,11 @@ export default function DetalleLiquidacionPage() {
         let montoARepartir = Number(liq.monto_total);
         let itemsDeEstaLiq = [];
         
-        // Definir la fecha exacta en que se cerró/pagó esta liquidación histórica
-        let fechaCierreLiq = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
-        fechaCierreLiq.setHours(23, 59, 59, 999);
+        // Rango de fechas estricto de la liquidación guardada en BD
+        let fechaInicioLiq = liq.periodo_desde ? new Date(liq.periodo_desde.replace(' ', 'T')) : new Date(0);
+        let fechaFinLiq = liq.periodo_hasta ? new Date(liq.periodo_hasta.replace(' ', 'T')) : new Date((liq.fecha_pago || '').replace(' ', 'T'));
+        fechaInicioLiq.setHours(0, 0, 0, 0);
+        fechaFinLiq.setHours(23, 59, 59, 999);
 
         for(let i = 0; i < poolProduccion.length; i++) {
             let item = poolProduccion[i];
@@ -164,9 +166,9 @@ export default function DetalleLiquidacionPage() {
 
             let fechaItem = new Date(item.fecha ? item.fecha.replace(' ', 'T') : 0);
 
-            // 🛡️ REGLA ESTRICTA: Un cierre histórico NUNCA puede atrapar un pago 
-            // cuya fecha de realización/pago sea posterior a la fecha en que se pagó ese cierre.
-            if (fechaItem > fechaCierreLiq) continue;
+            // 🛡️ REGLA ESTRICTA: El cierre histórico solo puede consumir ítems 
+            // cuya fecha esté dentro del rango de ese periodo de liquidación.
+            if (fechaItem < fechaInicioLiq || fechaItem > fechaFinLiq) continue;
 
             let aDescontar = Math.min(item.honorario_restante, montoARepartir);
             
@@ -194,7 +196,7 @@ export default function DetalleLiquidacionPage() {
             honorario: p.honorario_restante
         }));
 
-      setItemPendientes(pendientesFinal);
+      setItemsPendientes(pendientesFinal);
       setCierresCompletados(cierresList.reverse());
 
       const produccionDelMes = produccionCombinada.filter(p => {
