@@ -278,11 +278,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                               <SidebarSubLink href="/administracion/configuracion/pagos-pendientes" label="Pagos Pendientes" onClick={() => setMobileMenuOpen(false)} />
 
                               <GroupTitle title="Configuración" />
-                              <SidebarSubLink href="/administracion/configuracion/aranceles" label="Aranceles Precios" onClick={() => setMobileMenuOpen(false)} />
-                              <SidebarSubLink href="/administracion/configuracion/bancos" label="Bancos" onClick={() => setMobileMenuOpen(false)} />
-                              <SidebarSubLink href="/administracion/configuracion/documentos" label="Docs Clínicos" onClick={() => setMobileMenuOpen(false)} />
-                              <SidebarSubLink href="/administracion/configuracion/consentimientos" label="Consentimientos" onClick={() => setMobileMenuOpen(false)} />
-
+<SidebarSubLink href="/administracion/configuracion/aranceles" label="Aranceles Precios" onClick={() => setMobileMenuOpen(false)} />
+<SidebarSubLink href="/administracion/configuracion/aranceles/plantillas" label="Plantillas" onClick={() => setMobileMenuOpen(false)} />
+<SidebarSubLink href="/administracion/configuracion/bancos" label="Bancos" onClick={() => setMobileMenuOpen(false)} />
+<SidebarSubLink href="/administracion/configuracion/documentos" label="Docs Clínicos" onClick={() => setMobileMenuOpen(false)} />
+<SidebarSubLink href="/administracion/configuracion/consentimientos" label="Consentimientos" onClick={() => setMobileMenuOpen(false)} />
                             </div>
                           </motion.div>
                         )}
