@@ -256,12 +256,10 @@ export default function PagosPacientePage() {
 
 
 
-        itemsConDeuda = todosLosItemsMapeados.filter(item => {
-
+       itemsConDeuda = todosLosItemsMapeados.filter(item => {
             const estado = String(item.estado || 'pendiente').toLowerCase();
-
-            return ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(estado) || (item.progreso && item.progreso > 0);
-
+            // Si el estado es distinto de cancelado y tiene deuda, se muestra para pagar
+            return estado !== 'cancelada';
         });
 
       }
