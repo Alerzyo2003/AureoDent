@@ -258,7 +258,6 @@ export default function PagosPacientePage() {
 
        itemsConDeuda = todosLosItemsMapeados.filter(item => {
             const estado = String(item.estado || 'pendiente').toLowerCase();
-            // Si el estado es distinto de cancelado y tiene deuda, se muestra para pagar
             return estado !== 'cancelada';
         });
 
