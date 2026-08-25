@@ -433,10 +433,6 @@ export default function DetalleTratamientoPage() {
       let nombreDisplay = item.prestaciones?.["Nombre Accion"] || item.prestaciones?.["Nombre"] || partes[0] || "Tratamiento Genérico";
       nombreDisplay = String(nombreDisplay).split('|')[0].trim(); 
 
-      if (faseMatch === 'Plan General' && item.observacion && !item.observacion.includes('|')) {
-          faseMatch = item.observacion.trim();
-      }
-
       const nombreLower = nombreDisplay.toLowerCase();
       const esGeneral = [
           "ortodoncia", "control", "evolución", "evolucion", "limpieza", "destartraje", 
@@ -624,7 +620,7 @@ export default function DetalleTratamientoPage() {
     await supabase.from('presupuestos').update({ secciones: JSON.stringify(Array.from(new Set(nuevaLista))) }).eq('id', idURL);
 
     const updates = acciones.filter(a => a.seccion_nombre === oldName).map(item => {
-        let nuevaObs = item.texto_db || item.display_nombre || '';
+        let nuevaObs = item.texto_db || `${item.display_nombre} | Fase: ${item.seccion_nombre}`;
         if (/\|\s*Fase:\s*[^|]+/.test(nuevaObs)) {
             nuevaObs = nuevaObs.replace(/\|\s*Fase:\s*[^|]+/, `| Fase: ${newName}`);
         } else {
