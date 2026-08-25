@@ -59,7 +59,6 @@ export default function DetalleCajaPage() {
   const resumenPagos = useMemo(() => {
     if (!pagos || pagos.length === 0) return null;
 
-    // Definimos la interfaz interna para que TypeScript sepa qué tiene 'stats'
     const resumen = pagos.reduce((acc: Record<string, { count: number; total: number }>, pago) => {
       const metodo = pago.metodo_pago?.toLowerCase() || 'desconocido';
       const monto = Number(pago.monto || 0);
@@ -93,28 +92,30 @@ export default function DetalleCajaPage() {
         return;
       }
 
+      // 🔥 LÍMITE DE BORDE APLICADO: 700px de ancho estricto 🔥
       const opt: any = { 
-        margin: [15, 15, 20, 15] as [number, number, number, number], 
-        filename: `Cierre_Caja_${caja?.nombre_responsable.replace(' ', '_') || 'reporte'}.pdf`,
+        margin: [15, 10, 15, 10], // [top, left, bottom, right]
+        filename: `Cierre_Caja_${caja?.nombre_responsable?.replace(' ', '_') || 'reporte'}.pdf`,
         image: { type: 'jpeg', quality: 1 },
         html2canvas: { 
           scale: 2, 
           useCORS: true, 
           letterRendering: true, 
           backgroundColor: '#ffffff', 
-          scrollY: 0 
+          scrollY: 0,
+          windowWidth: 700 // Sincronizado con el ancho del contenedor oculto
         }, 
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'legacy'] }
+        pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.avoid-break'] } 
       };
 
       await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
         const totalPages = pdf.internal.getNumberOfPages();
         for (let i = 1; i <= totalPages; i++) {
           pdf.setPage(i);
-          pdf.setFontSize(9);
+          pdf.setFontSize(8);
           pdf.setTextColor(120, 120, 120); 
-          pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 35, pdf.internal.pageSize.getHeight() - 8);
+          pdf.text(`Página ${i} de ${totalPages}`, pdf.internal.pageSize.getWidth() - 25, pdf.internal.pageSize.getHeight() - 8);
         }
         window.open(pdf.output('bloburl'), '_blank');
       });
@@ -292,96 +293,137 @@ export default function DetalleCajaPage() {
           </div>
         </div>
 
-        {/* CONTENIDO PARA IMPRESIÓN (OCULTO EN PANTALLA) */}
-        <div className="absolute -left-[9999px] top-auto" style={{ width: '850px' }}>
-          <div id="reporte-impresion-contenido" style={{ boxSizing: 'border-box', backgroundColor: 'white', padding: '48px', fontFamily: 'sans-serif', color: '#0f172a' }}>
-            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: '24px', marginBottom: '24px', borderBottom: '2px solid #1e293b' }}>
-              <div style={{ width: '66.6667%' }}>
-                <h1 style={{ fontSize: '1.25rem', fontWeight: '900', color: '#0f172a' }}>CENTRO MÉDICO Y DENTAL DIGNIDAD</h1>
-                <p style={{ fontSize: '0.75rem', color: '#475569', fontWeight: '500' }}>Venancia Leiva 1871, La Pintana, Región Metropolitana</p>
-              </div>
-              <div style={{ width: '33.3333%', textAlign: 'right' }}>
-                <h2 style={{ fontSize: '1.875rem', fontWeight: '900', textTransform: 'uppercase', color: '#0f172a' }}>Cierre de Caja</h2>
-                <p style={{ fontSize: '0.875rem', fontWeight: '600', color: '#475569', marginTop: '4px' }}>
-                  ID Sesión: <span style={{ color: '#0f172a', fontWeight: '700' }}>#{caja.id.substring(0, 8)}</span>
-                </p>
-              </div>
-            </header>
+        {/* CONTENEDOR OCULTO PARA EL GENERADOR DE PDF */}
+        <div style={{ position: 'absolute', top: '-9999px', left: '0' }}>
+           <div id="reporte-impresion-contenido" style={{ width: '700px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#111827', padding: '30px', fontFamily: 'Arial, sans-serif' }}>
+              
+              {/* Estilos para forzar cortes de página correctos */}
+              <style>{`
+                #reporte-impresion-contenido tr { page-break-inside: avoid; }
+                #reporte-impresion-contenido thead { display: table-header-group; }
+                #reporte-impresion-contenido tfoot { display: table-footer-group; }
+              `}</style>
 
-            <section style={{ marginBottom: '32px', fontSize: '0.875rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', columnGap: '32px', rowGap: '8px' }}>
-                <div><p style={{ fontWeight: '700', color: '#64748b' }}>Responsable:</p><p style={{ fontWeight: '700', fontSize: '1.125rem', color: '#0f172a' }}>{caja.nombre_responsable}</p></div>
-                <div style={{ textAlign: 'right' }}><p style={{ fontWeight: '700', color: '#64748b' }}>Estado:</p><p style={{ fontWeight: '700', fontSize: '1.125rem', textTransform: 'uppercase', color: '#0f172a' }}>{caja.estado}</p></div>
-                <div><p style={{ fontWeight: '700', color: '#64748b' }}>Apertura:</p><p style={{ color: '#0f172a' }}>{new Date(caja.fecha_apertura).toLocaleString('es-CL')}</p></div>
-                <div style={{ textAlign: 'right' }}><p style={{ fontWeight: '700', color: '#64748b' }}>Cierre:</p><p style={{ color: '#0f172a' }}>{caja.fecha_cierre ? new Date(caja.fecha_cierre).toLocaleString('es-CL') : 'TURNO ACTIVO'}</p></div>
-              </div>
-            </section>
-
-            <section style={{ marginBottom: '32px', fontSize: '0.875rem' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: '16px', textAlign: 'center' }}>
-                <div style={{ backgroundColor: '#f1f5f9', padding: '16px', borderRadius: '0.5rem' }}><p style={{ fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', color: '#64748b' }}>Fondo Inicial</p><p style={{ fontSize: '1.25rem', fontWeight: '900', color: '#0f172a' }}>${Number(caja.monto_apertura || 0).toLocaleString('es-CL')}</p></div>
-                <div style={{ backgroundColor: '#f1f5f9', padding: '16px', borderRadius: '0.5rem' }}><p style={{ fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', color: '#64748b' }}>Recaudado</p><p style={{ fontSize: '1.25rem', fontWeight: '900', color: '#0f172a' }}>${Number((caja.monto_cierre || 0) - (caja.monto_apertura || 0)).toLocaleString('es-CL')}</p></div>
-                <div style={{ backgroundColor: '#dbeafe', padding: '16px', borderRadius: '0.5rem' }}><p style={{ fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', color: '#2563eb' }}>Total en Caja</p><p style={{ fontSize: '1.25rem', fontWeight: '900', color: '#1d4ed8' }}>${Number(caja.monto_cierre || 0).toLocaleString('es-CL')}</p></div>
-              </div>
-            </section>
-
-            {/* IMPRESIÓN: DESGLOSE MÉTODOS DE PAGO */}
-            {resumenPagos && Object.keys(resumenPagos).length > 0 && (
-              <section style={{ marginBottom: '32px', fontSize: '0.875rem' }}>
-                <h3 style={{ fontSize: '1rem', fontWeight: '900', textTransform: 'uppercase', marginBottom: '12px', color: '#0f172a', borderTop: '2px solid #e2e8f0', paddingTop: '16px' }}>Desglose por Medio de Pago</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '16px' }}>
-                  {Object.entries(resumenPagos).map(([metodo, stats]) => (
-                    <div key={metodo} style={{ backgroundColor: '#f8fafc', padding: '12px', borderRadius: '0.5rem', border: '1px solid #e2e8f0' }}>
-                      <p style={{ fontSize: '0.65rem', fontWeight: '700', textTransform: 'uppercase', color: '#64748b' }}>{metodo} (Cant: {stats.count})</p>
-                      <p style={{ fontSize: '1.125rem', fontWeight: '900', color: '#0f172a' }}>${stats.total.toLocaleString('es-CL')}</p>
+              {/* Cabecera */}
+              <div className="avoid-break" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', pageBreakInside: 'avoid' }}>
+                 <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <img src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" alt="Logo" style={{ height: '40px', width: 'auto' }} crossOrigin="anonymous" />
+                    <div>
+                       <h1 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 2px 0', textTransform: 'uppercase' }}>CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
+                       <p style={{ fontSize: '9px', margin: '0 0 2px 0', color: '#555' }}>Fecha Impresión: {new Date().toLocaleDateString('es-CL')}</p>
+                       <p style={{ fontSize: '9px', margin: '0', color: '#555' }}>ID Caja: {caja?.id?.substring(0, 8).toUpperCase()}</p>
                     </div>
-                  ))}
-                </div>
-              </section>
-            )}
+                 </div>
+                 <div>
+                     <h2 style={{ fontSize: '16px', fontWeight: 'bold', margin: 0, textTransform: 'uppercase', color: '#333' }}>Cierre de Caja</h2>
+                 </div>
+              </div>
 
-            <section style={{ pageBreakInside: 'avoid' }}>
-              <h3 style={{ fontSize: '1.125rem', fontWeight: '900', textTransform: 'uppercase', marginBottom: '12px', borderTop: '2px solid #1e293b', paddingTop: '24px', color: '#0f172a' }}>Detalle de Pagos</h3>
-              <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '2px solid #94a3b8' }}>
-                    <th style={{ textAlign: 'left', padding: '8px 2px', fontWeight: '700', textTransform: 'uppercase' }}>N°</th>
-                    <th style={{ textAlign: 'left', padding: '8px 2px', fontWeight: '700', textTransform: 'uppercase' }}>Paciente</th>
-                    <th style={{ textAlign: 'left', padding: '8px 2px', fontWeight: '700', textTransform: 'uppercase' }}>Medio Pago</th>
-                    <th style={{ textAlign: 'left', padding: '8px 2px', fontWeight: '700', textTransform: 'uppercase' }}>Convenio</th>
-                    <th style={{ textAlign: 'left', padding: '8px 2px', fontWeight: '700', textTransform: 'uppercase' }}>Fecha</th>
-                    <th style={{ textAlign: 'left', padding: '8px 2px', fontWeight: '700', textTransform: 'uppercase' }}>N° Transf.</th>
-                    <th style={{ textAlign: 'left', padding: '8px 2px', fontWeight: '700', textTransform: 'uppercase' }}>N° Boleta</th>
-                    <th style={{ textAlign: 'right', padding: '8px 2px', fontWeight: '700', textTransform: 'uppercase' }}>Monto</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagos.map((p, index) => (
-                    <tr key={p.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                      <td style={{ padding: '8px 2px', textTransform: 'uppercase' }}>{index + 1}</td>
-                      <td style={{ padding: '8px 2px', textTransform: 'uppercase', wordBreak: 'break-word' }}>{p.pacientes ? `${p.pacientes.nombre} ${p.pacientes.apellido}` : 'S/N'}</td>
-                      <td style={{ padding: '8px 2px', textTransform: 'uppercase' }}>{p.metodo_pago}</td>
-                      <td style={{ padding: '8px 2px', textTransform: 'uppercase' }}>{p.convenio || '-'}</td>
-                      <td style={{ padding: '8px 2px', textTransform: 'uppercase' }}>{new Date(p.fecha_pago).toLocaleDateString('es-CL')}</td>
-                      <td style={{ padding: '8px 2px', textTransform: 'uppercase' }}>{p.numero_referencia || '-'}</td>
-                      <td style={{ padding: '8px 2px', textTransform: 'uppercase' }}>{p.numero_boleta || '-'}</td>
-                      <td style={{ padding: '8px 2px', textAlign: 'right', fontWeight: '700' }}>${Number(p.monto || 0).toLocaleString('es-CL')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr style={{ borderTop: '2px solid #1e293b' }}>
-                    <td colSpan={7} style={{ textAlign: 'right', padding: '12px 0', fontWeight: '700', textTransform: 'uppercase' }}>Total Recaudado</td>
-                    <td style={{ textAlign: 'right', padding: '12px 0', fontWeight: '900', fontSize: '1rem' }}>${Number((caja.monto_cierre || 0) - (caja.monto_apertura || 0)).toLocaleString('es-CL')}</td>
-                  </tr>
-                </tfoot>
-              </table>
-            </section>
+              {/* Datos de la Caja */}
+              <div className="avoid-break" style={{ marginBottom: '15px', pageBreakInside: 'avoid' }}>
+                 <h3 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>Detalles del Turno:</h3>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#333' }}>
+                    <div style={{ width: '48%' }}>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Responsable:</span> {caja?.nombre_responsable}</p>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Estado:</span> {caja?.estado?.toUpperCase()}</p>
+                    </div>
+                    <div style={{ width: '48%' }}>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Apertura:</span> {new Date(caja?.fecha_apertura).toLocaleString('es-CL')}</p>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Cierre:</span> {caja?.fecha_cierre ? new Date(caja.fecha_cierre).toLocaleString('es-CL') : 'Turno Activo'}</p>
+                    </div>
+                 </div>
+              </div>
 
-            <footer style={{ marginTop: '64px', paddingTop: '24px', borderTop: '1px solid #e2e8f0', textAlign: 'center', fontSize: '0.75rem', color: '#64748b' }}>
-              <p>Documento generado automáticamente por el sistema.</p>
-            </footer>
-          </div>
+              {/* Resumen de Montos */}
+              <div className="avoid-break" style={{ marginBottom: '15px', pageBreakInside: 'avoid' }}>
+                 <h3 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>Resumen de Montos:</h3>
+                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#333' }}>
+                    <div style={{ width: '30%' }}>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Fondo Inicial:</span> ${Number(caja?.monto_apertura || 0).toLocaleString('es-CL')}</p>
+                    </div>
+                    <div style={{ width: '30%' }}>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Total Recaudado:</span> ${Number((caja?.monto_cierre || 0) - (caja?.monto_apertura || 0)).toLocaleString('es-CL')}</p>
+                    </div>
+                    <div style={{ width: '30%' }}>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Total en Caja:</span> ${Number(caja?.monto_cierre || 0).toLocaleString('es-CL')}</p>
+                    </div>
+                 </div>
+              </div>
+
+              {/* Desglose por Medio de Pago */}
+              {resumenPagos && Object.keys(resumenPagos).length > 0 && (
+              <div className="avoid-break" style={{ marginBottom: '20px', pageBreakInside: 'avoid' }}>
+                 <h3 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>Desglose por Medio de Pago:</h3>
+                 <table style={{ width: '100%', fontSize: '9px', borderCollapse: 'collapse' }}>
+                    <thead>
+                       <tr style={{ borderBottom: '2px solid #ccc', pageBreakInside: 'avoid' }}>
+                          <th style={{ textAlign: 'left', padding: '4px 2px', fontWeight: 'bold', color: '#555' }}>Medio de Pago</th>
+                          <th style={{ textAlign: 'center', padding: '4px 2px', fontWeight: 'bold', color: '#555' }}>Nº de Transacciones</th>
+                          <th style={{ textAlign: 'right', padding: '4px 2px', fontWeight: 'bold', color: '#555' }}>Total Recaudado</th>
+                       </tr>
+                    </thead>
+                    <tbody>
+                       {Object.entries(resumenPagos).map(([metodo, stats]: any, i: number) => (
+                          <tr key={i} style={{ borderBottom: '1px solid #eee', pageBreakInside: 'avoid' }}>
+                             <td style={{ padding: '6px 2px', textTransform: 'uppercase', fontWeight: 'bold', color: '#333' }}>{metodo}</td>
+                             <td style={{ textAlign: 'center', padding: '6px 2px' }}>{stats.count}</td>
+                             <td style={{ textAlign: 'right', padding: '6px 2px' }}>${Number(stats.total).toLocaleString('es-CL')}</td>
+                          </tr>
+                       ))}
+                    </tbody>
+                 </table>
+              </div>
+              )}
+
+              {/* Detalle de Transacciones */}
+              <div style={{ marginBottom: '20px' }}>
+                 <h3 className="avoid-break" style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px', pageBreakInside: 'avoid' }}>Detalle de Transacciones:</h3>
+                 <table style={{ width: '100%', fontSize: '9px', borderCollapse: 'collapse' }}>
+                    <thead>
+                       <tr style={{ borderBottom: '2px solid #ccc', pageBreakInside: 'avoid' }}>
+                          <th style={{ textAlign: 'left', padding: '6px 2px', fontWeight: 'bold', color: '#555' }}>Nº Pago</th>
+                          <th style={{ textAlign: 'left', padding: '6px 2px', fontWeight: 'bold', color: '#555' }}>Paciente</th>
+                          <th style={{ textAlign: 'left', padding: '6px 2px', fontWeight: 'bold', color: '#555' }}>Nº Boleta</th>
+                          <th style={{ textAlign: 'left', padding: '6px 2px', fontWeight: 'bold', color: '#555' }}>Medio de pago</th>
+                          <th style={{ textAlign: 'right', padding: '6px 2px', fontWeight: 'bold', color: '#555' }}>Monto</th>
+                       </tr>
+                    </thead>
+                    <tbody>
+                       {pagos.map((p: any, idx: number) => (
+                          <tr key={idx} style={{ borderBottom: '1px solid #eee', pageBreakInside: 'avoid' }}>
+                             <td style={{ padding: '6px 2px' }}>{p.id.substring(0, 8).toUpperCase()}</td>
+                             <td style={{ padding: '6px 2px', textTransform: 'uppercase' }}>{p.pacientes ? `${p.pacientes.nombre} ${p.pacientes.apellido}` : 'S/N'}</td>
+                             <td style={{ padding: '6px 2px' }}>{p.numero_boleta && p.numero_boleta !== 'S/N' ? p.numero_boleta : '-'}</td>
+                             <td style={{ padding: '6px 2px', textTransform: 'uppercase' }}>{p.metodo_pago} {p.numero_referencia && p.numero_referencia !== 'S/N' ? `(Ref: ${p.numero_referencia.split('- Ref: ')[1] || p.numero_referencia})` : ''}</td>
+                             <td style={{ textAlign: 'right', padding: '6px 2px', fontWeight: 'bold' }}>${Number(p.monto || 0).toLocaleString('es-CL')}</td>
+                          </tr>
+                       ))}
+                       {pagos.length === 0 && (
+                          <tr style={{ pageBreakInside: 'avoid' }}>
+                             <td colSpan={5} style={{ textAlign: 'center', padding: '10px' }}>No hay transacciones registradas</td>
+                          </tr>
+                       )}
+                    </tbody>
+                    
+                    {/* TOTAL EN EL FOOTER DE LA TABLA */}
+                    <tfoot>
+                       <tr style={{ borderTop: '2px solid #333', pageBreakInside: 'avoid' }}>
+                          <td colSpan={4} style={{ textAlign: 'right', padding: '10px 4px', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase' }}>Total Transacciones:</td>
+                          <td style={{ textAlign: 'right', padding: '10px 4px', fontWeight: 'bold', fontSize: '11px', color: '#059669' }}>${Number(totalRecaudado).toLocaleString('es-CL')}</td>
+                       </tr>
+                    </tfoot>
+                 </table>
+              </div>
+
+              {/* Footer Fijo para el final del documento */}
+              <div className="avoid-break" style={{ fontSize: '8px', color: '#666', textAlign: 'center', marginTop: '30px', paddingTop: '10px', borderTop: '1px solid #eee', pageBreakInside: 'avoid' }}>
+                 <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', color: '#333' }}>CENTRO MEDICO Y DENTAL DIGNIDAD SPA</p>
+                 <p style={{ margin: '0 0 2px 0' }}>Venancia Leiva 1871, Región Metropolitana, La Pintana</p>
+                 <p style={{ margin: '0 0 10px 0' }}>+56 9 6646 7641</p>
+                 <p style={{ margin: 0 }}>Reporte de Cierre de Caja generado automáticamente por el sistema.</p>
+              </div>
+
+           </div>
         </div>
       </div>
     </main>
