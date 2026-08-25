@@ -36,38 +36,15 @@ const slotsHorarios = [
   "20:00", "20:15", "20:30", "20:45", "21:00"
 ];
 
-interface NuevoPaciente {
-  nombre: string; apellido: string; rut: string; telefono: string; fecha_nacimiento: string; sexo: string;
-}
+interface NuevoPaciente { nombre: string; apellido: string; rut: string; telefono: string; fecha_nacimiento: string; sexo: string; }
 
-const getDiasLunesSabado = (d: Date) => {
-  const curr = new Date(d); 
-  const day = curr.getDay();
-  const diff = curr.getDate() - day + (day === 0 ? -6 : 1);
-  return Array.from({ length: 6 }, (_, i) => new Date(curr.getFullYear(), curr.getMonth(), diff + i));
-}
-
-const getInitials = (n: string, a: string) => {
-  return `${n?.charAt(0) || ''}${a?.charAt(0) || ''}`.toUpperCase();
-}
-
+const getDiasLunesSabado = (d: Date) => { const curr = new Date(d); const day = curr.getDay(); const diff = curr.getDate() - day + (day === 0 ? -6 : 1); return Array.from({ length: 6 }, (_, i) => new Date(curr.getFullYear(), curr.getMonth(), diff + i)); }
+const getInitials = (n: string, a: string) => `${n?.charAt(0) || ''}${a?.charAt(0) || ''}`.toUpperCase();
 const getAvatarColorClass = (name: string) => {
-  const styles = [
-    { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-500' },
-    { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-500' },
-    { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-500' },
-    { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-500' },
-    { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-500' }
-  ];
-  let hash = 0;
-  for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return styles[Math.abs(hash) % styles.length];
+  const styles = [{ bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-500' }, { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-500' }, { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-500' }, { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-500' }, { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-500' }];
+  let hash = 0; for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash); return styles[Math.abs(hash) % styles.length];
 }
-
-const getLocalDateISO = (d: Date) => {
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-}
-
+const getLocalDateISO = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 const tToMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
 const minsToT = (m: number) => { const h = Math.floor(m / 60).toString().padStart(2, '0'); const min = (m % 60).toString().padStart(2, '0'); return `${h}:${min}`; }
 const getMinsFromDateStr = (dtString: string) => { const timePart = dtString.includes('T') ? dtString.split('T')[1] : dtString.split(' ')[1]; return tToMins(timePart.substring(0,5)); }
@@ -94,9 +71,7 @@ export default function AgendaPage() {
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
   const [anuladasCount, setAnuladasCount] = useState(0);
   const dateInputRef = useRef<HTMLInputElement>(null);
-
   const [realtimeTrigger, setRealtimeTrigger] = useState(0);
-
   const [modalOnlineAbierto, setModalOnlineAbierto] = useState(false);
 
   const citasFiltradas = useMemo(() => {
@@ -224,7 +199,6 @@ export default function AgendaPage() {
 
       if (session?.user) {
          setUsuarioLogueado(session.user.id);
-         
          const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).maybeSingle();
          if (perfil) {
             setUserRol(perfil.rol);
@@ -248,7 +222,6 @@ export default function AgendaPage() {
       }
 
       await fetchCitasAgenda(especialistaInicial);
-
     } finally { setCargandoPagina(false) }
   }
 
@@ -266,16 +239,13 @@ export default function AgendaPage() {
     }
     
     let query = supabase.from('citas').select('*, pacientes(*)').gte('inicio', inicioRango).lte('inicio', finRango);
-    
     const especialistaActivo = especialistaForzado !== undefined ? especialistaForzado : filtroEspecialista;
     
     if (especialistaActivo !== 'Todos') {
         query = query.eq('profesional_id', especialistaActivo);
     }
     
-    const { data: citasData } = await query
-      .order('inicio', { ascending: true })
-      .order('id', { ascending: true });
+    const { data: citasData } = await query.order('inicio', { ascending: true }).order('id', { ascending: true });
     
     if (!citasData || citasData.length === 0) {
         setCitasDia([]);
@@ -287,11 +257,9 @@ export default function AgendaPage() {
     setAnuladasCount(anuladas);
 
     const citasActivas = citasData.filter((c: any) => c.estado !== 'cancelada');
-
     const pacienteIds = [...new Set(citasActivas.map((c: any) => c.paciente_id).filter(Boolean))];
     
     const { data: presups } = await supabase.from('presupuestos').select('id, paciente_id').in('paciente_id', pacienteIds).eq('aprobado', true);
-
     const presupsIds = presups?.map(p => p.id) || [];
     
     let finanzasMap: Record<string, { total: number, abonado: number, deuda: number, deuda_realizada: number }> = {};
@@ -340,7 +308,10 @@ export default function AgendaPage() {
     const dias = getDiasLunesSabado(semanaInicio);
     const inicioSemana = dias[0].toLocaleDateString('sv-SE');
     const finSemana = dias[5].toLocaleDateString('sv-SE');
-    const { data } = await supabase.from('bloqueos_agenda').select('*').eq('profesional_id', filtro.profesional_id).gte('fecha', inicioSemana).lte('fecha', finSemana);
+    const profObj = profesionales.find(p => p.user_id === filtro.profesional_id);
+    if (!profObj) return;
+
+    const { data } = await supabase.from('bloqueos_agenda').select('*').eq('profesional_id', profObj.id).gte('fecha', inicioSemana).lte('fecha', finSemana);
     setBloqueosSemana(data || []);
   }
 
@@ -361,7 +332,9 @@ export default function AgendaPage() {
         .not('estado', 'in', '("cancelada","atendido","no_asiste")')
         .order('inicio', { ascending: true });
         
-      if (filtroEspecialista !== 'Todos') { queryCitas = queryCitas.eq('profesional_id', filtroEspecialista); }
+      if (filtroEspecialista && filtroEspecialista !== 'Todos' && filtroEspecialista !== 'TODOS') { 
+          queryCitas = queryCitas.eq('profesional_id', filtroEspecialista); 
+      }
 
       const { data: citasFuturas, error: errCitas } = await queryCitas;
       if (errCitas) console.error("❌ Error en BD al traer citas:", errCitas);
@@ -371,7 +344,11 @@ export default function AgendaPage() {
       }
 
       let queryBloqueos = supabase.from('bloqueos_agenda').select('*').gte('fecha', hoyStr).lte('fecha', limiteStr);
-      if (filtroEspecialista !== 'Todos') queryBloqueos = queryBloqueos.eq('profesional_id', filtroEspecialista);
+      if (filtroEspecialista && filtroEspecialista !== 'Todos' && filtroEspecialista !== 'TODOS') {
+          const profObj = profesionales.find(p => p.user_id === filtroEspecialista);
+          queryBloqueos = queryBloqueos.eq('profesional_id', profObj?.id);
+      }
+      
       const { data: bloqueos, error: errBloq } = await queryBloqueos;
       if (errBloq) console.error("❌ Error en BD al traer bloqueos:", errBloq);
 
@@ -380,7 +357,8 @@ export default function AgendaPage() {
         if (!cita.profesional_id) return true;
         
         const isBlocked = bloqueos?.some(b => {
-           if (b.profesional_id !== cita.profesional_id || b.fecha !== fechaStr) return false;
+           const profCita = profesionales.find(p => p.user_id === cita.profesional_id);
+           if (b.profesional_id !== profCita?.id || b.fecha !== fechaStr) return false;
            if (!b.hora_inicio || !b.hora_fin) return true; 
            
            const citaStart = new Date(cita.inicio.replace(' ', 'T')).getTime();
@@ -398,38 +376,25 @@ export default function AgendaPage() {
     } catch (error) { toast.error("Error al escanear la agenda global"); } finally { setCargandoHuerfanas(false); }
   }
 
-  // --- MODIFICADO: Envía el nuevo link en WhatsApp de confirmación ---
   const validarCitaOnline = async (cita: any) => {
     setCargandoAccion(true);
     try {
-        await supabase.from('citas').update({ 
-            estado_confirmacion: 'enviado',
-            estado: 'programada' 
-        }).eq('id', cita.id);
-        
+        await supabase.from('citas').update({ estado_confirmacion: 'enviado', estado: 'programada' }).eq('id', cita.id);
         toast.success('Cita web aprobada');
-        
         const telefono = cita.pacientes?.telefono;
         if (telefono) {
             const numLimpio = telefono.replace(/\D/g, '');
             const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
             const fechaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
             const horaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
-            
             const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
             const mensaje = `Hola ${cita.pacientes?.nombre}, tu solicitud de hora para el día ${fechaFormat} a las ${horaFormat} hrs ha sido validada y agendada con éxito.\n\nPor favor confirma tu asistencia haciendo clic en el siguiente enlace:\n${link}\n\n¡Te esperamos en Clínica Dignidad!`;
-            
             window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
         } else {
             toast.warning('La cita fue aprobada, pero el paciente no tiene teléfono registrado.');
         }
-
         await fetchCitasAgenda();
-    } catch (e) {
-        toast.error('Error al aprobar cita web');
-    } finally {
-        setCargandoAccion(false);
-    }
+    } catch (e) { toast.error('Error al aprobar cita web'); } finally { setCargandoAccion(false); }
   };
 
   const rechazarCitaOnline = async (citaId: string) => {
@@ -439,32 +404,21 @@ export default function AgendaPage() {
         await supabase.from('citas').update({ estado: 'cancelada', cancelado_por: usuarioLogueado }).eq('id', citaId);
         toast.success('Solicitud web eliminada');
         await fetchCitasAgenda();
-    } catch (e) {
-        toast.error('Error al rechazar cita');
-    } finally {
-        setCargandoAccion(false);
-    }
+    } catch (e) { toast.error('Error al rechazar cita'); } finally { setCargandoAccion(false); }
   };
 
   const iniciarReprogramacion = (cita: any) => {
     resetEstados(); 
-    
     setCitaEnReprogramacion(cita); 
-    
     setFiltro({ ...filtro, profesional_id: cita.profesional_id || '' });
-    
     const tInicio = new Date(cita.inicio.replace(' ', 'T')).getTime();
     const tFin = new Date(cita.fin.replace(' ', 'T')).getTime();
     const duracionMinutos = Math.round((tFin - tInicio) / 60000);
-    
     const duracionFinal = duracionesDisponibles.includes(duracionMinutos) ? duracionMinutos : 30;
     setFiltro(prev => ({ ...prev, duracionDefault: duracionFinal }));
-
     seleccionarPacienteExistente(cita.pacientes); 
     setNuevoTratamientoNombre(cita.motivo || ''); 
-    
     setSemanaInicio(new Date(cita.inicio.replace(' ', 'T')));
-
     setModalAbierto(true); 
     setPaso(1);
   };
@@ -476,15 +430,13 @@ export default function AgendaPage() {
   async function calcularDisponibilidadSemanalEdicion() {
     setCargandoSlotsEdicion(true);
     try {
-      const dias = Array.from({length: 7}).map((_, i) => {
-        const d = new Date(semanaInicioEdicion); d.setDate(d.getDate() + i); return d;
-      });
-
+      const dias = Array.from({length: 7}).map((_, i) => { const d = new Date(semanaInicioEdicion); d.setDate(d.getDate() + i); return d; });
       const inicioSemanaStr = dias[0].toISOString().split('T')[0];
       const finSemanaStr = dias[6].toISOString().split('T')[0];
+      const profNuevo = profesionales.find(p => p.user_id === nuevoEspecialista);
 
       const [bloqueosRes, dispoRes, citasRes] = await Promise.all([
-        supabase.from('bloqueos_agenda').select('fecha, hora_inicio, hora_fin').eq('profesional_id', nuevoEspecialista).gte('fecha', inicioSemanaStr).lte('fecha', finSemanaStr),
+        supabase.from('bloqueos_agenda').select('fecha, hora_inicio, hora_fin').eq('profesional_id', profNuevo?.id).gte('fecha', inicioSemanaStr).lte('fecha', finSemanaStr),
         supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', nuevoEspecialista),
         supabase.from('citas').select('inicio, fin, estado_confirmacion, motivo').eq('profesional_id', nuevoEspecialista).gte('inicio', `${inicioSemanaStr}T00:00:00`).lte('inicio', `${finSemanaStr}T23:59:59`).neq('estado', 'cancelada')
       ]);
@@ -492,22 +444,17 @@ export default function AgendaPage() {
       const semanaProcesada = dias.map(dateObj => {
         const dateStr = dateObj.toISOString().split('T')[0];
         const diaSemanaNum = dateObj.getDay();
-
         const bloqueosDia = bloqueosRes.data?.filter(b => b.fecha === dateStr) || [];
         if (bloqueosDia.some(b => !b.hora_inicio || !b.hora_fin)) return { date: dateStr, dateObj, status: 'bloqueado', slots: [] };
-
         const dispoDia = dispoRes.data?.filter(d => (d.dia_semana === diaSemanaNum && !d.fecha_especifica) || d.fecha_especifica === dateStr) || [];
         if (dispoDia.length === 0) return { date: dateStr, dateObj, status: 'sin_horario', slots: [] };
-
         const citasDia = citasRes.data?.filter(c => c.inicio.startsWith(dateStr) && !(c.estado_confirmacion === 'pendiente' && c.motivo?.includes('Online'))).map(c => ({
           inicio: getMinsFromDateStr(c.inicio), fin: getMinsFromDateStr(c.fin)
         })) || [];
-
         let slotsLibres: any[] = [];
         dispoDia.forEach(bloque => {
           let currTime = tToMins(bloque.hora_inicio);
           const endTime = tToMins(bloque.hora_fin);
-
           while (currTime + duracionCitaEdicion <= endTime) {
             const slotEnd = currTime + duracionCitaEdicion;
             const chocaCita = citasDia.some(cita => currTime < cita.fin && slotEnd > cita.inicio);
@@ -515,26 +462,16 @@ export default function AgendaPage() {
               if(!b.hora_inicio || !b.hora_fin) return true;
               return currTime < tToMins(b.hora_fin) && slotEnd > tToMins(b.hora_inicio);
             });
-            if (!chocaBloqueo) {
-               slotsLibres.push({ time: minsToT(currTime), ocupado: chocaCita });
-            }
+            if (!chocaBloqueo) { slotsLibres.push({ time: minsToT(currTime), ocupado: chocaCita }); }
             currTime += 15;
           }
         });
-
         const uniqueSlots: any[] = [];
         const seen = new Set();
-        for (const s of slotsLibres) {
-            if (!seen.has(s.time)) {
-                seen.add(s.time);
-                uniqueSlots.push(s);
-            }
-        }
+        for (const s of slotsLibres) { if (!seen.has(s.time)) { seen.add(s.time); uniqueSlots.push(s); } }
         uniqueSlots.sort((a: any, b: any) => a.time.localeCompare(b.time));
-
         return { date: dateStr, dateObj, status: uniqueSlots.length > 0 ? 'limpio' : 'lleno', slots: uniqueSlots };
       });
-
       setDispoSemanaEdicion(semanaProcesada);
     } catch (error) { toast.error("Error al calcular la agenda"); } finally { setCargandoSlotsEdicion(false); }
   }
@@ -549,23 +486,12 @@ export default function AgendaPage() {
       const inicioDate = new Date(`${nuevaFecha}T${nuevaHora}:00`);
       const finDate = new Date(inicioDate.getTime() + duracionCitaEdicion * 60000);
       const finHoraStr = `${finDate.getHours().toString().padStart(2, '0')}:${finDate.getMinutes().toString().padStart(2, '0')}:00`;
-
-      await supabase.from('citas').update({
-        inicio: `${nuevaFecha}T${nuevaHora}:00`, fin: `${nuevaFecha}T${finHoraStr}`,
-        profesional_id: nuevoEspecialista, estado: 'reprogramada', modificado_por: usuarioLogueado
-      }).eq('id', citaId);
-
+      await supabase.from('citas').update({ inicio: `${nuevaFecha}T${nuevaHora}:00`, fin: `${nuevaFecha}T${finHoraStr}`, profesional_id: nuevoEspecialista, estado: 'reprogramada', modificado_por: usuarioLogueado }).eq('id', citaId);
       const citaHuérfana = citasHuerfanas.find(c => c.id === citaId);
       if (citaHuérfana) {
           const nombrePaciente = `${citaHuérfana.pacientes?.nombre || ''} ${citaHuérfana.pacientes?.apellido || ''}`.trim();
-          await supabase.from('auditoria_clinica').insert([{
-              usuario_id: usuarioLogueado,
-              accion: 'UPDATE / REPROGRAMACIÓN HUÉRFANA',
-              tabla: 'citas',
-              detalles: `Reprogramó cita huérfana de ${nombrePaciente} para el ${nuevaFecha} a las ${nuevaHora}.`
-          }]);
+          await supabase.from('auditoria_clinica').insert([{ usuario_id: usuarioLogueado, accion: 'UPDATE / REPROGRAMACIÓN HUÉRFANA', tabla: 'citas', detalles: `Reprogramó cita huérfana de ${nombrePaciente} para el ${nuevaFecha} a las ${nuevaHora}.` }]);
       }
-
       toast.success("Cita huérfana reagendada");
       setCitaEnEdicion(null);
       setCitasHuerfanas(prev => prev.filter(c => c.id !== citaId));
@@ -581,82 +507,42 @@ export default function AgendaPage() {
       const citaAnulada = citasHuerfanas.find(c => c.id === citaId);
       if (citaAnulada) {
           const nombrePaciente = `${citaAnulada.pacientes?.nombre || ''} ${citaAnulada.pacientes?.apellido || ''}`.trim();
-          await supabase.from('auditoria_clinica').insert([{
-              usuario_id: usuarioLogueado,
-              accion: 'UPDATE / ANULACIÓN CITA',
-              tabla: 'citas',
-              detalles: `Anuló la cita de ${nombrePaciente} del día ${citaAnulada.inicio.split('T')[0]}.`
-          }]);
+          await supabase.from('auditoria_clinica').insert([{ usuario_id: usuarioLogueado, accion: 'UPDATE / ANULACIÓN CITA', tabla: 'citas', detalles: `Anuló la cita de ${nombrePaciente} del día ${citaAnulada.inicio.split('T')[0]}.` }]);
       }
       toast.success("Cita anulada correctamente");
       setCitasHuerfanas(prev => prev.filter(c => c.id !== citaId));
       await fetchCitasAgenda();
-    } catch(e) {
-      toast.error("No se pudo anular la cita");
-    }
+    } catch(e) { toast.error("No se pudo anular la cita"); }
   }
 
   const handleEliminarCita = async (cita: any) => {
     const nombrePaciente = `${cita.pacientes?.nombre || 'S/N'} ${cita.pacientes?.apellido || ''}`.trim();
-    
     if (confirm(`⚠️ ¿Estás seguro de ELIMINAR PERMANENTEMENTE la cita de ${nombrePaciente}? Esta acción no se puede deshacer.`)) {
       try {
-        const { error } = await supabase
-          .from('citas')
-          .delete()
-          .eq('id', cita.id);
-
+        const { error } = await supabase.from('citas').delete().eq('id', cita.id);
         if (error) throw error;
-
-        await supabase.from('auditoria_clinica').insert([{
-          usuario_id: usuarioLogueado,
-          accion: 'DELETE / CITA',
-          tabla: 'citas',
-          detalles: `Eliminó permanentemente la cita de ${nombrePaciente} del día ${cita.inicio.split('T')[0]}.`
-        }]);
-
+        await supabase.from('auditoria_clinica').insert([{ usuario_id: usuarioLogueado, accion: 'DELETE / CITA', tabla: 'citas', detalles: `Eliminó permanentemente la cita de ${nombrePaciente} del día ${cita.inicio.split('T')[0]}.` }]);
         toast.success("Cita eliminada de la base de datos");
         await fetchCitasAgenda(); 
-      } catch (e) {
-        console.error(e);
-        toast.error("No se pudo eliminar la cita");
-      }
+      } catch (e) { console.error(e); toast.error("No se pudo eliminar la cita"); }
     }
   };
   
   async function actualizarEstadoCita(citaId: string, nuevoEstado: string) {
     const ahora = new Date(); const offset = ahora.getTimezoneOffset() * 60000; const horaLocalISO = new Date(ahora.getTime() - offset).toISOString();
-    const updateData: any = { 
-        estado: nuevoEstado,
-        modificado_por: usuarioLogueado
-    };
-    
+    const updateData: any = { estado: nuevoEstado, modificado_por: usuarioLogueado };
     if (nuevoEstado === 'cancelada') updateData.cancelado_por = usuarioLogueado;
     if (nuevoEstado === 'en_espera') { updateData.llegada_confirmada = true; updateData.hora_llegada = horaLocalISO; }
     if (nuevoEstado === 'atendiendose') updateData.hora_inicio_atencion = horaLocalISO; 
     if (nuevoEstado === 'atendido') updateData.hora_fin_atencion = horaLocalISO; 
     
-    const { data: citaActual, error } = await supabase
-        .from('citas')
-        .update(updateData)
-        .eq('id', citaId)
-        .select('*, pacientes(nombre, apellido)')
-        .single();
-        
+    const { data: citaActual, error } = await supabase.from('citas').update(updateData).eq('id', citaId).select('*, pacientes(nombre, apellido)').single();
     if (error) return toast.error("Error al actualizar");
-    
     if (citaActual) {
       const nombrePac = citaActual.pacientes?.nombre || 'Sin nombre';
       const apellidoPac = citaActual.pacientes?.apellido || '';
-
-      await supabase.from('auditoria_clinica').insert([{
-          usuario_id: usuarioLogueado,
-          accion: `UPDATE / ESTADO CITA`,
-          tabla: 'citas',
-          detalles: `Cambió estado de la cita de ${nombrePac} ${apellidoPac} a "${nuevoEstado.toUpperCase()}".`
-      }]);
+      await supabase.from('auditoria_clinica').insert([{ usuario_id: usuarioLogueado, accion: `UPDATE / ESTADO CITA`, tabla: 'citas', detalles: `Cambió estado de la cita de ${nombrePac} ${apellidoPac} a "${nuevoEstado.toUpperCase()}".` }]);
     }
-
     if (nuevoEstado === 'en_espera' && citaActual && citaActual.pacientes) {
       const canalNotif = supabase.channel(`notificaciones-${citaActual.profesional_id}`);
       canalNotif.subscribe(async (status) => {
@@ -669,7 +555,6 @@ export default function AgendaPage() {
     toast.success("Estado actualizado"); await fetchCitasAgenda();
   }
 
-  // --- MODIFICADO: Usa el nuevo link en los recordatorios ---
   const enviarRecordatorioConLink = (cita: any) => {
       const telefono = cita.pacientes?.telefono;
       if (!telefono) return toast.error("Paciente sin teléfono");
@@ -680,67 +565,38 @@ export default function AgendaPage() {
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
   
-  // --- MODIFICADO: Incluye el link de Agendamiento Online en los Presupuestos ---
   const generarYMostrarResumen = async (presupuestoId: string, cita: any) => {
     const toastId = toast.loading("Generando resumen del tratamiento...");
     try {
         const { data: items } = await supabase.from('presupuesto_items').select('observacion, precio_pactado, abonado, prestaciones:prestacion_id("Nombre Accion", "Nombre")').eq('presupuesto_id', presupuestoId).neq('estado', 'cancelada');
-
-        if (!items || items.length === 0) {
-            toast.error("El plan seleccionado no contiene tratamientos activos.", { id: toastId });
-            return;
-        }
-
+        if (!items || items.length === 0) { toast.error("El plan seleccionado no contiene tratamientos activos.", { id: toastId }); return; }
         let total = 0; let abonado = 0;
         let detalleText = `Hola ${cita.pacientes?.nombre}, te compartimos el detalle actualizado de tu Plan de Tratamiento Dental:\n\n`;
-
         items.forEach((item: any) => {
             let nombreDisplay = item.prestaciones?.["Nombre Accion"] || item.prestaciones?.["Nombre"] || 'Tratamiento';
             if (item.observacion && item.observacion.includes('|')) nombreDisplay = item.observacion.split('|')[0].trim();
-            
             let precio = Number(item.precio_pactado || 0);
             total += precio; abonado += Number(item.abonado || 0);
             detalleText += `🔸 ${nombreDisplay} - $${precio.toLocaleString('es-CL')}\n`;
         });
-
         detalleText += `\n💰 *Total Plan:* $${total.toLocaleString('es-CL')}`;
         if (abonado > 0) detalleText += `\n✅ *Abonado:* $${abonado.toLocaleString('es-CL')}`;
         if (total - abonado > 0) detalleText += `\n🔴 *Saldo Pendiente:* ${(total - abonado).toLocaleString('es-CL')}`;
-
         detalleText += `\n\n🗓️ *Agenda tus próximas sesiones online aquí:*\nhttps://confirmar-cita-dignidad.vercel.app/agendar`;
         detalleText += `\n\nCualquier consulta, estamos a tu disposición. ¡Saludos! 🦷`;
-
         setModalEnvioPresupuesto({ abierto: true, cita, texto: detalleText });
         toast.success("Resumen generado", { id: toastId });
-    } catch (error) {
-        toast.error("Error al generar resumen", { id: toastId });
-    }
+    } catch (error) { toast.error("Error al generar resumen", { id: toastId }); }
   }
 
   const abrirEnvioPresupuesto = async (cita: any) => {
     if (!cita.paciente_id) return toast.error("Cita sin paciente asociado");
-    
     const toastId = toast.loading("Buscando tratamientos...");
     try {
-        const { data: presupuestos } = await supabase
-            .from('presupuestos')
-            .select('id, nombre_tratamiento')
-            .eq('paciente_id', cita.paciente_id)
-            .neq('estado', 'finalizado');
-
-        if (!presupuestos || presupuestos.length === 0) {
-            toast.error("El paciente no tiene planes de tratamiento activos.", { id: toastId });
-            return;
-        }
-
-        if (presupuestos.length === 1) {
-            await generarYMostrarResumen(presupuestos[0].id, cita);
-            toast.dismiss(toastId);
-        } else {
-            setModalSeleccionTratamiento({ abierto: true, cita, tratamientos: presupuestos });
-            toast.dismiss(toastId);
-        }
-
+        const { data: presupuestos } = await supabase.from('presupuestos').select('id, nombre_tratamiento').eq('paciente_id', cita.paciente_id).neq('estado', 'finalizado');
+        if (!presupuestos || presupuestos.length === 0) { toast.error("El paciente no tiene planes de tratamiento activos.", { id: toastId }); return; }
+        if (presupuestos.length === 1) { await generarYMostrarResumen(presupuestos[0].id, cita); toast.dismiss(toastId); } 
+        else { setModalSeleccionTratamiento({ abierto: true, cita, tratamientos: presupuestos }); toast.dismiss(toastId); }
     } catch (error) { toast.error("Error al buscar tratamientos", { id: toastId }); }
   }
 
@@ -750,8 +606,10 @@ export default function AgendaPage() {
       if (!bloqueoTodoElDia && (!horaInicioBloqueo || !horaFinBloqueo)) return toast.error("Debe especificar hora de inicio y fin.");
       
       const fechaBloqueo = getLocalDateISO(selectedDate);
-
       setCargandoAccion(true);
+
+      const profObj = profesionales.find(p => p.user_id === profesionalBloqueo);
+
       try {
           const { data: citasAfectadas } = await supabase.from('citas')
             .select('id, inicio, fin')
@@ -785,7 +643,7 @@ export default function AgendaPage() {
           }
 
           const payload = {
-              profesional_id: profesionalBloqueo,
+              profesional_id: profObj?.id, 
               fecha: fechaBloqueo,
               motivo: motivoBloqueo,
               hora_inicio: bloqueoTodoElDia ? null : horaInicioBloqueo,
@@ -795,8 +653,7 @@ export default function AgendaPage() {
           const { error } = await supabase.from('bloqueos_agenda').insert([payload]);
           if (error) throw error;
           
-          const profesionalBloqueadoData = profesionales.find(p => p.user_id === profesionalBloqueo);
-          const nombreProfesional = profesionalBloqueadoData ? `${profesionalBloqueadoData.nombre} ${profesionalBloqueadoData.apellido}` : `ID ${profesionalBloqueo}`;
+          const nombreProfesional = profObj ? `${profObj.nombre} ${profObj.apellido}` : `ID ${profesionalBloqueo}`;
           await supabase.from('auditoria_clinica').insert([{
               usuario_id: usuarioLogueado,
               accion: 'INSERT / BLOQUEO AGENDA',
@@ -841,7 +698,6 @@ export default function AgendaPage() {
         if (h.dia_semana !== diaSemana) return false;
         const inicioLab = new Date(`${fecha}T${h.hora_inicio.substring(0,5)}:00`).getTime();
         const finLab = new Date(`${fecha}T${h.hora_fin.substring(0,5)}:00`).getTime();
-        
         return slotStart >= inicioLab && slotEnd <= finLab;
     });
   }
@@ -850,15 +706,19 @@ export default function AgendaPage() {
     const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
     const slotEnd = slotStart + duracionMinutos * 60000;
     
-    const chocaCita = citasOcupadas.some(cita => {
+    return citasOcupadas.some(cita => {
+        if (citaEnReprogramacion && cita.id === citaEnReprogramacion.id) return false;
         const citaInicio = new Date(cita.inicio.replace(' ', 'T')).getTime();
         const citaFin = new Date(cita.fin.replace(' ', 'T')).getTime();
         return slotStart < citaFin && slotEnd > citaInicio;
     });
+  };
 
-    if (chocaCita) return true;
+  const esHorarioBloqueado = (fecha: string, hora: string, duracionMinutos: number) => {
+    const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
+    const slotEnd = slotStart + duracionMinutos * 60000;
 
-    const chocaBloqueo = bloqueosSemana.some(b => {
+    return bloqueosSemana.some(b => {
         if (b.fecha !== fecha) return false;
         if (!b.hora_inicio || !b.hora_fin) return true; 
         
@@ -866,9 +726,44 @@ export default function AgendaPage() {
         const bEnd = new Date(`${fecha}T${b.hora_fin}`).getTime();
         return slotStart < bEnd && slotEnd > bStart;
     });
+  };
 
-    return chocaBloqueo;
-  }
+  const handleSlotClick = (fecha: string, hora: string) => {
+    const sel = horasSeleccionadas.some(x => x.fecha === fecha && x.hora === hora);
+    if (sel) {
+      toggleHora(fecha, hora);
+      return;
+    }
+
+    const laboral = esHorarioLaboral(fecha, hora, filtro.duracionDefault);
+    const chocaConCita = esCitaOcupada(fecha, hora, filtro.duracionDefault);
+    const chocaConBloqueo = esHorarioBloqueado(fecha, hora, filtro.duracionDefault);
+    
+    const profObj = profesionales.find(p => p.user_id === filtro.profesional_id);
+    const diaCompletamenteBloqueado = bloqueosSemana.some(b => b.profesional_id === profObj?.id && b.fecha === fecha && (!b.hora_inicio || !b.hora_fin));
+    
+    const chocaConSeleccion = horasSeleccionadas.some(s => {
+        if (s.fecha === fecha && s.hora === hora) return false; 
+        const selStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
+        const selEnd = selStart + s.duracion * 60000;
+        const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
+        const slotEnd = slotStart + filtro.duracionDefault * 60000;
+        return slotStart < selEnd && slotEnd > selStart;
+    });
+
+    if (diaCompletamenteBloqueado) return toast.error("Este día está completamente bloqueado.");
+    if (chocaConBloqueo) return toast.error("El horario seleccionado está bloqueado por el especialista.");
+    if (!laboral) return toast.error("Fuera del horario laboral del especialista.");
+    if (chocaConSeleccion) return toast.warning("El horario choca con otra selección actual.");
+    
+    if (chocaConCita) {
+        if (!window.confirm(`⚠️ El bloque completo que intentas agendar choca con otra cita existente. ¿Deseas forzar un SOBRECUPO?`)) {
+            return;
+        }
+    }
+    
+    toggleHora(fecha, hora);
+  };
 
   const buscarPacientes = async (term: string) => {
     if (!term.trim()) { setPacientesEncontrados([]); return; }
@@ -893,25 +788,15 @@ export default function AgendaPage() {
     setBusqueda(`${paciente.nombre} ${paciente.apellido}`); 
     setPacientesEncontrados([]);
     
-    const { data } = await supabase.from('presupuestos')
-        .select('id, nombre_tratamiento')
-        .eq('paciente_id', paciente.id)
-        .neq('estado', 'finalizado')
-        .order('fecha_creacion', { ascending: false });
-    
+    const { data } = await supabase.from('presupuestos').select('id, nombre_tratamiento').eq('paciente_id', paciente.id).neq('estado', 'finalizado').order('fecha_creacion', { ascending: false });
     setTratamientosPaciente(data || []);
     setTratamientoSeleccionadoId('MANUAL'); 
     setNuevoTratamientoNombre(citaEnReprogramacion ? citaEnReprogramacion.motivo : ''); 
   };
 
-  // --- MODIFICADO: Retornar ID de cita para WhatsApp automático ---
   const handleGuardar = async () => {
     if (cargandoAccion) return;
-    if (modoNuevoPaciente && (!nuevoPaciente.nombre || !nuevoPaciente.apellido)) {
-      return toast.error("Faltan datos del nuevo paciente", {
-        description: "Nombre y Apellido son obligatorios."
-      });
-    }
+    if (modoNuevoPaciente && (!nuevoPaciente.nombre || !nuevoPaciente.apellido)) { return toast.error("Faltan datos del nuevo paciente", { description: "Nombre y Apellido son obligatorios." }); }
     setCargandoAccion(true);
     try {
       let pId = pacienteSeleccionado?.id;
@@ -920,31 +805,10 @@ export default function AgendaPage() {
 
       if (modoNuevoPaciente && !citaEnReprogramacion) {
         let rutFinal: string | null = nuevoPaciente.rut.toUpperCase().trim();
-        if (esOtroDocumento) {
-          if (!rutFinal) rutFinal = `OTRO-DOC-${Date.now()}`;
-        } else {
-            rutFinal = rutFinal.replace(/[^0-9kK-]/g, '');
-        }
-
-        const { data: pNew, error: pErr } = await supabase
-          .from('pacientes')
-          .insert([{
-            nombre: nuevoPaciente.nombre.toUpperCase().trim(),
-            apellido: nuevoPaciente.apellido.toUpperCase().trim(),
-            rut: rutFinal,
-            telefono: nuevoPaciente.telefono,
-            fecha_nacimiento: nuevoPaciente.fecha_nacimiento || null,
-            sexo: nuevoPaciente.sexo || null,
-            activo: true
-          }])
-          .select().single();
-        if (pErr) {
-          console.error(pErr);
-          throw pErr;
-        }
-        pId = pNew.id;
-        pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`;
-        pTelefono = nuevoPaciente.telefono;
+        if (esOtroDocumento) { if (!rutFinal) rutFinal = `OTRO-DOC-${Date.now()}`; } else { rutFinal = rutFinal.replace(/[^0-9kK-]/g, ''); }
+        const { data: pNew, error: pErr } = await supabase.from('pacientes').insert([{ nombre: nuevoPaciente.nombre.toUpperCase().trim(), apellido: nuevoPaciente.apellido.toUpperCase().trim(), rut: rutFinal, telefono: nuevoPaciente.telefono, fecha_nacimiento: nuevoPaciente.fecha_nacimiento || null, sexo: nuevoPaciente.sexo || null, activo: true }]).select().single();
+        if (pErr) throw pErr;
+        pId = pNew.id; pNombreFull = `${nuevoPaciente.nombre} ${nuevoPaciente.apellido}`; pTelefono = nuevoPaciente.telefono;
       }
 
       const parsearAFechaLocal = (fechaStr: string, horaStr: string, duracionMin: number) => {
@@ -960,111 +824,23 @@ export default function AgendaPage() {
       if (citaEnReprogramacion) {
         const s = horasSeleccionadas[0];
         const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
-        await supabase
-          .from('citas')
-          .update({
-            inicio,
-            fin,
-            profesional_id: filtro.profesional_id,
-            estado: 'reprogramada',
-            motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo,
-            modificado_por: usuarioLogueado
-          })
-          .eq('id', citaEnReprogramacion.id);
-
+        await supabase.from('citas').update({ inicio, fin, profesional_id: filtro.profesional_id, estado: 'reprogramada', motivo: nuevoTratamientoNombre.toUpperCase() || citaEnReprogramacion.motivo, modificado_por: usuarioLogueado }).eq('id', citaEnReprogramacion.id);
         citaIdParaConfirmacion = citaEnReprogramacion.id;
-
-        await supabase.from('auditoria_clinica').insert([{
-          usuario_id: usuarioLogueado,
-          accion: 'UPDATE / REPROGRAMACIÓN',
-          tabla: 'citas',
-          detalles: `Reprogramó la cita de ${pNombreFull} para el ${s.fecha} a las ${s.hora}.`
-        }]);
+        await supabase.from('auditoria_clinica').insert([{ usuario_id: usuarioLogueado, accion: 'UPDATE / REPROGRAMACIÓN', tabla: 'citas', detalles: `Reprogramó la cita de ${pNombreFull} para el ${s.fecha} a las ${s.hora}.` }]);
       } else {
         const nuevasCitas = horasSeleccionadas.map(s => {
           const { inicio, fin } = parsearAFechaLocal(s.fecha, s.hora, s.duracion);
-          return {
-            paciente_id: pId,
-            profesional_id: filtro.profesional_id,
-            presupuesto_id: (tratamientoSeleccionadoId && tratamientoSeleccionadoId !== 'MANUAL') ? tratamientoSeleccionadoId : null,
-            inicio,
-            fin,
-            estado: 'programada',
-            motivo: nuevoTratamientoNombre.toUpperCase() || 'CONSULTA',
-            creado_por: usuarioLogueado
-          };
+          return { paciente_id: pId, profesional_id: filtro.profesional_id, presupuesto_id: (tratamientoSeleccionadoId && tratamientoSeleccionadoId !== 'MANUAL') ? tratamientoSeleccionadoId : null, inicio, fin, estado: 'programada', motivo: nuevoTratamientoNombre.toUpperCase() || 'CONSULTA', creado_por: usuarioLogueado };
         });
-        
-        // Aquí insertamos y guardamos el ID para el link de WhatsApp
         const { data: citasCreadas } = await supabase.from('citas').insert(nuevasCitas).select('id');
-        if (citasCreadas && citasCreadas.length > 0) {
-            citaIdParaConfirmacion = citasCreadas[0].id;
-        }
-
+        if (citasCreadas && citasCreadas.length > 0) citaIdParaConfirmacion = citasCreadas[0].id;
         const detallesCitas = nuevasCitas.map(c => `Cita para ${pNombreFull} el ${c.inicio.split('T')[0]} a las ${c.inicio.split('T')[1].substring(0,5)}`).join('; ');
-        await supabase.from('auditoria_clinica').insert([{
-          usuario_id: usuarioLogueado,
-          accion: 'INSERT / CITA',
-          tabla: 'citas',
-          detalles: `Agendó: ${detallesCitas}`
-        }]);
+        await supabase.from('auditoria_clinica').insert([{ usuario_id: usuarioLogueado, accion: 'INSERT / CITA', tabla: 'citas', detalles: `Agendó: ${detallesCitas}` }]);
       }
 
-      setCitaConfirmadaData({
-        paciente: pNombreFull.toUpperCase(),
-        citas: horasSeleccionadas,
-        telefono: pTelefono,
-        citaId: citaIdParaConfirmacion // <-- Lo guardamos aquí
-      });
-      setMostrarTicket(true);
-      await fetchCitasAgenda();
-    } catch (e: any) {
-      console.error(e);
-      toast.error("Error al guardar");
-      setCargandoAccion(false);
-    }
-  };
-
-  const toggleHora = (fecha: string, hora: string) => {
-    setHorasSeleccionadas(prev => {
-      if (citaEnReprogramacion) return [{ fecha, hora, duracion: filtro.duracionDefault }];
-      const existe = prev.find(h => h.fecha === fecha && h.hora === hora);
-      if (existe) return prev.filter(h => !(h.fecha === fecha && h.hora === hora));
-      return [...prev, { fecha, hora, duracion: filtro.duracionDefault }];
-    });
-  }
-
-  const handleSlotClick = (fecha: string, hora: string) => {
-    const sel = horasSeleccionadas.some(x => x.fecha === fecha && x.hora === hora);
-    if (sel) {
-      toggleHora(fecha, hora);
-      return;
-    }
-
-    const laboral = esHorarioLaboral(fecha, hora, filtro.duracionDefault);
-    const ocupadoReal = esCitaOcupada(fecha, hora, filtro.duracionDefault);
-    const diaCompletamenteBloqueado = bloqueosSemana.some(b => b.fecha === fecha && (!b.hora_inicio || !b.hora_fin));
-    
-    const chocaConSeleccion = horasSeleccionadas.some(s => {
-        if (s.fecha === fecha && s.hora === hora) return false; 
-        const selStart = new Date(`${s.fecha}T${s.hora}:00`).getTime();
-        const selEnd = selStart + s.duracion * 60000;
-        const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
-        const slotEnd = slotStart + filtro.duracionDefault * 60000;
-        return slotStart < selEnd && slotEnd > selStart;
-    });
-
-    if (diaCompletamenteBloqueado) return toast.error("Este día está completamente bloqueado.");
-    if (!laboral) return toast.error("Fuera del horario laboral del especialista.");
-    if (chocaConSeleccion) return toast.warning("El horario choca con otra selección actual.");
-    
-    if (ocupadoReal) {
-        if (!window.confirm(`⚠️ El bloque completo que intentas agendar (desde las ${hora} por ${filtro.duracionDefault} min) choca con otra cita existente. ¿Deseas forzar un SOBRECUPO?`)) {
-            return;
-        }
-    }
-    
-    toggleHora(fecha, hora);
+      setCitaConfirmadaData({ paciente: pNombreFull.toUpperCase(), citas: horasSeleccionadas, telefono: pTelefono, citaId: citaIdParaConfirmacion });
+      setMostrarTicket(true); await fetchCitasAgenda();
+    } catch (e: any) { console.error(e); toast.error("Error al guardar"); setCargandoAccion(false); }
   };
 
   const navegarSemana = (sentido: 'atras' | 'adelante') => {
@@ -1075,24 +851,16 @@ export default function AgendaPage() {
 
   const abrirCaja = (cita: any) => {
     const idPaciente = cita.pacientes?.id || cita.paciente_id;
-    
-    if (!idPaciente) {
-      return toast.error("Cita no tiene paciente asignado");
-    }
-    
+    if (!idPaciente) return toast.error("Cita no tiene paciente asignado");
     router.push(`/pacientes/${idPaciente}/pagos`);
   }
 
   const procesarPagoCaja = async () => {
     const pago = Number(montoIngresado);
     if (!montoIngresado || pago <= 0) return toast.error("Ingrese un monto válido a recaudar");
-    
     const requiereComprobante = metodoPago !== 'Saldo a Favor';
     if (requiereComprobante && !codigoTransaccion.trim()) return toast.error("Ingrese el N° de boleta o código de transacción");
-
-    if (metodoPago === 'Saldo a Favor') {
-        if (pago > saldoAFavor) return toast.error("El monto supera el saldo disponible en la billetera.");
-    }
+    if (metodoPago === 'Saldo a Favor') { if (pago > saldoAFavor) return toast.error("El monto supera el saldo disponible en la billetera."); }
 
     setCargandoAccion(true); 
     let montoRestante = pago;
@@ -1102,146 +870,70 @@ export default function AgendaPage() {
         if (!currentCajaId) {
             const { data: perfilData } = await supabase.from('perfiles').select('nombre_completo').eq('id', usuarioLogueado).maybeSingle();
             const userName = perfilData?.nombre_completo || 'Recepcionista';
-
-            const { data: nuevaCaja, error: errCaja } = await supabase.from('sesiones_caja').insert([{
-                usuario_id: usuarioLogueado,
-                nombre_responsable: userName,
-                monto_apertura: 0,
-                estado: 'abierta',
-                fecha_apertura: new Date().toISOString()
-            }]).select('id').single();
-
+            const { data: nuevaCaja, error: errCaja } = await supabase.from('sesiones_caja').insert([{ usuario_id: usuarioLogueado, nombre_responsable: userName, monto_apertura: 0, estado: 'abierta', fecha_apertura: new Date().toISOString() }]).select('id').single();
             if (errCaja) throw errCaja;
-            currentCajaId = nuevaCaja.id;
-            setCajaActivaId(currentCajaId);
-            toast.success("Turno de caja iniciado automáticamente ($0 inicial)");
+            currentCajaId = nuevaCaja.id; setCajaActivaId(currentCajaId); toast.success("Turno de caja iniciado automáticamente ($0 inicial)");
         }
 
         for (const item of deudasPaciente) {
             if (montoRestante <= 0) break;
             const aAbonar = Math.min(item.deuda, montoRestante);
-            
-            const detalleAbono = { 
-                id: item.id,
-                prestacion: item.nombreDisplay, 
-                precio: item.precio_pactado, 
-                doctor: item.doctor,
-                abonado_ahora: aAbonar 
-            };
-
-            await supabase.from('pagos').insert([{ 
-                paciente_id: pacientePago.id, 
-                monto: aAbonar, 
-                metodo_pago: metodoPago, 
-                numero_referencia: codigoTransaccion.trim() || null, 
-                numero_boleta: codigoTransaccion.trim() || 'S/N', 
-                fecha_pago: new Date().toISOString(),
-                item_id: item.id,
-                comentario: JSON.stringify([detalleAbono]),
-                caja_id: currentCajaId
-            }]);
-
+            const detalleAbono = { id: item.id, prestacion: item.nombreDisplay, precio: item.precio_pactado, doctor: item.doctor, abonado_ahora: aAbonar };
+            await supabase.from('pagos').insert([{ paciente_id: pacientePago.id, monto: aAbonar, metodo_pago: metodoPago, numero_referencia: codigoTransaccion.trim() || null, numero_boleta: codigoTransaccion.trim() || 'S/N', fecha_pago: new Date().toISOString(), item_id: item.id, comentario: JSON.stringify([detalleAbono]), caja_id: currentCajaId }]);
             await supabase.from('presupuesto_items').update({ abonado: Number(item.abonado) + aAbonar }).eq('id', item.id);
             montoRestante -= aAbonar;
         }
         
         let nuevoSaldo = saldoAFavor;
-
         if (metodoPago === 'Saldo a Favor') {
-            nuevoSaldo = saldoAFavor - pago;
-            await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id);
-            toast.success(`Se utilizaron $${pago.toLocaleString('es-CL')} de su saldo a favor.`);
+            nuevoSaldo = saldoAFavor - pago; await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id); toast.success(`Se utilizaron $${pago.toLocaleString('es-CL')} de su saldo a favor.`);
         } else {
             if (montoRestante > 0) {
                 const detalleSobrante = [{ prestacion: "Saldo a Favor (Abono extra/Vuelto)", precio: montoRestante, abonado_ahora: montoRestante }];
-                await supabase.from('pagos').insert([{ 
-                    paciente_id: pacientePago.id, 
-                    monto: montoRestante, 
-                    metodo_pago: metodoPago, 
-                    numero_referencia: codigoTransaccion.trim() || null, 
-                    numero_boleta: codigoTransaccion.trim() || 'S/N',
-                    fecha_pago: new Date().toISOString(),
-                    comentario: JSON.stringify(detalleSobrante),
-                    caja_id: currentCajaId
-                }]);
-
-                nuevoSaldo = saldoAFavor + montoRestante;
-                await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id);
-                toast.info(`¡Quedó un vuelto de $${montoRestante.toLocaleString('es-CL')} guardado a favor del paciente!`);
-            } else {
-                toast.success(`Pago procesado exitosamente.`);
-            }
+                await supabase.from('pagos').insert([{ paciente_id: pacientePago.id, monto: montoRestante, metodo_pago: metodoPago, numero_referencia: codigoTransaccion.trim() || null, numero_boleta: codigoTransaccion.trim() || 'S/N', fecha_pago: new Date().toISOString(), comentario: JSON.stringify(detalleSobrante), caja_id: currentCajaId }]);
+                nuevoSaldo = saldoAFavor + montoRestante; await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', pacientePago.id); toast.info(`¡Quedó un vuelto de $${montoRestante.toLocaleString('es-CL')} guardado a favor del paciente!`);
+            } else { toast.success(`Pago procesado exitosamente.`); }
         }
 
-        setSaldoAFavor(nuevoSaldo);
-        setModalPagoAbierto(false); 
-        setMontoIngresado(''); 
-        setCodigoTransaccion('');
-        await fetchCitasAgenda(); 
-
-    } catch (e) { 
-        toast.error("Ocurrió un error al procesar el pago"); 
-    } finally { 
-        setCargandoAccion(false); 
-    }
+        setSaldoAFavor(nuevoSaldo); setModalPagoAbierto(false); setMontoIngresado(''); setCodigoTransaccion(''); await fetchCitasAgenda(); 
+    } catch (e) { toast.error("Ocurrió un error al procesar el pago"); } finally { setCargandoAccion(false); }
   }
 
   const calcularDeudaTotalCaja = () => deudasPaciente.reduce((acc, curr) => acc + curr.deuda, 0);
 
   const checkIsSobrecupo = (c: any) => {
     if (!c.profesional_id) return false;
-    
     return citasFiltradas.some(otra => {
         if (otra.id === c.id) return false;
         if (!otra.profesional_id) return false;
         if (String(otra.profesional_id) !== String(c.profesional_id)) return false; 
-        
         if (otra.estado_confirmacion === 'pendiente' && otra.motivo?.includes('Online')) return false;
         if (c.estado_confirmacion === 'pendiente' && c.motivo?.includes('Online')) return false;
-        
         const cIni = new Date(c.inicio.replace(' ', 'T')).getTime();
         const cFin = new Date(c.fin.replace(' ', 'T')).getTime();
         const oIni = new Date(otra.inicio.replace(' ', 'T')).getTime();
         const oFin = new Date(otra.fin.replace(' ', 'T')).getTime();
-        
         if (cIni >= oFin || cFin <= oIni) return false; 
-        
         const timeC = c.created_at ? new Date(c.created_at).getTime() : 0;
         const timeO = otra.created_at ? new Date(otra.created_at).getTime() : 0;
-        
         if (timeC !== timeO && timeC > 0 && timeO > 0) return timeC > timeO;
-        
         return String(c.id) > String(otra.id);
     });
   }
 
-  const GOLD = '#C9A24B'
-  const NAVY = '#0E1B2E'
-  const GOLD_LIGHT = '#E8CD8A'
-  const INK = '#0B1220'
+  const GOLD = '#C9A24B'; const NAVY = '#0E1B2E'; const GOLD_LIGHT = '#E8CD8A'; const INK = '#0B1220';
 
   if (cargandoPagina) return (
     <div className="h-full flex flex-col items-center justify-center bg-[#FBF8F2] relative overflow-hidden">
-        <motion.div
-            initial={{ scale: 0.8, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            className="flex flex-col items-center z-10"
-        >
+        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.5, ease: "easeOut" }} className="flex flex-col items-center z-10">
             <div className="w-20 h-20 bg-[#0A111F] rounded-3xl flex items-center justify-center mb-6 shadow-2xl relative">
                 <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 3, ease: "linear" }} className="absolute inset-[-2px] rounded-3xl border border-transparent border-t-[#C9A24B] border-b-[#C9A24B]/30 opacity-70" />
                 <svg width="32" height="36" viewBox="0 0 24 24" fill="none" stroke="#C9A24B" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20.5C12 20.5 15 19 16 16C17.3333 12 18 8 16 5C15 3 13 3 12 5C11 3 9 3 8 5C6 8 6.66667 12 8 16C9 19 12 20.5 12 20.5Z"/></svg>
             </div>
             <h2 className="text-xl font-black tracking-widest uppercase text-[#0A111F]">Cargando Agenda</h2>
             <p className="text-xs font-bold text-slate-400 mt-2">Sincronizando con la base de datos...</p>
-            
             <div className="w-48 h-1 bg-slate-200 rounded-full mt-6 overflow-hidden">
-            <motion.div 
-                initial={{ width: "0%" }} 
-                animate={{ width: "100%" }} 
-                transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }} 
-                className="h-full bg-[#C9A24B] rounded-full" 
-            />
+            <motion.div initial={{ width: "0%" }} animate={{ width: "100%" }} transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }} className="h-full bg-[#C9A24B] rounded-full" />
             </div>
         </motion.div>
     </div>
@@ -1709,16 +1401,22 @@ export default function AgendaPage() {
                                      </div>
                                      <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto custom-scrollbar pr-1">
                                         {slotsHorarios.map(hora => {
-                                           const esLaboral = esHorarioLaboral(diaStr, hora, filtro.duracionDefault);
-                                           if(!esLaboral) return null;
+   const esLaboral = esHorarioLaboral(diaStr, hora, filtro.duracionDefault);
+   if(!esLaboral) return null;
                                            
                                            const ocupado = esCitaOcupada(diaStr, hora, filtro.duracionDefault);
-                                           const seleccionado = horasSeleccionadas.some(s => s.fecha === diaStr && s.hora === hora);
-                                           
-                                           let btnClass = "py-2 text-[11px] font-black rounded-lg border transition-all ";
-                                           if(seleccionado) btnClass += "bg-emerald-500 text-white border-emerald-600 shadow-md";
-                                           else if(ocupado) btnClass += "bg-red-50 text-red-500 border-red-200 opacity-60";
-                                           else btnClass += "bg-white text-slate-600 border-slate-200 hover:border-[#C9A24B] hover:text-[#C9A24B] shadow-sm";
+const bloqueado = esHorarioBloqueado(diaStr, hora, filtro.duracionDefault); // Faltaba evaluar esto
+const seleccionado = horasSeleccionadas.some(s => s.fecha === diaStr && s.hora === hora);
+
+let btnClass = "py-2 text-[11px] font-black rounded-lg border transition-all ";
+
+if(seleccionado) {
+  btnClass += "bg-emerald-500 text-white border-emerald-600 shadow-md";
+} else if(ocupado || bloqueado) { // Integrar 'bloqueado' al color rojo/deshabilitado
+  btnClass += "bg-red-50 text-red-500 border-red-200 opacity-60"; 
+} else {
+  btnClass += "bg-white text-slate-600 border-slate-200 hover:border-[#C9A24B] hover:text-[#C9A24B] shadow-sm";
+}
 
                                            return (
                                               <button key={hora} onClick={() => handleSlotClick(diaStr, hora)} className={btnClass}>
