@@ -495,7 +495,6 @@ export default function PagosPacientePage() {
       await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', paciente_id);
       setPacienteInfo((prev: any) => ({ ...prev, saldo_a_favor: nuevoSaldo }));
       
-      // 🔥 NUEVO: Registrar el motivo en la auditoría clínica
       const detallesAuditoria = esAbonoLibre 
           ? `Anuló un ingreso manual agrupado de $${pago.monto.toLocaleString('es-CL')}. Se descuenta de SALDO A FAVOR. Motivo: ${motivo.trim()}`
           : `Anuló un pago agrupado a tratamiento de $${pago.monto.toLocaleString('es-CL')}. Destino: SALDO A FAVOR. Motivo: ${motivo.trim()}`;
@@ -545,15 +544,15 @@ export default function PagosPacientePage() {
                 return;
             }
 
-            // Opciones para generar el PDF limpio sin cabeceras web
+            // Opciones corregidas para Typescript
             const opt = {
-    margin: [15, 15, 20, 15],
-    filename: `Comprobante_${pacienteInfo?.rut || 'Pago'}.pdf`,
-    image: { type: 'jpeg', quality: 1 },
-    html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0, windowWidth: 720 },
-    jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'] }
-};
+                margin: [15, 15, 20, 15] as [number, number, number, number],
+                filename: `Comprobante_${pacienteInfo?.rut || 'Pago'}.pdf`,
+                image: { type: 'jpeg', quality: 1 } as const,
+                html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollY: 0, windowWidth: 720 },
+                jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' } as const,
+                pagebreak: { mode: ['css', 'legacy'] as const }
+            };
 
             await html2pdf().set(opt).from(element).toPdf().get('pdf').then((pdf: any) => {
                 window.open(pdf.output('bloburl'), '_blank');
@@ -564,7 +563,7 @@ export default function PagosPacientePage() {
             console.error(error);
             toast.error("Error al generar el PDF", { id: toastId });
         }
-    }, 200); // Esperamos a que React asigne el estado de pagoAImprimir
+    }, 200); 
   }
 
   if (cargando) return (
@@ -713,7 +712,6 @@ export default function PagosPacientePage() {
                     </div>
                 )}
 
-                {/* LISTA MULTIPLE DE MEDIOS DE PAGO (Ultra Compacto 2x fila) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                     {mediosPago.map((medio, index) => (
                         <div key={medio.id} className="relative p-2 border border-slate-200 bg-slate-50/50 rounded-md space-y-1.5 shadow-sm">
@@ -1099,4 +1097,3 @@ export default function PagosPacientePage() {
     </>
   )
 }
-   
