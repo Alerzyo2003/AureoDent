@@ -228,7 +228,7 @@ export default function PagosPacientePage() {
 
             return { ...item, deuda, nombreDisplay, doctor };
 
-        }).filter(item => item.deuda > 0);
+        }).filter(item => item.deuda > 0 && (item.estado === 'realizado' || Number(item.progreso || 0) > 0));
 
 
 
