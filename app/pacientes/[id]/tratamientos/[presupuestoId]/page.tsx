@@ -1301,9 +1301,14 @@ if (profesionalRowId) {
       }
       
       if (!presupuestoData.isAprobado) { 
-        await supabase.from('presupuestos').update({ aprobado: true }).eq('id', idURL); 
-        setPresupuestoData({ ...presupuestoData, isAprobado: true }); 
-      }
+  const { error: errAprobar } = await supabase.from('presupuestos').update({ aprobado: true }).eq('id', idURL); 
+  if (errAprobar) {
+    toast.error("⚠️ El presupuesto no pudo aprobarse automáticamente (revisa permisos). El tratamiento no aparecerá en Pagos hasta corregir esto.");
+    console.error(errAprobar);
+  } else {
+    setPresupuestoData({ ...presupuestoData, isAprobado: true }); 
+  }
+}
       
       setAcciones(prev => prev.map(a => {
         if (itemIds.includes(a.id)) {
