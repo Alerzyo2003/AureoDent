@@ -40,7 +40,7 @@ export default function DetalleLiquidacionPage() {
       
       const porcentajeDr = Number(prof.porcentaje_comision || 40) / 100;
 
-      // 2. Obtener Liquidaciones Cerradas
+      // 2. Obtener Liquidaciones Cerradas del mes seleccionado
       const { data: liqsData } = await supabase
         .from('liquidaciones')
         .select('*')
@@ -91,7 +91,6 @@ export default function DetalleLiquidacionPage() {
          const precioPactado = Number(pItem.precio_pactado || 0);
          const abonadoTotal = Number(pItem.abonado || 0);
 
-         // REGLA INQUEBRANTABLE: Solo dejamos pasar tratamientos 100% pagados
          return precioPactado > 0 && abonadoTotal >= precioPactado;
       });
 
@@ -153,23 +152,23 @@ export default function DetalleLiquidacionPage() {
         let montoARepartir = Number(liq.monto_total);
         let itemsDeEstaLiq = [];
         
-        // Creamos la fecha límite: La liquidación no puede tocar pacientes después de este día
-        let fechaLimite = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
-        fechaLimite.setHours(23, 59, 59, 999); // Le damos hasta el último minuto de ese día
+        // 🛡️ CORRECCIÓN CLAVE: Usar estrictamente el rango de fechas de la liquidación (periodo_desde / periodo_hasta)
+        let fechaInicioLiq = liq.periodo_desde ? new Date(liq.periodo_desde.replace(' ', 'T')) : new Date(0);
+        let fechaFinLiq = liq.periodo_hasta ? new Date(liq.periodo_hasta.replace(' ', 'T')) : new Date((liq.fecha_pago || '').replace(' ', 'T'));
+        fechaInicioLiq.setHours(0, 0, 0, 0);
+        fechaFinLiq.setHours(23, 59, 59, 999);
 
-        // Empieza a recorrer toda la producción histórica
         for(let i = 0; i < poolProduccion.length; i++) {
             let item = poolProduccion[i];
             
             if (item.honorario_restante <= 0) continue;
-            if (montoARepartir <= 0) break; // Si se acaba el dinero, frena
+            if (montoARepartir <= 0) break;
 
-            // ¡EL ESCUDO DE TIEMPO! 
-            // Si el tratamiento es de una fecha posterior a la liquidación, lo ignoramos.
             let fechaItem = new Date(item.fecha ? item.fecha.replace(' ', 'T') : 0);
-            if (fechaItem > fechaLimite) continue;
 
-            // Descuenta lo pagado del honorario
+            // Validar que el pago pertenezca estrictamente al rango de este cierre específico
+            if (fechaItem < fechaInicioLiq || fechaItem > fechaFinLiq) continue;
+
             let aDescontar = Math.min(item.honorario_restante, montoARepartir);
             
             itemsDeEstaLiq.push({
@@ -181,7 +180,6 @@ export default function DetalleLiquidacionPage() {
             montoARepartir -= aDescontar;
         }
 
-        // Guardamos el cierre completo
         cierresList.push({
           id: liq.id,
           titulo: `Cierre #${index + 1} • Pagado el ${new Date(liq.fecha_pago || liq.periodo_hasta).toLocaleDateString('es-CL')}`,
