@@ -728,6 +728,19 @@ export default function AgendaPage() {
     });
   };
 
+  const toggleHora = (fecha: string, hora: string) => {
+    setHorasSeleccionadas(prev => {
+      const yaSeleccionada = prev.some(h => h.fecha === fecha && h.hora === hora);
+      if (yaSeleccionada) {
+        // Si ya está, la quitamos
+        return prev.filter(h => !(h.fecha === fecha && h.hora === hora));
+      } else {
+        // Si no está, la agregamos con la duración definida en el filtro
+        return [...prev, { fecha, hora, duracion: filtro.duracionDefault }];
+      }
+    });
+  };
+
   const handleSlotClick = (fecha: string, hora: string) => {
     const sel = horasSeleccionadas.some(x => x.fecha === fecha && x.hora === hora);
     if (sel) {
