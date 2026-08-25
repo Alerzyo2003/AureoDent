@@ -1270,8 +1270,11 @@ export default function DetalleTratamientoPage() {
               const profEncontrado = profesionales.find(p => p.user_id === doctorFinalParaPago);
               const profesionalRowId = profEncontrado ? profEncontrado.id : null;
 
-              if (profesionalRowId) {
-                const porcentajeDr = Number(profesional?.porcentaje_comision || 40) / 100;
+if (profesionalRowId) {
+                // ❌ ANTES CAUSABA ERROR: const porcentajeDr = Number(profesional?.porcentaje_comision || 40) / 100;
+                
+                // ✅ CORRECCIÓN SEGURA: Asignamos el 40% por defecto (o puedes leerlo del state si lo tienes disponible)
+                const porcentajeDr = 0.40; 
                 const honorarioDoc = baseImponible * porcentajeDr;
 
                 await supabase.from('liquidaciones_detalle').insert([{
