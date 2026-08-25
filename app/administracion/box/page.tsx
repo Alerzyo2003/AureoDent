@@ -114,9 +114,11 @@ export default function BoxConfigPage() {
 
       const inicioSemanaStr = dias[0].toISOString().split('T')[0];
       const finSemanaStr = dias[6].toISOString().split('T')[0];
+      const profNuevo = profesionales.find(p => p.user_id === nuevoEspecialista);
 
+      // CORRECCIÓN: Traer hora_inicio y hora_fin
       const { data: bloqueos } = await supabase.from('bloqueos_agenda')
-        .select('fecha').eq('profesional_id', nuevoEspecialista)
+        .select('fecha, hora_inicio, hora_fin').eq('profesional_id', profNuevo?.id) 
         .gte('fecha', inicioSemanaStr).lte('fecha', finSemanaStr);
 
       const { data: dispo } = await supabase.from('disponibilidad_profesional')
@@ -132,7 +134,9 @@ export default function BoxConfigPage() {
         const dateStr = dateObj.toISOString().split('T')[0];
         const diaSemanaNum = dateObj.getDay();
 
-        if (bloqueos?.some(b => b.fecha === dateStr)) {
+        // CORRECCIÓN: Revisar si el bloqueo es de día completo
+        const bloqueosDia = bloqueos?.filter(b => b.fecha === dateStr) || [];
+        if (bloqueosDia.some(b => !b.hora_inicio || !b.hora_fin)) {
           return { date: dateStr, dateObj, status: 'bloqueado', slots: [] };
         }
 
@@ -153,8 +157,17 @@ export default function BoxConfigPage() {
 
           while (currTime + duracionCitaEdicion <= endTime) {
             const slotEnd = currTime + duracionCitaEdicion;
-            const choca = citasDia.some(cita => currTime < cita.fin && slotEnd > cita.inicio);
-            if (!choca) slotsLibres.push(minsToT(currTime));
+            const chocaCita = citasDia.some(cita => currTime < cita.fin && slotEnd > cita.inicio);
+            
+            // CORRECCIÓN: Validar si choca con un bloqueo de horas específicas
+            const chocaBloqueo = bloqueosDia.some(b => {
+              if (!b.hora_inicio || !b.hora_fin) return true;
+              return currTime < tToMins(b.hora_fin) && slotEnd > tToMins(b.hora_inicio);
+            });
+
+            if (!chocaCita && !chocaBloqueo) {
+              slotsLibres.push(minsToT(currTime));
+            }
             currTime += 15;
           }
         });
@@ -208,10 +221,14 @@ export default function BoxConfigPage() {
   }
 
   async function fetchBloqueos() {
+    // Buscamos el ID interno del profesional
+    const prof = profesionales.find(p => p.user_id === profesionalId);
+    if (!prof) return;
+
     const { data } = await supabase
       .from('bloqueos_agenda')
       .select('*')
-      .eq('profesional_id', profesionalId)
+      .eq('profesional_id', prof.id) // Usamos el ID interno
     setTodosLosBloqueos(data || [])
   }
 
@@ -272,27 +289,52 @@ export default function BoxConfigPage() {
       setGuardando(false);
     }
   };
-
+  
   const ejecutarBloqueoFinal = async () => {
     setGuardando(true);
     try {
-      const { error: errBloqueo } = await supabase
-        .from('bloqueos_agenda')
-        .insert([{
-          profesional_id: profesionalId,
-          fecha: fechaInasistencia,
-          motivo: motivoInasistencia || "Inasistencia programada"
-        }]);
+      const prof = profesionales.find(p => p.user_id === profesionalId);
+      if (!prof) throw new Error("No se encontró el profesional");
 
-      if (errBloqueo) throw errBloqueo;
+      const { data: bloqueoExistente } = await supabase
+        .from('bloqueos_agenda')
+        .select('id')
+        .eq('profesional_id', prof.id) 
+        .eq('fecha', fechaInasistencia)
+        .maybeSingle();
+
+      if (bloqueoExistente) {
+        // CORRECCIÓN: Forzar hora_inicio y hora_fin a null para asegurar día completo
+        const { error: errUpdate } = await supabase
+          .from('bloqueos_agenda')
+          .update({ 
+            motivo: motivoInasistencia || "Inasistencia programada",
+            hora_inicio: null,
+            hora_fin: null 
+          })
+          .eq('id', bloqueoExistente.id);
+          
+        if (errUpdate) throw errUpdate;
+      } else {
+        const { error: errBloqueo } = await supabase
+          .from('bloqueos_agenda')
+          .insert([{
+            profesional_id: prof.id, 
+            fecha: fechaInasistencia,
+            motivo: motivoInasistencia || "Inasistencia programada"
+          }]);
+
+        if (errBloqueo) throw errBloqueo;
+      }
 
       toast.success("Jornada bloqueada con éxito");
       setFechaInasistencia('');
       setMotivoInasistencia('');
       setMostrarModalConflictos(false);
       fetchBloqueos();
-    } catch (error) {
-      toast.error("Error al registrar el bloqueo");
+    } catch (error: any) {
+      console.error(error);
+      toast.error("Error al registrar el bloqueo: " + (error?.message || ""));
     } finally {
       setGuardando(false);
     }
