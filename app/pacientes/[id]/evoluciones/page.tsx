@@ -1,12 +1,13 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import { 
   Stethoscope, Plus, Save, X, Loader2, 
   Clipboard, Trash2, Edit3, 
-  Printer, EyeOff, User, Calendar, Clock
+  Printer, EyeOff, User, Calendar, Clock,
+  Bold, Italic, Underline, Highlighter, Eraser, List
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -24,11 +25,15 @@ export default function EvolucionesPage() {
   
   const [verAnuladas, setVerAnuladas] = useState(false)
   const [soloMias, setSoloMisEvoluciones] = useState(false)
+  const [guardando, setGuardando] = useState(false)
 
   const [nuevaEv, setNuevaEv] = useState({ 
     descripcion_procedimiento: '', 
     observaciones: '' 
   })
+
+  // Ref para el editor de texto enriquecido
+  const editorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => { 
     setMounted(true)
@@ -37,6 +42,13 @@ export default function EvolucionesPage() {
       fetchEvoluciones()
     }
   }, [paciente_id])
+
+  // Sincronizar el contenido del editor cuando se abre el modal
+  useEffect(() => {
+    if (modalAbierto && editorRef.current) {
+      editorRef.current.innerHTML = nuevaEv.descripcion_procedimiento || '';
+    }
+  }, [modalAbierto])
 
   async function obtenerUsuario() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -80,9 +92,21 @@ export default function EvolucionesPage() {
     }
   }
 
+  // Comando para inyectar estilo en el editor enriquecido
+  const executeCommand = (command: string, arg?: string) => {
+    document.execCommand(command, false, arg);
+    if (editorRef.current) {
+        editorRef.current.focus();
+        setNuevaEv({ ...nuevaEv, descripcion_procedimiento: editorRef.current.innerHTML });
+    }
+  };
+
   const guardarEvolucion = async () => {
-    if (!nuevaEv.descripcion_procedimiento.trim()) return toast.error("La descripción es obligatoria");
+    // Validar si el texto limpio (sin etiquetas HTML) está vacío
+    const textoLimpio = nuevaEv.descripcion_procedimiento.replace(/<[^>]*>?/gm, '').trim();
+    if (!textoLimpio) return toast.error("La descripción del procedimiento es obligatoria");
     
+    setGuardando(true)
     try {
       if (editandoId) {
         const { error } = await supabase
@@ -105,7 +129,7 @@ export default function EvolucionesPage() {
 
         if (!especialistaId) {
           const creatorName = sessionUserProfile?.nombre_completo || sessionUser?.email || 'Usuario del Sistema';
-          insertData.descripcion_procedimiento = `[REGISTRADO POR: ${creatorName}]\n\n${nuevaEv.descripcion_procedimiento}`;
+          insertData.descripcion_procedimiento = `<p><strong>[REGISTRADO POR: ${creatorName}]</strong></p><br/>${nuevaEv.descripcion_procedimiento}`;
         }
 
         const { error } = await supabase.from('evoluciones').insert([insertData])
@@ -117,6 +141,8 @@ export default function EvolucionesPage() {
       fetchEvoluciones()
     } catch (e: any) {
       toast.error("Error: " + e.message);
+    } finally {
+      setGuardando(false)
     }
   }
 
@@ -148,17 +174,37 @@ export default function EvolucionesPage() {
     const descripcion = ev.descripcion_limpia;
     const responsable = prof ? `Dr/a. ${prof.nombre} ${prof.apellido}` : creador || 'Sistema';
 
+    const isHtml = /<[a-z][\s\S]*>/i.test(descripcion);
+    const contenidoImprimir = isHtml ? descripcion : descripcion.replace(/\n/g, '<br/>');
+
     const ventanaImpresion = window.open('', '_blank');
     if (!ventanaImpresion) return;
     const fecha = new Date(ev.fecha_registro).toLocaleString('es-CL');
     ventanaImpresion.document.write(`
       <html>
-        <head><style>body { font-family: sans-serif; padding: 40px; } .header { border-bottom: 2px solid #000; }</style></head>
-        <body><div class="header"><h2>EVOLUCIÓN CLÍNICA</h2></div><p><strong>Fecha:</strong> ${fecha}</p><p><strong>Responsable:</strong> ${responsable}</p><hr/><p>${descripcion.replace(/\n/g, '<br/>')}</p></body>
+        <head>
+          <style>
+            body { font-family: sans-serif; padding: 40px; } 
+            .header { border-bottom: 2px solid #000; margin-bottom: 20px;}
+            b, strong { font-weight: 800; color: #000; }
+            u { text-decoration: underline; }
+            span[style*="background-color"] { background-color: #fef08a !important; padding: 0 4px; }
+            ul { padding-left: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="header"><h2>EVOLUCIÓN CLÍNICA</h2></div>
+          <p><strong>Fecha:</strong> ${fecha}</p>
+          <p><strong>Responsable:</strong> ${responsable}</p>
+          <hr/>
+          <div style="margin-top: 20px; line-height: 1.6;">${contenidoImprimir}</div>
+        </body>
       </html>
     `);
     ventanaImpresion.document.close();
-    ventanaImpresion.print();
+    setTimeout(() => {
+        ventanaImpresion.print();
+    }, 250);
   }
 
   const cerrarModal = () => {
@@ -172,10 +218,13 @@ export default function EvolucionesPage() {
     let descripcionLimpia = ev.descripcion_procedimiento;
 
     if (!ev.profesionales) {
-        const match = ev.descripcion_procedimiento?.match(/^\[REGISTRADO POR: (.*?)\]\n\n/);
+        const match = ev.descripcion_procedimiento?.match(/\[REGISTRADO POR: (.*?)\]/);
         if (match && match[1]) {
             creadorNombre = match[1];
-            descripcionLimpia = ev.descripcion_procedimiento.replace(match[0], '');
+            // Removemos tanto el formato HTML nuevo como el formato plano antiguo
+            descripcionLimpia = ev.descripcion_procedimiento
+               .replace(/<p><strong>\[REGISTRADO POR: .*?\]<\/strong><\/p><br\/>/, '')
+               .replace(/^\[REGISTRADO POR: .*?\]\n\n/, '');
         }
     }
     return { ...ev, creador_nombre: creadorNombre, descripcion_limpia: descripcionLimpia };
@@ -229,7 +278,7 @@ export default function EvolucionesPage() {
             </button>
           </div>
 
-          <button onClick={() => setModalAbierto(true)} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 active:scale-95 transition-all flex items-center gap-2 border border-blue-500">
+          <button onClick={() => { setEditandoId(null); setNuevaEv({ descripcion_procedimiento: '', observaciones: '' }); setModalAbierto(true); }} className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-6 py-3.5 rounded-2xl font-black text-[10px] uppercase shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 active:scale-95 transition-all flex items-center gap-2 border border-blue-500">
             <Plus size={16} strokeWidth={3}/> Registrar
           </button>
         </div>
@@ -255,6 +304,7 @@ export default function EvolucionesPage() {
               const esAdmin = sessionUserProfile?.rol === 'ADMIN';
               const esCreadorOriginal = ev.creado_por === sessionUser?.id;
               const puedeModificar = esAdmin || esCreadorOriginal;
+              const isHtml = /<[a-z][\s\S]*>/i.test(ev.descripcion_limpia);
               
               return (
                 <motion.div 
@@ -293,9 +343,13 @@ export default function EvolucionesPage() {
                   </div>
 
                   <div className={`bg-slate-50/80 p-6 rounded-3xl border ${ev.estado === 'anulada' ? 'border-slate-200' : 'border-slate-200/60'} relative z-10 text-left shadow-inner`}>
-                    <p className="text-xs text-slate-700 font-medium leading-relaxed italic text-left whitespace-pre-wrap">
-                      {ev.descripcion_limpia}
-                    </p>
+                    
+                    {/* RENDERIZADO SEGURO DE HTML O TEXTO PLANO */}
+                    <div 
+                        className={`text-xs text-slate-700 font-medium leading-relaxed text-left rich-text-content ${!isHtml ? 'whitespace-pre-wrap italic' : ''}`}
+                        dangerouslySetInnerHTML={{ __html: ev.descripcion_limpia }}
+                    />
+
                     {ev.observaciones && puedeModificar && (
                       <div className="mt-4 pt-4 border-t border-slate-200/60">
                         <span className="text-[9px] font-black text-amber-500 uppercase tracking-widest block mb-1">Notas Internas:</span>
@@ -327,7 +381,7 @@ export default function EvolucionesPage() {
         </AnimatePresence>
       </div>
 
-      {/* MODAL CON PORTAL Y DISEÑO GLASSMORPHISM */}
+      {/* MODAL CON PORTAL, DISEÑO GLASSMORPHISM Y EDITOR ENRIQUECIDO */}
       {mounted && typeof document !== 'undefined' && createPortal(
         <AnimatePresence>
           {modalAbierto && (
@@ -356,13 +410,43 @@ export default function EvolucionesPage() {
                 <div className="space-y-6 text-left">
                   <div>
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 ml-1">Detalle del Procedimiento *</label>
-                    <textarea 
-                      rows={6} 
-                      className="w-full p-6 bg-slate-50/80 hover:bg-white focus:bg-white rounded-[2rem] font-medium text-slate-700 outline-none focus:ring-4 ring-blue-500/10 border border-slate-200/60 focus:border-blue-500/50 shadow-inner transition-all text-sm resize-none placeholder:text-slate-300" 
-                      value={nuevaEv.descripcion_procedimiento} 
-                      onChange={(e) => setNuevaEv({...nuevaEv, descripcion_procedimiento: e.target.value})} 
-                      placeholder="Escriba aquí los detalles del procedimiento..."
-                    />
+                    
+                    {/* CONTENEDOR DEL EDITOR ENRIQUECIDO */}
+                    <div className="border border-slate-200 rounded-[1.5rem] overflow-hidden bg-white shadow-sm flex flex-col focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+                        
+                        {/* Toolbar de herramientas */}
+                        <div className="flex flex-wrap items-center gap-1.5 p-2.5 border-b border-slate-100 bg-slate-50">
+                            <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('bold'); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="Negrita">
+                                <Bold size={16}/>
+                            </button>
+                            <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('italic'); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="Cursiva">
+                                <Italic size={16}/>
+                            </button>
+                            <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('underline'); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="Subrayado">
+                                <Underline size={16}/>
+                            </button>
+                            <div className="w-px h-5 bg-slate-300 mx-1"></div>
+                            <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('insertUnorderedList'); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="Viñetas">
+                                <List size={16}/>
+                            </button>
+                            <div className="w-px h-5 bg-slate-300 mx-1"></div>
+                            <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('backColor', '#fef08a'); }} className="p-2 hover:bg-yellow-100 rounded-lg text-yellow-600 transition-colors" title="Destacar amarillo">
+                                <Highlighter size={16}/>
+                            </button>
+                            <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('removeFormat'); }} className="p-2 hover:bg-red-50 rounded-lg text-red-500 transition-colors" title="Limpiar formato">
+                                <Eraser size={16}/>
+                            </button>
+                        </div>
+
+                        {/* Área Content Editable */}
+                        <div 
+                            ref={editorRef}
+                            contentEditable
+                            suppressContentEditableWarning
+                            onInput={(e) => setNuevaEv({...nuevaEv, descripcion_procedimiento: e.currentTarget.innerHTML})}
+                            className="w-full min-h-[12rem] max-h-[20rem] p-5 text-[14px] outline-none text-slate-700 bg-white custom-scrollbar rich-text-content overflow-y-auto"
+                        />
+                    </div>
                   </div>
 
                   <div>
@@ -380,9 +464,11 @@ export default function EvolucionesPage() {
                     <button onClick={cerrarModal} className="flex-1 bg-slate-100 text-slate-600 py-5 rounded-2xl font-black text-xs uppercase hover:bg-slate-200 transition-all shadow-sm">Cancelar</button>
                     <button 
                       onClick={guardarEvolucion} 
-                      className={`flex-[2.5] py-5 rounded-2xl font-black text-sm uppercase tracking-[0.15em] shadow-xl transition-all flex items-center justify-center gap-2.5 text-white border ${editandoId ? 'bg-amber-500 hover:bg-amber-600 border-amber-400 shadow-amber-500/20' : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:shadow-blue-500/40 border-blue-500 shadow-blue-500/25'}`}
+                      disabled={guardando || !nuevaEv.descripcion_procedimiento.replace(/<[^>]*>?/gm, '').trim()}
+                      className={`flex-[2.5] py-5 rounded-2xl font-black text-sm uppercase tracking-[0.15em] shadow-xl transition-all flex items-center justify-center gap-2.5 text-white border disabled:opacity-50 ${editandoId ? 'bg-amber-500 hover:bg-amber-600 border-amber-400 shadow-amber-500/20' : 'bg-gradient-to-r from-blue-600 to-blue-700 hover:shadow-blue-500/40 border-blue-500 shadow-blue-500/25'}`}
                     >
-                      <Save size={18} strokeWidth={2.5}/> {editandoId ? "Actualizar" : "Guardar Registro"}
+                      {guardando ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} strokeWidth={2.5}/>} 
+                      {editandoId ? "Actualizar" : "Guardar Registro"}
                     </button>
                   </div>
                 </div>
@@ -392,6 +478,27 @@ export default function EvolucionesPage() {
         </AnimatePresence>,
         document.body
       )}
+
+      {/* ESTILOS GLOBALES DEL EDITOR ENRIQUECIDO */}
+      <style dangerouslySetInnerHTML={{ __html: `
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        .rich-text-content b, .rich-text-content strong { font-weight: 800 !important; color: #0f172a; }
+        .rich-text-content i, .rich-text-content em { font-style: italic !important; }
+        .rich-text-content u { text-decoration: underline !important; text-underline-offset: 2px; }
+        .rich-text-content span[style*="background-color"] { padding: 0 4px; border-radius: 4px; color: #854d0e; font-weight: 600; }
+        .rich-text-content ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .rich-text-content { line-height: 1.6; }
+        
+        /* Placeholder para el div contenteditable vacío */
+        .rich-text-content[contenteditable]:empty:before {
+            content: "Escriba aquí los detalles del procedimiento...";
+            color: #cbd5e1;
+            pointer-events: none;
+            display: block;
+        }
+      `}}></style>
     </div>
   )
 }
