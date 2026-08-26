@@ -1,13 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
-// 1. IMPORTAMOS CREATEPORTAL
 import { createPortal } from 'react-dom'
 import {
   Save, Loader2, Clock, Calendar, Trash2,
   LayoutGrid, Sparkles, CalendarDays, AlertCircle, XCircle,
   MessageCircle, Phone, X, CalendarClock, Ban, CheckCircle2, UserCircle,
-  ChevronLeft, ChevronRight, Users, Stethoscope, Info // <--- Add Info here
+  ChevronLeft, ChevronRight, Users, Stethoscope, Info, Edit2
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -17,7 +16,6 @@ const DIAS = [
   { id: 4, label: 'Jueves' }, { id: 5, label: 'Viernes' }, { id: 6, label: 'Sábado' }, { id: 0, label: 'Domingo' }
 ];
 
-// Utilidades para calcular tiempos
 const tToMins = (t: string) => {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
@@ -32,13 +30,19 @@ const getMinsFromDateStr = (dtString: string) => {
   return tToMins(timePart.substring(0,5));
 }
 
-// Obtener el Lunes de una fecha dada
 const getLunes = (d: Date) => {
   const date = new Date(d);
   const day = date.getDay() || 7;
   date.setDate(date.getDate() - day + 1);
   date.setHours(0,0,0,0);
   return date;
+}
+
+const toLocalISODate = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export default function BoxConfigPage() {
@@ -48,35 +52,29 @@ export default function BoxConfigPage() {
   const [todosLosBloqueos, setTodosLosBloqueos] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
-  const [modo, setModo] = useState<'semanal' | 'extraordinario'>('semanal')
 
   const [fechaInasistencia, setFechaInasistencia] = useState('')
   const [motivoInasistencia, setMotivoInasistencia] = useState('')
 
-  // ESTADOS DEL MODAL Y GESTIÓN EN LÍNEA
   const [citasConflictivas, setCitasConflictivas] = useState<any[]>([])
   const [mostrarModalConflictos, setMostrarModalConflictos] = useState(false)
   const [modoModal, setModoModal] = useState<'bloquear' | 'revisar'>('bloquear')
   const [citaEnEdicion, setCitaEnEdicion] = useState<string | null>(null)
   
-  // Datos para reagendar
   const [nuevaFecha, setNuevaFecha] = useState('')
   const [nuevaHora, setNuevaHora] = useState('')
   const [nuevoBox, setNuevoBox] = useState(1)
   const [nuevoEspecialista, setNuevoEspecialista] = useState('')
-  
-  // Estado para guardar cuánto duraba la cita original en minutos
   const [duracionCitaEdicion, setDuracionCitaEdicion] = useState(45)
 
-  // MOTOR DE DISPONIBILIDAD SEMANAL
   const [semanaInicio, setSemanaInicio] = useState<Date>(getLunes(new Date()))
   const [dispoSemana, setDispoSemana] = useState<any[]>([])
   const [cargandoSlots, setCargandoSlots] = useState(false)
-
-  // ESTADO PARA LOS PORTALS (Asegurar que carga en el cliente)
   const [isMounted, setIsMounted] = useState(false)
 
-  const [nuevoBloque, setNuevoBloque] = useState({
+  const [nuevoBloque, setNuevoBloque] = useState<any>({
+    id: null,
+    tipo: 'semanal', 
     dia_semana: 1,
     hora_inicio: '09:00',
     hora_fin: '13:00',
@@ -93,10 +91,10 @@ export default function BoxConfigPage() {
     if (profesionalId) {
         fetchDisponibilidad();
         fetchBloqueos();
+        cancelarEdicion();
     }
   }, [profesionalId])
 
-  // CALCULAR SEMANA CUANDO CAMBIA DOCTOR, SEMANA O LA DURACIÓN DE LA CITA
   useEffect(() => {
     if (nuevoEspecialista && citaEnEdicion) {
       calcularDisponibilidadSemanal()
@@ -112,11 +110,10 @@ export default function BoxConfigPage() {
         return d;
       });
 
-      const inicioSemanaStr = dias[0].toISOString().split('T')[0];
-      const finSemanaStr = dias[6].toISOString().split('T')[0];
+      const inicioSemanaStr = toLocalISODate(dias[0]);
+      const finSemanaStr = toLocalISODate(dias[6]);
       const profNuevo = profesionales.find(p => p.user_id === nuevoEspecialista);
 
-      // CORRECCIÓN: Traer hora_inicio y hora_fin
       const { data: bloqueos } = await supabase.from('bloqueos_agenda')
         .select('fecha, hora_inicio, hora_fin').eq('profesional_id', profNuevo?.id) 
         .gte('fecha', inicioSemanaStr).lte('fecha', finSemanaStr);
@@ -131,16 +128,22 @@ export default function BoxConfigPage() {
         .neq('estado', 'cancelada');
 
       const semanaProcesada = dias.map(dateObj => {
-        const dateStr = dateObj.toISOString().split('T')[0];
+        const dateStr = toLocalISODate(dateObj);
         const diaSemanaNum = dateObj.getDay();
 
-        // CORRECCIÓN: Revisar si el bloqueo es de día completo
         const bloqueosDia = bloqueos?.filter(b => b.fecha === dateStr) || [];
         if (bloqueosDia.some(b => !b.hora_inicio || !b.hora_fin)) {
           return { date: dateStr, dateObj, status: 'bloqueado', slots: [] };
         }
 
-        const dispoDia = dispo?.filter(d => (d.dia_semana === diaSemanaNum && !d.fecha_especifica) || d.fecha_especifica === dateStr) || [];
+        const dispoEspecialDia = dispo?.filter(d => d.fecha_especifica === dateStr) || [];
+        let dispoDia = [];
+        if (dispoEspecialDia.length > 0) {
+          dispoDia = dispoEspecialDia;
+        } else {
+          dispoDia = dispo?.filter(d => d.dia_semana === diaSemanaNum && !d.fecha_especifica) || [];
+        }
+
         if (dispoDia.length === 0) {
           return { date: dateStr, dateObj, status: 'sin_horario', slots: [] };
         }
@@ -159,7 +162,6 @@ export default function BoxConfigPage() {
             const slotEnd = currTime + duracionCitaEdicion;
             const chocaCita = citasDia.some(cita => currTime < cita.fin && slotEnd > cita.inicio);
             
-            // CORRECCIÓN: Validar si choca con un bloqueo de horas específicas
             const chocaBloqueo = bloqueosDia.some(b => {
               if (!b.hora_inicio || !b.hora_fin) return true;
               return currTime < tToMins(b.hora_fin) && slotEnd > tToMins(b.hora_inicio);
@@ -221,42 +223,93 @@ export default function BoxConfigPage() {
   }
 
   async function fetchBloqueos() {
-    // Buscamos el ID interno del profesional
     const prof = profesionales.find(p => p.user_id === profesionalId);
     if (!prof) return;
 
     const { data } = await supabase
       .from('bloqueos_agenda')
       .select('*')
-      .eq('profesional_id', prof.id) // Usamos el ID interno
+      .eq('profesional_id', prof.id)
     setTodosLosBloqueos(data || [])
+  }
+
+  const cancelarEdicion = () => {
+    setNuevoBloque({
+      id: null,
+      tipo: 'semanal',
+      dia_semana: 1,
+      hora_inicio: '09:00',
+      hora_fin: '13:00',
+      box_id: 1,
+      fecha_especifica: ''
+    });
+  }
+
+  const editarBloque = (bloque: any) => {
+    setNuevoBloque({
+      id: bloque.id,
+      tipo: bloque.fecha_especifica ? 'especial' : 'semanal',
+      dia_semana: bloque.dia_semana || 1,
+      hora_inicio: bloque.hora_inicio.substring(0, 5),
+      hora_fin: bloque.hora_fin.substring(0, 5),
+      box_id: bloque.box_id,
+      fecha_especifica: bloque.fecha_especifica || ''
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   const agregarBloque = async () => {
     if (nuevoBloque.hora_inicio >= nuevoBloque.hora_fin) return toast.error("Horario inválido");
+    
+    const esEspecial = nuevoBloque.tipo === 'especial';
+    
+    if (esEspecial && !nuevoBloque.fecha_especifica) {
+      return toast.error("Por favor, selecciona una fecha para el horario especial");
+    }
+
     setGuardando(true)
     try {
-      const [year, month, day] = (modo === 'extraordinario' ? nuevoBloque.fecha_especifica : "2024-01-01").split('-').map(Number);
-      const diaCalculado = modo === 'extraordinario' ? new Date(year, month - 1, day).getDay() : nuevoBloque.dia_semana;
+      let diaCalculado = nuevoBloque.dia_semana;
+      if (esEspecial) {
+        const d = new Date(nuevoBloque.fecha_especifica + 'T12:00:00');
+        diaCalculado = d.getDay();
+      }
 
-      const { error } = await supabase.from('disponibilidad_profesional').insert([{
+      const payload = {
         profesional_id: profesionalId,
         dia_semana: diaCalculado,
         hora_inicio: nuevoBloque.hora_inicio,
         hora_fin: nuevoBloque.hora_fin,
         box_id: nuevoBloque.box_id,
-        fecha_especifica: modo === 'extraordinario' ? nuevoBloque.fecha_especifica : null
-      }])
-      if (error) throw error;
-      toast.success("Disponibilidad actualizada");
+        fecha_especifica: esEspecial ? nuevoBloque.fecha_especifica : null
+      };
+
+      // 🔥 LOG DE DEPURACIÓN (MÁNDAME LO QUE SALGA AQUÍ) 🔥
+      console.log("=== DATOS ENVIADOS A SUPABASE ===", payload);
+      toast.info(`Guardando: Tipo: ${nuevoBloque.tipo} | Fecha Especial: ${payload.fecha_especifica || 'Ninguna (Semanal)'}`);
+
+      if (nuevoBloque.id) {
+        const { error } = await supabase.from('disponibilidad_profesional').update(payload).eq('id', nuevoBloque.id);
+        if (error) throw error;
+        toast.success(`Horario ${esEspecial ? 'Especial' : 'Semanal'} actualizado`);
+      } else {
+        const { error } = await supabase.from('disponibilidad_profesional').insert([payload]);
+        if (error) throw error;
+        toast.success(`Horario ${esEspecial ? 'Especial' : 'Semanal'} agregado`);
+      }
+      
       fetchDisponibilidad();
-    } catch (e) { toast.error("Error al guardar"); }
-    finally { setGuardando(false) }
+      cancelarEdicion();
+    } catch (e) { 
+      toast.error("Error al guardar el horario"); 
+      console.error("ERROR GUARDANDO:", e);
+    } finally { 
+      setGuardando(false) 
+    }
   }
 
   const validarInasistencia = async () => {
     if (!fechaInasistencia) return toast.error("Seleccione una fecha");
-
     setGuardando(true);
     try {
       const inicioDia = `${fechaInasistencia}T00:00:00`;
@@ -304,7 +357,6 @@ export default function BoxConfigPage() {
         .maybeSingle();
 
       if (bloqueoExistente) {
-        // CORRECCIÓN: Forzar hora_inicio y hora_fin a null para asegurar día completo
         const { error: errUpdate } = await supabase
           .from('bloqueos_agenda')
           .update({ 
@@ -334,21 +386,25 @@ export default function BoxConfigPage() {
       fetchBloqueos();
     } catch (error: any) {
       console.error(error);
-      toast.error("Error al registrar el bloqueo: " + (error?.message || ""));
+      toast.error("Error al registrar el bloqueo");
     } finally {
       setGuardando(false);
     }
   }
 
   const eliminarBloque = async (bloque: any) => {
-    if(!confirm("¿Estás seguro de eliminar este horario base?")) return;
+    if(!confirm("¿Estás seguro de eliminar este horario?")) return;
 
     setGuardando(true);
     try {
       await supabase.from('disponibilidad_profesional').delete().eq('id', bloque.id);
       fetchDisponibilidad();
+      
+      if (nuevoBloque.id === bloque.id) {
+        cancelarEdicion();
+      }
 
-      const hoyStr = new Date().toISOString().split('T')[0];
+      const hoyStr = toLocalISODate(new Date());
       const { data: citasFuturas } = await supabase
         .from('citas')
         .select('inicio')
@@ -370,7 +426,7 @@ export default function BoxConfigPage() {
           { duration: 8000, icon: <AlertCircle className="text-amber-500"/> }
         );
       } else {
-        toast.success("Horario eliminado correctamente. Agenda limpia.");
+        toast.success("Horario eliminado correctamente.");
       }
     } catch (error) {
       toast.error("Error al eliminar el bloque");
@@ -453,29 +509,23 @@ export default function BoxConfigPage() {
   )
 
   const profesionalSeleccionado = profesionales.find(p => p.user_id === profesionalId);
-
-  // Lógica Segura para calcular la Fecha Local de Hoy y Filtrar Bloqueos Activos
-  const hoy = new Date();
-  const year = hoy.getFullYear();
-  const month = String(hoy.getMonth() + 1).padStart(2, '0');
-  const day = String(hoy.getDate()).padStart(2, '0');
-  const hoyStr = `${year}-${month}-${day}`;
+  const hoyStr = toLocalISODate(new Date());
 
   const bloqueosFuturos = todosLosBloqueos
     .filter(b => b.fecha >= hoyStr)
-    .sort((a, b) => a.fecha.localeCompare(b.fecha)); // Los más próximos primero
+    .sort((a, b) => a.fecha.localeCompare(b.fecha)); 
+
+  const bloquesEspeciales = disponibilidad.filter(b => b.fecha_especifica);
 
   return (
     <main className="min-h-screen bg-[#FBF8F2] p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
       
-      {/* IMAGEN DE FONDO GLOBAL */}
       <div 
         className="absolute top-0 right-0 w-[700px] h-[800px] bg-[url('/fondo-profesionales.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-40 mix-blend-multiply"
       ></div>
 
       <div className="max-w-7xl mx-auto space-y-8 relative z-10 text-left">
         
-        {/* HEADER TIPO TARJETA BLANCA */}
         <header className="bg-white/90 backdrop-blur-md p-6 md:p-8 rounded-[2.5rem] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center gap-6 text-left">
           <div className="flex items-center gap-5 text-left w-full md:w-auto">
             <div className="bg-[#0A111F] w-16 h-16 rounded-full flex items-center justify-center text-[#C9A24B] shadow-lg shrink-0">
@@ -506,23 +556,27 @@ export default function BoxConfigPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           
-          {/* COLUMNA IZQUIERDA: FORMULARIOS */}
           <div className="lg:col-span-4 space-y-8">
             
-            {/* AGREGAR HORARIO */}
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-white/95 backdrop-blur-sm p-8 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 space-y-8">
               
-              <div className="flex bg-slate-50 p-1.5 rounded-2xl gap-1 border border-slate-100">
-                <button onClick={() => setModo('semanal')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase transition-all tracking-wider ${modo === 'semanal' ? 'bg-white text-[#0A111F] shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
+              <div className="flex bg-slate-50 p-1.5 rounded-2xl gap-1 border border-slate-100 relative">
+                {nuevoBloque.id && (
+                  <div className="absolute -top-3 -right-3 bg-blue-500 text-white text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full shadow-sm animate-pulse">
+                    Editando
+                  </div>
+                )}
+                {/* 🔥 BOTONES CON TYPE="BUTTON" PARA EVITAR RELOADS 🔥 */}
+                <button type="button" onClick={() => setNuevoBloque({...nuevoBloque, tipo: 'semanal'})} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase transition-all tracking-wider ${nuevoBloque.tipo === 'semanal' ? 'bg-white text-[#0A111F] shadow-sm border border-slate-200' : 'text-slate-400 hover:text-slate-600'}`}>
                   Semanal
                 </button>
-                <button onClick={() => setModo('extraordinario')} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase transition-all tracking-wider ${modo === 'extraordinario' ? 'bg-[#0A111F] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>
+                <button type="button" onClick={() => setNuevoBloque({...nuevoBloque, tipo: 'especial'})} className={`flex-1 py-3.5 rounded-xl text-[10px] font-black uppercase transition-all tracking-wider ${nuevoBloque.tipo === 'especial' ? 'bg-[#0A111F] text-white shadow-md' : 'text-slate-400 hover:text-slate-600'}`}>
                   Especial
                 </button>
               </div>
 
               <div className="space-y-6 text-left">
-                {modo === 'semanal' ? (
+                {nuevoBloque.tipo === 'semanal' ? (
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 flex items-center gap-2">
                       <CalendarDays size={12} className="text-[#C9A24B]"/> Día de Repetición
@@ -555,18 +609,25 @@ export default function BoxConfigPage() {
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Asignar Box</label>
                   <div className="grid grid-cols-3 gap-2">
                     {[1, 2, 3].map(n => (
-                      <button key={n} onClick={() => setNuevoBloque({...nuevoBloque, box_id: n})} className={`py-3.5 rounded-2xl text-[11px] font-black tracking-widest transition-all border ${nuevoBloque.box_id === n ? 'bg-[#0A111F] text-[#C9A24B] border-[#0A111F] shadow-md' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-white hover:text-slate-600'}`}>BOX {n}</button>
+                      <button type="button" key={n} onClick={() => setNuevoBloque({...nuevoBloque, box_id: n})} className={`py-3.5 rounded-2xl text-[11px] font-black tracking-widest transition-all border ${nuevoBloque.box_id === n ? 'bg-[#0A111F] text-[#C9A24B] border-[#0A111F] shadow-md' : 'bg-slate-50 text-slate-400 border-slate-200 hover:bg-white hover:text-slate-600'}`}>BOX {n}</button>
                     ))}
                   </div>
                 </div>
 
-                <button onClick={agregarBloque} disabled={guardando} className="w-full py-5 bg-[#0A111F] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all flex items-center justify-center gap-3 mt-4 disabled:bg-slate-300">
-                  {guardando ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} Guardar Horario
-                </button>
+                <div className="flex gap-2 mt-4">
+                  <button type="button" onClick={agregarBloque} disabled={guardando} className="flex-1 py-5 bg-[#0A111F] text-white rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all flex items-center justify-center gap-3 disabled:bg-slate-300">
+                    {guardando ? <Loader2 className="animate-spin" size={18}/> : <Save size={18}/>} 
+                    {nuevoBloque.id ? "Actualizar Horario" : "Guardar Horario"}
+                  </button>
+                  {nuevoBloque.id && (
+                     <button type="button" onClick={cancelarEdicion} className="px-5 bg-red-50 text-red-500 hover:bg-red-100 rounded-2xl font-black text-[11px] uppercase tracking-widest transition-all border border-red-100" title="Cancelar edición">
+                       <X size={18} />
+                     </button>
+                  )}
+                </div>
               </div>
             </motion.div>
 
-            {/* SEGURIDAD INASISTENCIA */}
             <div className="bg-red-50/50 p-8 md:p-10 rounded-[2.5rem] border border-red-100 shadow-sm space-y-8">
               <div className="flex items-center gap-4 text-left">
                 <div className="bg-red-500 p-4 rounded-2xl text-white shadow-md shadow-red-500/30 shrink-0"><XCircle size={24} /></div>
@@ -592,12 +653,9 @@ export default function BoxConfigPage() {
             </div>
           </div>
 
-          {/* COLUMNA DERECHA: RESUMEN Y HORARIOS */}
           <div className="lg:col-span-8 space-y-8">
-            
             <div className="bg-white/95 backdrop-blur-sm p-8 md:p-10 rounded-[2.5rem] shadow-sm border border-slate-100 min-h-full">
               
-              {/* 🔥 JORNADAS BLOQUEADAS (ACTIVAS Y FUTURAS) 🔥 */}
               {bloqueosFuturos.length > 0 && (
                 <div className="space-y-6 mb-12">
                   <h3 className="text-[11px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-red-100">
@@ -627,7 +685,44 @@ export default function BoxConfigPage() {
                 </div>
               )}
 
-              {/* HORARIOS SEMANALES */}
+              {bloquesEspeciales.length > 0 && (
+                <div className="space-y-6 mb-12">
+                  <h3 className="text-[11px] font-black text-[#0A111F] uppercase tracking-widest flex items-center gap-2 pb-4 border-b border-slate-100">
+                    <Calendar size={14} className="text-[#C9A24B]"/> Resumen Horarios Especiales
+                  </h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {bloquesEspeciales.map(b => (
+                      <div key={b.id} className={`bg-white border ${nuevoBloque.id === b.id ? 'border-blue-400 bg-blue-50/30' : 'border-slate-200'} px-5 py-4 rounded-2xl flex flex-col gap-3 shadow-sm group hover:border-[#C9A24B] transition-colors text-left`}>
+                        <div className="flex justify-between items-start">
+                          <div>
+                            <span className="text-[9px] font-black text-[#C9A24B] uppercase tracking-widest block mb-1">Fecha Única</span>
+                            <span className="text-[13px] font-black text-[#0A111F]">
+                              {new Date(b.fecha_especifica + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' })}
+                            </span>
+                          </div>
+                          <div className="w-8 h-8 rounded-full bg-[#C9A24B]/10 text-[#C9A24B] flex items-center justify-center text-[9px] font-black tracking-tighter border border-[#C9A24B]/20 shrink-0">
+                            B{b.box_id}
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center mt-2">
+                           <div className="bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">
+                             <span className="text-[11px] font-bold text-slate-600">{b.hora_inicio.substring(0,5)} a {b.hora_fin.substring(0,5)}</span>
+                           </div>
+                           <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-all">
+                             <button onClick={() => editarBloque(b)} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-all" title="Editar bloque">
+                               <Edit2 size={14}/>
+                             </button>
+                             <button onClick={() => eliminarBloque(b)} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="Eliminar bloque">
+                               <Trash2 size={14}/>
+                             </button>
+                           </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-6">
                 <h3 className="text-[11px] font-black text-[#0A111F] uppercase tracking-widest flex items-center gap-2 pb-4 border-b border-slate-100">
                   <CalendarDays size={14} className="text-[#C9A24B]"/> Resumen Horarios Semanales
@@ -646,7 +741,7 @@ export default function BoxConfigPage() {
                             {bloques.length === 0 ? (
                               <span className="text-[10px] font-bold text-slate-300 uppercase tracking-widest bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">Libre / Sin Atención</span>
                             ) : bloques.map(b => (
-                              <div key={b.id} className="bg-white border border-slate-200 px-4 py-2.5 rounded-2xl flex items-center gap-4 shadow-sm group/item hover:border-[#C9A24B] transition-colors">
+                              <div key={b.id} className={`bg-white border ${nuevoBloque.id === b.id ? 'border-blue-400 bg-blue-50/30' : 'border-slate-200'} px-4 py-2.5 rounded-2xl flex items-center gap-4 shadow-sm group/item hover:border-[#C9A24B] transition-colors`}>
                                 <div className="text-left">
                                   <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-0.5">Horario</span>
                                   <span className="text-[11px] font-black text-[#0A111F]">{b.hora_inicio.substring(0,5)} a {b.hora_fin.substring(0,5)}</span>
@@ -654,9 +749,14 @@ export default function BoxConfigPage() {
                                 <div className="w-8 h-8 rounded-full bg-[#C9A24B]/10 text-[#C9A24B] flex items-center justify-center text-[9px] font-black tracking-tighter border border-[#C9A24B]/20">
                                   B{b.box_id}
                                 </div>
-                                <button onClick={() => eliminarBloque(b)} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover/item:opacity-100" title="Eliminar bloque">
-                                  <Trash2 size={14}/>
-                                </button>
+                                <div className="flex gap-1 opacity-100 sm:opacity-0 group-hover/item:opacity-100 transition-all">
+                                  <button onClick={() => editarBloque(b)} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition-all" title="Editar bloque">
+                                    <Edit2 size={14}/>
+                                  </button>
+                                  <button onClick={() => eliminarBloque(b)} className="w-8 h-8 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all" title="Eliminar bloque">
+                                    <Trash2 size={14}/>
+                                  </button>
+                                </div>
                               </div>
                             ))}
                         </div>
@@ -670,7 +770,6 @@ export default function BoxConfigPage() {
         </div>
       </div>
 
-      {/* MODAL DE CONFLICTOS Y REAGENDAMIENTO ENVOLVIDO EN PORTAL */}
       {isMounted && typeof document !== 'undefined' ? createPortal(
         <AnimatePresence>
           {mostrarModalConflictos && (
@@ -681,7 +780,6 @@ export default function BoxConfigPage() {
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 className="bg-[#FBF8F2] w-full max-w-5xl max-h-[90vh] flex flex-col rounded-[3rem] shadow-2xl overflow-hidden text-left"
               >
-                {/* HEADER MODAL */}
                 <div className={`${modoModal === 'bloquear' ? 'bg-red-500' : 'bg-blue-600'} p-8 md:p-10 flex items-center justify-between shrink-0 shadow-sm relative z-10 transition-colors text-left`}>
                   <div className="flex items-center gap-5 text-white">
                     <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md">
@@ -699,7 +797,6 @@ export default function BoxConfigPage() {
                   </button>
                 </div>
 
-                {/* CONTENIDO SCROLLABLE */}
                 <div className="p-8 md:p-10 overflow-y-auto bg-[#FBF8F2] flex-1 space-y-6 custom-scrollbar text-left">
                   
                   {citasConflictivas.length === 0 ? (
@@ -728,7 +825,6 @@ export default function BoxConfigPage() {
                           const telefonoLimpio = cita.pacientes?.telefono ? cita.pacientes.telefono.replace(/\D/g, '') : '';
                           const isEditing = citaEnEdicion === cita.id;
 
-                          // Calcular duración visual de la cita original
                           let durationStr = "45 min";
                           try {
                             const dMins = Math.round((new Date(cita.fin).getTime() - new Date(cita.inicio).getTime()) / 60000);
@@ -761,7 +857,6 @@ export default function BoxConfigPage() {
                                   </div>
                                 </div>
 
-                                {/* ACCIONES DEL PACIENTE */}
                                 {!isEditing && (
                                   <div className="flex flex-wrap gap-2 self-start md:self-auto shrink-0">
                                     {telefonoLimpio && (
@@ -794,7 +889,6 @@ export default function BoxConfigPage() {
                                 )}
                               </div>
 
-                              {/* PANEL DE EDICIÓN (AGENDA SEMANAL) */}
                               <AnimatePresence>
                                 {isEditing && (
                                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
@@ -820,7 +914,6 @@ export default function BoxConfigPage() {
                                         </div>
                                       </div>
 
-                                      {/* CALENDARIO SEMANAL */}
                                       <div className="bg-slate-50 p-5 rounded-[2rem] border border-slate-200 flex flex-col shadow-inner">
                                         
                                         <div className="flex items-center justify-between mb-5 bg-white p-2.5 rounded-2xl shadow-sm border border-slate-100">
@@ -901,7 +994,6 @@ export default function BoxConfigPage() {
                   )}
                 </div>
 
-                {/* FOOTER MODAL - CAMBIA SEGÚN EL MODO */}
                 <div className="p-8 bg-white border-t border-slate-100 shrink-0 flex flex-col md:flex-row gap-4 text-left">
                   {modoModal === 'bloquear' ? (
                     <>
