@@ -1959,15 +1959,25 @@ if(seleccionado) {
   
   const hora = citas[0].hora;
   
-  // Verificamos si la cita es para hoy
-  const hoyStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  // Calculamos las fechas de hoy y mañana
+  const hoy = new Date();
+  const hoyStr = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  
+  const manana = new Date(hoy);
+  manana.setDate(manana.getDate() + 1);
+  const mananaStr = new Date(manana.getTime() - manana.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+
+  // Verificamos si la cita es para hoy o mañana
   const esHoy = citas[0].fecha === hoyStr;
+  const esManana = citas[0].fecha === mananaStr;
 
   let mensaje = "";
 
-  if (esHoy) {
-    // 🔴 MENSAJE PARA CITAS DE HOY (Con advertencia Y link de confirmación)
-    mensaje = `Hola ${paciente}, hemos agendado tu cita con el/la ${nombreDoctor} para HOY a las ${hora} hrs.\n\n`;
+  if (esHoy || esManana) {
+    // 🔴 MENSAJE PARA CITAS DE HOY O MAÑANA (Con advertencia Y link de confirmación)
+    const textoDia = esHoy ? "HOY" : "MAÑANA";
+    
+    mensaje = `Hola ${paciente}, hemos agendado tu cita con el/la ${nombreDoctor} para ${textoDia} a las ${hora} hrs.\n\n`;
     mensaje += `📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n`;
     if (citaId) {
       mensaje += `⚠️ Importante: Debido a la alta demanda de horas, si tu cita no es confirmada el bloque será asignado a otro paciente.\n\n`;
