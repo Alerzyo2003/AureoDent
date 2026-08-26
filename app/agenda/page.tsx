@@ -555,16 +555,44 @@ export default function AgendaPage() {
     toast.success("Estado actualizado"); await fetchCitasAgenda();
   }
 
+
   const enviarRecordatorioConLink = (cita: any) => {
       const telefono = cita.pacientes?.telefono;
       if (!telefono) return toast.error("Paciente sin teléfono");
+      
       const num = telefono.replace(/\D/g, '');
-      const hora = new Date(cita.inicio).toLocaleTimeString('es-CL', {hour:'2-digit', minute:'2-digit', hour12:false, timeZone:'America/Santiago'});
+
+      // Buscamos al profesional asociado a la cita
+      const doctor = profesionales.find(p => p.user_id === cita.profesional_id);
+      const nombreDoctor = doctor ? `Dr(a). ${doctor.nombre} ${doctor.apellido}` : "nuestro especialista";
+      
+      // Asegurar compatibilidad de fecha
+      const fechaValida = cita.inicio.includes('T') ? cita.inicio : cita.inicio.replace(' ', 'T');
+      const fechaObj = new Date(fechaValida);
+
+      // Extraemos la hora
+      const hora = fechaObj.toLocaleTimeString('es-CL', {
+          hour: '2-digit', 
+          minute: '2-digit', 
+          hour12: false, 
+          timeZone: 'America/Santiago'
+      });
+      
+      // Extraemos la fecha y capitalizamos
+      let fechaCita = fechaObj.toLocaleDateString('es-CL', { 
+          weekday: 'long', 
+          day: 'numeric', 
+          month: 'long' 
+      }).replace(',', '');
+      fechaCita = fechaCita.charAt(0).toUpperCase() + fechaCita.slice(1);
+      
       const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
-      const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de Clínica Dignidad para recordar tu cita de hoy a las ${hora} hrs.\n\nPor favor confirma tu asistencia aquí:\n${link}`;
+      
+      // Mensaje con doctor y dirección
+      const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de Clínica Dignidad para recordar tu cita con el/la ${nombreDoctor} el día ${fechaCita} a las ${hora} hrs.\n\n Dirección: Av. Venancia Leiva 1871, La Pintana.\n\nPor favor confirma tu asistencia aquí:\n${link}`;
+      
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
-  
   const generarYMostrarResumen = async (presupuestoId: string, cita: any) => {
     const toastId = toast.loading("Generando resumen del tratamiento...");
     try {
