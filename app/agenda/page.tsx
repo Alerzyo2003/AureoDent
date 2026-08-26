@@ -44,7 +44,12 @@ const getAvatarColorClass = (name: string) => {
   const styles = [{ bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-500' }, { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-500' }, { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-500' }, { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-500' }, { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-500' }];
   let hash = 0; for (let i = 0; i < (name || '').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash); return styles[Math.abs(hash) % styles.length];
 }
-const getLocalDateISO = (d: Date) => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+const getLocalDateISO = (d: Date) => {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 const tToMins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; }
 const minsToT = (m: number) => { const h = Math.floor(m / 60).toString().padStart(2, '0'); const min = (m % 60).toString().padStart(2, '0'); return `${h}:${min}`; }
 const getMinsFromDateStr = (dtString: string) => { const timePart = dtString.includes('T') ? dtString.split('T')[1] : dtString.split(' ')[1]; return tToMins(timePart.substring(0,5)); }
@@ -306,8 +311,8 @@ export default function AgendaPage() {
 
   async function fetchBloqueosSemana() {
     const dias = getDiasLunesSabado(semanaInicio);
-    const inicioSemana = dias[0].toLocaleDateString('sv-SE');
-    const finSemana = dias[5].toLocaleDateString('sv-SE');
+    const inicioSemana = getLocalDateISO(dias[0]);
+    const finSemana = getLocalDateISO(dias[5]);
     const profObj = profesionales.find(p => p.user_id === filtro.profesional_id);
     if (!profObj) return;
 
@@ -322,8 +327,8 @@ export default function AgendaPage() {
       const limiteDias = new Date();
       limiteDias.setDate(hoy.getDate() + 90);
       
-      const hoyStr = hoy.toISOString().split('T')[0];
-      const limiteStr = limiteDias.toISOString().split('T')[0];
+      const hoyStr = getLocalDateISO(hoy);
+      const limiteStr = getLocalDateISO(limiteDias);
 
       let queryCitas = supabase.from('citas')
         .select('*, pacientes(*)')
@@ -431,8 +436,8 @@ export default function AgendaPage() {
     setCargandoSlotsEdicion(true);
     try {
       const dias = Array.from({length: 7}).map((_, i) => { const d = new Date(semanaInicioEdicion); d.setDate(d.getDate() + i); return d; });
-      const inicioSemanaStr = dias[0].toISOString().split('T')[0];
-      const finSemanaStr = dias[6].toISOString().split('T')[0];
+      const inicioSemanaStr = getLocalDateISO(dias[0]);
+      const finSemanaStr = getLocalDateISO(dias[6]);
       const profNuevo = profesionales.find(p => p.user_id === nuevoEspecialista);
 
       const [bloqueosRes, dispoRes, citasRes] = await Promise.all([
@@ -442,15 +447,25 @@ export default function AgendaPage() {
       ]);
 
       const semanaProcesada = dias.map(dateObj => {
-        const dateStr = dateObj.toISOString().split('T')[0];
+        const dateStr = getLocalDateISO(dateObj);
         const diaSemanaNum = dateObj.getDay();
         const bloqueosDia = bloqueosRes.data?.filter(b => b.fecha === dateStr) || [];
         if (bloqueosDia.some(b => !b.hora_inicio || !b.hora_fin)) return { date: dateStr, dateObj, status: 'bloqueado', slots: [] };
-        const dispoDia = dispoRes.data?.filter(d => (d.dia_semana === diaSemanaNum && !d.fecha_especifica) || d.fecha_especifica === dateStr) || [];
+        
+        // 🔥 CORRECCIÓN: Separar Especiales vs Semanales para la Edición también
+        const dispoEspecialDia = dispoRes.data?.filter(d => d.fecha_especifica === dateStr) || [];
+        let dispoDia = [];
+        if (dispoEspecialDia.length > 0) {
+            dispoDia = dispoEspecialDia;
+        } else {
+            dispoDia = dispoRes.data?.filter(d => d.dia_semana === diaSemanaNum && !d.fecha_especifica) || [];
+        }
+
         if (dispoDia.length === 0) return { date: dateStr, dateObj, status: 'sin_horario', slots: [] };
         const citasDia = citasRes.data?.filter(c => c.inicio.startsWith(dateStr) && !(c.estado_confirmacion === 'pendiente' && c.motivo?.includes('Online'))).map(c => ({
           inicio: getMinsFromDateStr(c.inicio), fin: getMinsFromDateStr(c.fin)
         })) || [];
+        
         let slotsLibres: any[] = [];
         dispoDia.forEach(bloque => {
           let currTime = tToMins(bloque.hora_inicio);
@@ -562,15 +577,12 @@ export default function AgendaPage() {
       
       const num = telefono.replace(/\D/g, '');
 
-      // Buscamos al profesional asociado a la cita
       const doctor = profesionales.find(p => p.user_id === cita.profesional_id);
       const nombreDoctor = doctor ? `Dr(a). ${doctor.nombre} ${doctor.apellido}` : "nuestro especialista";
       
-      // Asegurar compatibilidad de fecha
       const fechaValida = cita.inicio.includes('T') ? cita.inicio : cita.inicio.replace(' ', 'T');
       const fechaObj = new Date(fechaValida);
 
-      // Extraemos la hora
       const hora = fechaObj.toLocaleTimeString('es-CL', {
           hour: '2-digit', 
           minute: '2-digit', 
@@ -578,7 +590,6 @@ export default function AgendaPage() {
           timeZone: 'America/Santiago'
       });
       
-      // Extraemos la fecha y capitalizamos
       let fechaCita = fechaObj.toLocaleDateString('es-CL', { 
           weekday: 'long', 
           day: 'numeric', 
@@ -588,7 +599,6 @@ export default function AgendaPage() {
       
       const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
       
-      // Mensaje final estructurado
       const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de Clínica Dignidad para recordar tu cita con el/la ${nombreDoctor} el día ${fechaCita} a las ${hora} hrs.\n\n📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n⚠️ Importante: Debido a la alta demanda de horas, si tu cita no es confirmada el bloque será asignado a otro paciente.\n\nPor favor confirma tu asistencia en el siguiente enlace:\n${link}`;
       
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
@@ -723,8 +733,19 @@ export default function AgendaPage() {
     const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
     const slotEnd = slotStart + duracionMinutos * 60000;
 
-    return horariosConfigurados.some(h => {
-        if (h.dia_semana !== diaSemana) return false;
+    // 🔥 CORRECCIÓN: Separar Especiales vs Semanales
+    const horariosEspecialesDelDia = horariosConfigurados.filter(h => h.fecha_especifica === fecha);
+    
+    let horariosAUsar = [];
+    if (horariosEspecialesDelDia.length > 0) {
+      // Si el doctor tiene un horario especial para este día, USAMOS SOLO ESE.
+      horariosAUsar = horariosEspecialesDelDia;
+    } else {
+      // Si no, usamos el horario semanal normal.
+      horariosAUsar = horariosConfigurados.filter(h => h.dia_semana === diaSemana && !h.fecha_especifica);
+    }
+
+    return horariosAUsar.some(h => {
         const inicioLab = new Date(`${fecha}T${h.hora_inicio.substring(0,5)}:00`).getTime();
         const finLab = new Date(`${fecha}T${h.hora_fin.substring(0,5)}:00`).getTime();
         return slotStart >= inicioLab && slotEnd <= finLab;
@@ -761,10 +782,8 @@ export default function AgendaPage() {
     setHorasSeleccionadas(prev => {
       const yaSeleccionada = prev.some(h => h.fecha === fecha && h.hora === hora);
       if (yaSeleccionada) {
-        // Si ya está, la quitamos
         return prev.filter(h => !(h.fecha === fecha && h.hora === hora));
       } else {
-        // Si no está, la agregamos con la duración definida en el filtro
         return [...prev, { fecha, hora, duracion: filtro.duracionDefault }];
       }
     });
@@ -1295,8 +1314,8 @@ export default function AgendaPage() {
                                                       <span className="text-[11px] md:text-[10px] font-black text-[#8A6D2F] bg-[#C9A24B]/10 px-1.5 py-0.5 rounded-md">{hInicio}</span>
                                                       <span className={`text-[9px] md:text-[8px] font-black uppercase ${configEstado.text}`}>
                                                           {c.estado === 'en_espera' && c.hora_llegada 
-                                                            ? `ESPERA DESDE LAS ${new Date(c.hora_llegada).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' })}` 
-                                                            : configEstado.label}
+                                                              ? `ESPERA DESDE LAS ${new Date(c.hora_llegada).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' })}` 
+                                                              : configEstado.label}
                                                       </span>
                                                   </div>
                                               </div>
@@ -1447,14 +1466,14 @@ export default function AgendaPage() {
    if(!esLaboral) return null;
                                            
                                            const ocupado = esCitaOcupada(diaStr, hora, filtro.duracionDefault);
-const bloqueado = esHorarioBloqueado(diaStr, hora, filtro.duracionDefault); // Faltaba evaluar esto
+const bloqueado = esHorarioBloqueado(diaStr, hora, filtro.duracionDefault); 
 const seleccionado = horasSeleccionadas.some(s => s.fecha === diaStr && s.hora === hora);
 
 let btnClass = "py-2 text-[11px] font-black rounded-lg border transition-all ";
 
 if(seleccionado) {
   btnClass += "bg-emerald-500 text-white border-emerald-600 shadow-md";
-} else if(ocupado || bloqueado) { // Integrar 'bloqueado' al color rojo/deshabilitado
+} else if(ocupado || bloqueado) { 
   btnClass += "bg-red-50 text-red-500 border-red-200 opacity-60"; 
 } else {
   btnClass += "bg-white text-slate-600 border-slate-200 hover:border-[#C9A24B] hover:text-[#C9A24B] shadow-sm";
@@ -1890,8 +1909,9 @@ if(seleccionado) {
                                                 })
                                             )}
                                             </div>
-                                            
-                                            <div className="mt-2 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-200 pt-4 text-center md:text-left">
+                                        </div>
+                                        
+                                        <div className="mt-2 flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-200 pt-4 text-center md:text-left">
                                             <div className="text-[11px] md:text-[10px] font-black text-slate-500 uppercase tracking-widest">
                                                 Seleccionado: <span className={nuevaHora ? "text-emerald-600 block mt-1 md:inline md:mt-0" : "text-red-400 block mt-1 md:inline md:mt-0"}>
                                                 {nuevaHora ? `${nuevaFecha} a las ${nuevaHora}` : "Ninguno"}
@@ -1903,16 +1923,15 @@ if(seleccionado) {
                                                 {cargandoAccion ? <Loader2 className="animate-spin md:w-[14px] md:h-[14px]" size={16} /> : <Save className="md:w-[14px] md:h-[14px]" size={16} />} Confirmar
                                                 </button>
                                             </div>
-                                            </div>
-
                                         </div>
+
                                         </div>
                                     </motion.div>
                                     )}
                                 </AnimatePresence>
                                 </div>
                             )
-                            })}
+                        })}
                       </div>
                     )}
                   </div>
@@ -1948,18 +1967,15 @@ if(seleccionado) {
     return;
   }
 
-  // Buscamos al doctor
   const doctor = profesionales.find(p => p.user_id === filtro.profesional_id);
   const nombreDoctor = doctor ? `Dr(a). ${doctor.nombre} ${doctor.apellido}` : "nuestro especialista";
 
-  // Formateamos la fecha
   const fechaObj = new Date(citas[0].fecha + 'T00:00:00');
   let fechaCita = fechaObj.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '');
   fechaCita = fechaCita.charAt(0).toUpperCase() + fechaCita.slice(1);
   
   const hora = citas[0].hora;
   
-  // Calculamos las fechas de hoy y mañana
   const hoy = new Date();
   const hoyStr = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
   
@@ -1967,14 +1983,12 @@ if(seleccionado) {
   manana.setDate(manana.getDate() + 1);
   const mananaStr = new Date(manana.getTime() - manana.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 
-  // Verificamos si la cita es para hoy o mañana
   const esHoy = citas[0].fecha === hoyStr;
   const esManana = citas[0].fecha === mananaStr;
 
   let mensaje = "";
 
   if (esHoy || esManana) {
-    // 🔴 MENSAJE PARA CITAS DE HOY O MAÑANA (Con advertencia Y link de confirmación)
     const textoDia = esHoy ? "HOY" : "MAÑANA";
     
     mensaje = `Hola ${paciente}, hemos agendado tu cita con el/la ${nombreDoctor} para ${textoDia} a las ${hora} hrs.\n\n`;
@@ -1985,19 +1999,16 @@ if(seleccionado) {
     }
     mensaje += `¡Te esperamos en Clínica Dignidad!`;
   } else {
-    // 🟢 MENSAJE PARA CITAS FUTURAS (Informativo, SIN link)
     mensaje = `Hola ${paciente}, hemos agendado exitosamente tu cita con el/la ${nombreDoctor} para el día ${fechaCita} a las ${hora} hrs.\n\n`;
     mensaje += `📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n`;
     mensaje += `¡Te esperamos en Clínica Dignidad!`;
   }
 
-  // Formateamos el número y abrimos WhatsApp
   const numLimpio = telefono.replace(/\D/g, '');
   const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
   
   window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
   
-  // Limpiamos los estados y cerramos
   setMostrarTicket(false);
   setModalAbierto(false);
   resetEstados();
