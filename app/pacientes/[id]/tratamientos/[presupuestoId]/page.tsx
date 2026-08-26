@@ -2025,8 +2025,7 @@ if (profesionalRowId) {
                     )}
                   </div>
                   {puedeVerFinanzas && (
-                    <span className="text-[10px] text-slate-400 font-bold">Subtotal: ${totalPorSeccion(seccion).toLocaleString('es-CL')}</span>
-                  )}
+<span className="text-[10px] text-black font-black">Subtotal: ${totalPorSeccion(seccion).toLocaleString('es-CL')}</span>                  )}
                 </h3>
                 
                 {itemsSeccion.length === 0 ? (
