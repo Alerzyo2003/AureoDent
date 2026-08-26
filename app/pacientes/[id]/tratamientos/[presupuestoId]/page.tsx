@@ -1725,28 +1725,40 @@ if (profesionalRowId) {
                     <th style={{ textAlign: 'right', padding: '8px' }}>Total</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {acciones.filter(a => !a.es_oculto).map((item, idx) => {
-                    let labInfo = '';
-                    if (item.costo_laboratorio > 0) {
-                      labInfo = item.estado === 'realizado' ? ' - Lab: Solicitado' : ' - Lab: Por solicitar';
-                    }
-                    let estadoBase = item.estado === 'cancelada' ? 'Cancelado' : (item.estado === 'realizado' ? 'Realizado' : 'Pendiente');
-                    
-                    return (
-                      <tr key={`print-item-${idx}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                        <td style={{ padding: '8px', fontWeight: 600 }}>{estadoBase}<br/><span style={{fontSize: 9, color: '#64748b', fontWeight: 'normal'}}>{labInfo}</span></td>
-                        <td style={{ padding: '8px', textAlign: 'center' }}>{item.zona ? item.zona : (item.diente_id || '-')}{item.cara ? ` (${item.cara})` : ''}</td>
-                        <td style={{ padding: '8px' }}>{item.display_nombre}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>${Number(item.precio_base || item.display_pactado).toLocaleString('es-CL')}</td>
-                        <td style={{ padding: '8px', textAlign: 'right' }}>{item.descuento > 0 ? `${item.descuento}%` : '0%'}</td>
-                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>${Number(item.display_pactado).toLocaleString('es-CL')}</td>
+                {listaSecciones.map((seccion) => {
+                  const itemsSeccion = acciones.filter(a => a.seccion_nombre === seccion && !a.es_oculto);
+                  if (itemsSeccion.length === 0) return null;
+                  
+                  return (
+                    <tbody key={`print-sec-${seccion}`}>
+                      <tr style={{ backgroundColor: '#f1f5f9', borderBottom: '2px solid #cbd5e1' }}>
+                        <td colSpan={6} style={{ padding: '8px', fontWeight: 800, fontSize: '12px', color: '#000000', textTransform: 'uppercase' }}>
+                          {seccion} <span style={{ float: 'right' }}>Subtotal: ${totalPorSeccion(seccion).toLocaleString('es-CL')}</span>
+                        </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
+                      {itemsSeccion.map((item, idx) => {
+                        let labInfo = '';
+                        if (item.costo_laboratorio > 0) {
+                          labInfo = item.estado === 'realizado' ? ' - Lab: Solicitado' : ' - Lab: Por solicitar';
+                        }
+                        let estadoBase = item.estado === 'cancelada' ? 'Cancelado' : (item.estado === 'realizado' ? 'Realizado' : 'Pendiente');
+                        
+                        return (
+                          <tr key={`print-item-${idx}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                            <td style={{ padding: '8px', fontWeight: 600 }}>{estadoBase}<br/><span style={{fontSize: 9, color: '#64748b', fontWeight: 'normal'}}>{labInfo}</span></td>
+                            <td style={{ padding: '8px', textAlign: 'center' }}>{item.zona ? item.zona : (item.diente_id || '-')}{item.cara ? ` (${item.cara})` : ''}</td>
+                            <td style={{ padding: '8px' }}>{item.display_nombre}</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>${Number(item.precio_base || item.display_pactado).toLocaleString('es-CL')}</td>
+                            <td style={{ padding: '8px', textAlign: 'right' }}>{item.descuento > 0 ? `${item.descuento}%` : '0%'}</td>
+                            <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>${Number(item.display_pactado).toLocaleString('es-CL')}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  );
+                })}
               </table>
-            </div>
+            </div> 
 
             {/* RESUMEN */}
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 40, pageBreakInside: 'avoid' }}>
