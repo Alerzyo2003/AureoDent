@@ -588,11 +588,12 @@ export default function AgendaPage() {
       
       const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
       
-      // Mensaje con doctor y dirección
-      const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de Clínica Dignidad para recordar tu cita con el/la ${nombreDoctor} el día ${fechaCita} a las ${hora} hrs.\n\n Dirección: Av. Venancia Leiva 1871, La Pintana.\n\nPor favor confirma tu asistencia aquí:\n${link}`;
+      // Mensaje final estructurado
+      const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de Clínica Dignidad para recordar tu cita con el/la ${nombreDoctor} el día ${fechaCita} a las ${hora} hrs.\n\n📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n⚠️ Importante: Debido a la alta demanda de horas, si tu cita no es confirmada el bloque será asignado a otro paciente.\n\nPor favor confirma tu asistencia en el siguiente enlace:\n${link}`;
       
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
+  
   const generarYMostrarResumen = async (presupuestoId: string, cita: any) => {
     const toastId = toast.loading("Generando resumen del tratamiento...");
     try {
@@ -1940,38 +1941,58 @@ if(seleccionado) {
                     <div className="flex flex-col gap-3 md:gap-2">
                       <button
                         onClick={() => {
-                          if (!citaConfirmadaData) return;
-                          const { paciente, citas, telefono, citaId } = citaConfirmadaData;
-                          if (!telefono) {
-                            toast.error("El paciente no tiene un número de teléfono registrado.");
-                            return;
-                          }
-                          const fecha = new Date(citas[0].fecha + 'T00:00:00').toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
-                          const hora = citas[0].hora;
-                          let mensaje = `Hola ${paciente}, hemos agendado tu cita para el día ${fecha} a las ${hora} hrs.\n\n`;
-                          if (citaId) {
-                              mensaje += `Por favor confirma tu asistencia aquí:\nhttps://confirmar-cita-dignidad.vercel.app/confirmar/${citaId}\n\n`;
-                          }
-                          mensaje += `¡Te esperamos en Clínica Dignidad!`;
-                          const numLimpio = telefono.replace(/\D/g, '');
-                          const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
-                          window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
-                          setMostrarTicket(false);
-                          setModalAbierto(false);
-                          resetEstados();
-                          fetchCitasAgenda();
-                        }}
-                        className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-xs md:text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
-                      >
-                        <MessageCircle className="md:w-[14px] md:h-[14px]" size={18} /> Finalizar y Enviar WhatsApp
-                      </button>
-                      <button
-                        onClick={() => {
-                          setMostrarTicket(false);
-                          setModalAbierto(false);
-                          resetEstados();
-                          fetchCitasAgenda();
-                        }}
+  if (!citaConfirmadaData) return;
+  const { paciente, citas, telefono, citaId } = citaConfirmadaData;
+  if (!telefono) {
+    toast.error("El paciente no tiene un número de teléfono registrado.");
+    return;
+  }
+
+  // Buscamos al doctor
+  const doctor = profesionales.find(p => p.user_id === filtro.profesional_id);
+  const nombreDoctor = doctor ? `Dr(a). ${doctor.nombre} ${doctor.apellido}` : "nuestro especialista";
+
+  // Formateamos la fecha
+  const fechaObj = new Date(citas[0].fecha + 'T00:00:00');
+  let fechaCita = fechaObj.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '');
+  fechaCita = fechaCita.charAt(0).toUpperCase() + fechaCita.slice(1);
+  
+  const hora = citas[0].hora;
+  
+  // Verificamos si la cita es para hoy
+  const hoyStr = new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0];
+  const esHoy = citas[0].fecha === hoyStr;
+
+  let mensaje = "";
+
+  if (esHoy) {
+    // 🔴 MENSAJE PARA CITAS DE HOY (Con advertencia Y link de confirmación)
+    mensaje = `Hola ${paciente}, hemos agendado tu cita con el/la ${nombreDoctor} para HOY a las ${hora} hrs.\n\n`;
+    mensaje += `📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n`;
+    if (citaId) {
+      mensaje += `⚠️ Importante: Debido a la alta demanda de horas, si tu cita no es confirmada el bloque será asignado a otro paciente.\n\n`;
+      mensaje += `Por favor confirma tu asistencia en el siguiente enlace:\nhttps://confirmar-cita-dignidad.vercel.app/confirmar/${citaId}\n\n`;
+    }
+    mensaje += `¡Te esperamos en Clínica Dignidad!`;
+  } else {
+    // 🟢 MENSAJE PARA CITAS FUTURAS (Informativo, SIN link)
+    mensaje = `Hola ${paciente}, hemos agendado exitosamente tu cita con el/la ${nombreDoctor} para el día ${fechaCita} a las ${hora} hrs.\n\n`;
+    mensaje += `📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n`;
+    mensaje += `¡Te esperamos en Clínica Dignidad!`;
+  }
+
+  // Formateamos el número y abrimos WhatsApp
+  const numLimpio = telefono.replace(/\D/g, '');
+  const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
+  
+  window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
+  
+  // Limpiamos los estados y cerramos
+  setMostrarTicket(false);
+  setModalAbierto(false);
+  resetEstados();
+  fetchCitasAgenda();
+}}
                         className="w-full py-4 md:py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs md:text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
                       >
                         Finalizar sin enviar
