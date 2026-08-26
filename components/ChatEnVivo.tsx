@@ -243,7 +243,7 @@ export default function ChatGlobal({ session }: { session: any }) {
     <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-[99999] font-sans flex flex-col items-end">
       
       {/* Audios para notificaciones (Recibir y Enviar) */}
-      <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
+      <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2360/2360-preview.mp3" preload="auto" />
       <audio ref={audioSendRef} src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3" preload="auto" />
       
       <input type="file" accept="image/*" ref={fileInputRef} onChange={subirImagen} className="hidden" />
