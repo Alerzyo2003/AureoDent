@@ -1,14 +1,16 @@
 'use client'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import {
   History, Clock, Calendar, Stethoscope, Loader2, Image as ImageIcon, 
   X, DollarSign, User, Wallet, Building2, ClipboardList, Info, 
-  Eye, CreditCard, ClipboardEdit, ClipboardCheck, Edit, Download, FileText, FileSignature, Home
+  Eye, CreditCard, ClipboardEdit, ClipboardCheck, Edit, Download, FileText, 
+  FileSignature, Home, Save, Bold, Italic, Underline, Highlighter, Eraser, List
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 
 export default function HistorialPage() {
   const { id: paciente_id } = useParams()
@@ -18,8 +20,14 @@ export default function HistorialPage() {
   const [filtro, setFiltro] = useState<'todas' | 'mias'>('todas')
   const [mounted, setMounted] = useState(false)
 
-  // Estados para Modal
+  // Estados para Modal de Vista
   const [itemAVer, setItemAVer] = useState<any>(null)
+
+  // Estados para Modal de Edición de Evoluciones
+  const [evolucionAEditar, setEvolucionAEditar] = useState<any>(null)
+  const [textoEdicion, setTextoEdicion] = useState('')
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false)
+  const editorRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -27,6 +35,14 @@ export default function HistorialPage() {
       obtenerTodoElHistorial()
     }
   }, [paciente_id])
+
+  // Sincronizar el contenido del editor cuando se abre el modal
+  useEffect(() => {
+    if (evolucionAEditar && editorRef.current) {
+      editorRef.current.innerHTML = evolucionAEditar.descripcion_procedimiento || '';
+      setTextoEdicion(evolucionAEditar.descripcion_procedimiento || '');
+    }
+  }, [evolucionAEditar])
 
   async function obtenerTodoElHistorial() {
     setLoading(true)
@@ -128,7 +144,6 @@ export default function HistorialPage() {
         textIcon: 'text-[#dc3545]'
       }))
 
-      // --- AGRUPACIÓN DE PAGOS ---
       const pagosNormales: any[] = [];
       const pagosAgrupados: Record<string, any[]> = {};
 
@@ -205,12 +220,41 @@ export default function HistorialPage() {
     }
   }
 
+  // --- Función para guardar edición de Evolución ---
+  const handleGuardarEdicion = async () => {
+    // Si al quitar etiquetas HTML está vacío
+    const textoLimpio = textoEdicion.replace(/<[^>]*>?/gm, '').trim();
+    if (!textoLimpio) {
+      toast.error("El detalle de la evolución no puede estar vacío")
+      return
+    }
+
+    setGuardandoEdicion(true)
+    try {
+      const { error } = await supabase
+        .from('evoluciones')
+        .update({ descripcion_procedimiento: textoEdicion }) // Guardamos con formato HTML
+        .eq('id', evolucionAEditar.id)
+
+      if (error) throw error
+
+      toast.success("Evolución actualizada correctamente")
+      setEvolucionAEditar(null)
+      setTextoEdicion('')
+      obtenerTodoElHistorial()
+    } catch (error) {
+      console.error(error)
+      toast.error("Error al actualizar la evolución")
+    } finally {
+      setGuardandoEdicion(false)
+    }
+  }
+
   const bitacoraFiltrada = bitacora.filter(item => {
     if (filtro === 'mias') return (item.profesional_id || item.especialista_id || item.creado_por) === currentUserId
     return true
   })
 
-  // Formato: "17 ago 2026"
   const formatoFechaVisual = (isoString: string) => {
     if (!isoString) return 'S/F';
     const d = new Date(isoString);
@@ -220,13 +264,21 @@ export default function HistorialPage() {
     return `${dia} ${mes} ${anio}`;
   }
 
-  // Formato hora: "01:26 a. m."
   const formatoHora = (isoString: string) => {
     if (!isoString) return '';
     const d = new Date(isoString);
     let timeStr = d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: true });
     return timeStr.replace('AM', 'a. m.').replace('PM', 'p. m.').toLowerCase();
   }
+
+  // Comando para inyectar estilo de editor enriquecido
+  const executeCommand = (command: string, arg?: string) => {
+    document.execCommand(command, false, arg);
+    if (editorRef.current) {
+        editorRef.current.focus();
+        setTextoEdicion(editorRef.current.innerHTML);
+    }
+  };
 
   if (!mounted || loading) return (
     <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
@@ -239,7 +291,7 @@ export default function HistorialPage() {
     <div className="w-full pb-10 px-4 md:px-0 bg-slate-50 min-h-screen pt-4">
       <div className="max-w-5xl mx-auto space-y-6">
         
-        {/* HEADER IDÉNTICO A LA REFERENCIA */}
+        {/* HEADER */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-5 md:gap-6 mb-10 pl-2">
           <div className="flex items-center gap-4">
             <div className="bg-[#e6f2f2] p-4 rounded-full text-[#104a5a]">
@@ -271,7 +323,7 @@ export default function HistorialPage() {
           </div>
         </div>
 
-        {/* TIMELINE EXACTO A LA IMAGEN */}
+        {/* TIMELINE */}
         <div className="w-full bg-slate-50/50 pb-10">
           <AnimatePresence mode='popLayout'>
             {bitacoraFiltrada.map((item, idx) => {
@@ -299,7 +351,7 @@ export default function HistorialPage() {
                     <div className="absolute top-[22px] w-3 h-3 rounded-full bg-[#5a9c9b] z-10"></div>
                   </div>
 
-                  {/* TARJETA DE CONTENIDO - BLANCA Y LIMPIA */}
+                  {/* TARJETA DE CONTENIDO */}
                   <div className="flex-1 ml-4 md:ml-6 group">
                     <div className="bg-white border border-slate-100 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] rounded-2xl flex flex-col relative overflow-hidden transition-shadow hover:shadow-[0_8px_20px_-8px_rgba(0,0,0,0.1)]">
                       
@@ -319,13 +371,29 @@ export default function HistorialPage() {
                           <h4 className="text-[14px] md:text-[15px] font-bold text-[#0B2136] leading-tight mb-1">
                             {item.body_title}
                           </h4>
-                          <p className="text-[12px] md:text-[13px] text-slate-500 font-normal">
-                            {item.descripcion}
-                          </p>
+                          {item.tipo === 'evolucion' ? (
+                            <div className="text-[12px] md:text-[13px] text-slate-500 font-normal rich-text-content" dangerouslySetInnerHTML={{ __html: item.descripcion || item.body_desc }}></div>
+                          ) : (
+                            <p className="text-[12px] md:text-[13px] text-slate-500 font-normal">
+                              {item.descripcion || item.body_desc}
+                            </p>
+                          )}
                         </div>
 
                         {/* Botones de Acción Derecha */}
                         <div className="flex items-center gap-2 self-end sm:self-auto w-full sm:w-auto justify-end sm:justify-start pt-2 sm:pt-0">
+                          
+                          {/* BOTÓN EDITAR EVOLUCIÓN */}
+                          {item.tipo === 'evolucion' && (
+                            <button 
+                              onClick={() => setEvolucionAEditar(item)}
+                              className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 flex items-center justify-center transition-colors"
+                              title="Editar Evolución"
+                            >
+                              <Edit size={16} strokeWidth={2.5}/>
+                            </button>
+                          )}
+
                           <button 
                             onClick={() => setItemAVer(item)}
                             className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-slate-50 text-[#0B2136] hover:bg-[#5a9c9b]/10 hover:text-[#5a9c9b] flex items-center justify-center transition-colors"
@@ -333,6 +401,7 @@ export default function HistorialPage() {
                           >
                             <Eye size={16} strokeWidth={2.5}/>
                           </button>
+                          
                           <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-slate-50 text-[#0B2136] flex items-center justify-center">
                             {item.rightIcon}
                           </div>
@@ -375,74 +444,162 @@ export default function HistorialPage() {
         </div>
       </div>
 
-      {/* PORTAL: MODAL DE VISTA (VER INFO) */}
+      {/* PORTALS: MODALES */}
       {mounted && createPortal(
-        <AnimatePresence>
-          {itemAVer && (
-            <div className="fixed inset-0 z-[999998] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
-               <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
-                 <div className="px-6 py-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
-                    <div className="flex items-center gap-3">
-                      <div className={`p-2 rounded-xl ${itemAVer.bgIcon} ${itemAVer.textIcon} border border-slate-100 shadow-sm`}>{itemAVer.leftIcon}</div>
-                      <h3 className="font-bold uppercase text-slate-800 text-[11px] tracking-widest">Detalles del Registro</h3>
-                    </div>
-                    <button onClick={() => setItemAVer(null)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-xl transition-colors"><X size={18}/></button>
-                 </div>
-                 
-                 <div className="p-6 overflow-y-auto custom-scrollbar text-left flex-1 space-y-4">
-                    {/* INFO GENERAL DEL ITEM */}
-                    {itemAVer.tipo !== 'grupo_pagos' && (
-                      <div className="space-y-4">
-                        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                           <p className="text-[9px] font-bold uppercase text-[#5a9c9b] tracking-widest mb-1">Título / Concepto</p>
-                           <p className="text-[15px] font-bold text-slate-800">{itemAVer.body_title}</p>
-                        </div>
-                        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                           <p className="text-[9px] font-bold uppercase text-[#5a9c9b] tracking-widest mb-1">Fecha de Registro</p>
-                           <p className="text-[14px] font-medium text-slate-800">{itemAVer.fecha ? new Date(itemAVer.fecha).toLocaleString('es-CL') : 'S/F'}</p>
-                        </div>
-                        <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
-                           <p className="text-[9px] font-bold uppercase text-[#5a9c9b] tracking-widest mb-1">Detalles de Operación</p>
-                           <p className="text-[14px] text-slate-600 whitespace-pre-wrap leading-relaxed">{itemAVer.desc_plana}</p>
-                        </div>
+        <>
+          {/* MODAL DE VISTA (VER INFO GENERAL) */}
+          <AnimatePresence>
+            {itemAVer && (
+              <div className="fixed inset-0 z-[999998] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+                 <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-[2rem] w-full max-w-lg shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
+                   <div className="px-6 py-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-xl ${itemAVer.bgIcon} ${itemAVer.textIcon} border border-slate-100 shadow-sm`}>{itemAVer.leftIcon}</div>
+                        <h3 className="font-bold uppercase text-slate-800 text-[11px] tracking-widest">Detalles del Registro</h3>
                       </div>
-                    )}
+                      <button onClick={() => setItemAVer(null)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-xl transition-colors"><X size={18}/></button>
+                   </div>
+                   
+                   <div className="p-6 overflow-y-auto custom-scrollbar text-left flex-1 space-y-4">
+                      {itemAVer.tipo !== 'grupo_pagos' && (
+                        <div className="space-y-4">
+                          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                             <p className="text-[9px] font-bold uppercase text-[#5a9c9b] tracking-widest mb-1">Título / Concepto</p>
+                             <p className="text-[15px] font-bold text-slate-800">{itemAVer.body_title}</p>
+                          </div>
+                          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                             <p className="text-[9px] font-bold uppercase text-[#5a9c9b] tracking-widest mb-1">Fecha de Registro</p>
+                             <p className="text-[14px] font-medium text-slate-800">{itemAVer.fecha ? new Date(itemAVer.fecha).toLocaleString('es-CL') : 'S/F'}</p>
+                          </div>
+                          <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm">
+                             <p className="text-[9px] font-bold uppercase text-[#5a9c9b] tracking-widest mb-1">Detalles de Operación</p>
+                             {itemAVer.tipo === 'evolucion' ? (
+                               <div className="text-[14px] text-slate-600 whitespace-pre-wrap leading-relaxed rich-text-content" dangerouslySetInnerHTML={{ __html: itemAVer.desc_plana }}></div>
+                             ) : (
+                               <p className="text-[14px] text-slate-600 whitespace-pre-wrap leading-relaxed">{itemAVer.desc_plana}</p>
+                             )}
+                          </div>
+                        </div>
+                      )}
 
-                    {/* VISTA ESPECÍFICA PARA GRUPO DE PAGOS */}
-                    {itemAVer.tipo === 'grupo_pagos' && (
-                      <div className="space-y-4">
-                         <div className="bg-[#e6f2f2] p-5 rounded-2xl border border-[#5a9c9b]/20">
-                            <p className="text-[9px] font-bold uppercase text-[#5a9c9b] tracking-widest mb-1">Plan Relacionado</p>
-                            <p className="text-[15px] font-bold text-[#104a5a]">{itemAVer.body_title}</p>
-                            <p className="text-[13px] font-medium text-[#104a5a]/70 mt-1">{itemAVer.desc_plana}</p>
-                         </div>
+                      {itemAVer.tipo === 'grupo_pagos' && (
+                        <div className="space-y-4">
+                           <div className="bg-[#e6f2f2] p-5 rounded-2xl border border-[#5a9c9b]/20">
+                              <p className="text-[9px] font-bold uppercase text-[#5a9c9b] tracking-widest mb-1">Plan Relacionado</p>
+                              <p className="text-[15px] font-bold text-[#104a5a]">{itemAVer.body_title}</p>
+                              <p className="text-[13px] font-medium text-[#104a5a]/70 mt-1">{itemAVer.desc_plana}</p>
+                           </div>
+                           
+                           <h4 className="font-bold uppercase text-[10px] text-slate-500 tracking-widest pt-2 pl-1">Desglose de Pagos ({itemAVer.pagos.length})</h4>
+                           <div className="space-y-3">
+                             {itemAVer.pagos.map((pago: any) => {
+                               const detallePago = pago.concepto || pago.descripcion || pago.detalle || pago.motivo;
+                               return (
+                                 <div key={pago.id} className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
+                                   <p className="text-[15px] font-black text-slate-800">${Number(pago.monto).toLocaleString('es-CL')}</p>
+                                   {detallePago && <p className="text-[13px] font-medium text-slate-600 my-0.5">{detallePago}</p>}
+                                   <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{pago.metodo_pago} • {new Date(pago.fecha_pago || pago.created_at).toLocaleDateString()}</p>
+                                 </div>
+                               )
+                             })}
+                           </div>
+                        </div>
+                      )}
+                   </div>
+                 </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+
+          {/* MODAL EDICIÓN EVOLUCIÓN CON TEXTO ENRIQUECIDO */}
+          <AnimatePresence>
+            {evolucionAEditar && (
+              <div className="fixed inset-0 z-[999999] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm">
+                 <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white rounded-[2rem] w-full max-w-2xl shadow-2xl flex flex-col overflow-hidden max-h-[85vh]">
+                   <div className="px-6 py-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-blue-100 text-blue-600 border border-blue-200 shadow-sm"><ClipboardEdit size={20}/></div>
+                        <h3 className="font-bold uppercase text-slate-800 text-[11px] tracking-widest">Editar Evolución Clínica</h3>
+                      </div>
+                      <button onClick={() => setEvolucionAEditar(null)} className="p-2 text-slate-400 hover:bg-slate-200 rounded-xl transition-colors"><X size={18}/></button>
+                   </div>
+                   
+                   <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-4 bg-slate-50/50">
+                      <div className="space-y-3">
+                         <label className="text-[10px] font-bold uppercase text-slate-500 tracking-widest pl-1">Descripción del Procedimiento</label>
                          
-                         <h4 className="font-bold uppercase text-[10px] text-slate-500 tracking-widest pt-2 pl-1">Desglose de Pagos ({itemAVer.pagos.length})</h4>
-                         <div className="space-y-3">
-                           {itemAVer.pagos.map((pago: any) => {
-                             const detallePago = pago.concepto || pago.descripcion || pago.detalle || pago.motivo;
-                             return (
-                               <div key={pago.id} className="bg-white border border-slate-100 p-5 rounded-2xl shadow-sm">
-                                 <p className="text-[15px] font-black text-slate-800">${Number(pago.monto).toLocaleString('es-CL')}</p>
-                                 {detallePago && <p className="text-[13px] font-medium text-slate-600 my-0.5">{detallePago}</p>}
-                                 <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{pago.metodo_pago} • {new Date(pago.fecha_pago || pago.created_at).toLocaleDateString()}</p>
-                               </div>
-                             )
-                           })}
+                         {/* CONTENEDOR DEL EDITOR ENRIQUECIDO */}
+                         <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-sm flex flex-col focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
+                            
+                            {/* Toolbar de herramientas */}
+                            <div className="flex flex-wrap items-center gap-1.5 p-2.5 border-b border-slate-100 bg-slate-50">
+                               <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('bold'); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="Negrita">
+                                  <Bold size={16}/>
+                               </button>
+                               <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('italic'); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="Cursiva">
+                                  <Italic size={16}/>
+                               </button>
+                               <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('underline'); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="Subrayado">
+                                  <Underline size={16}/>
+                               </button>
+                               <div className="w-px h-5 bg-slate-300 mx-1"></div>
+                               <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('insertUnorderedList'); }} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 transition-colors" title="Viñetas">
+                                  <List size={16}/>
+                               </button>
+                               <div className="w-px h-5 bg-slate-300 mx-1"></div>
+                               <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('backColor', '#fef08a'); }} className="p-2 hover:bg-yellow-100 rounded-lg text-yellow-600 transition-colors" title="Destacar amarillo">
+                                  <Highlighter size={16}/>
+                               </button>
+                               <button type="button" onClick={(e) => { e.preventDefault(); executeCommand('removeFormat'); }} className="p-2 hover:bg-red-50 rounded-lg text-red-500 transition-colors" title="Limpiar formato">
+                                  <Eraser size={16}/>
+                               </button>
+                            </div>
+
+                            {/* Área Content Editable */}
+                            <div 
+                               ref={editorRef}
+                               contentEditable
+                               suppressContentEditableWarning
+                               onInput={(e) => setTextoEdicion(e.currentTarget.innerHTML)}
+                               className="w-full min-h-[16rem] max-h-[24rem] p-5 text-[14px] outline-none text-slate-700 bg-white custom-scrollbar rich-text-content overflow-y-auto"
+                            />
                          </div>
                       </div>
-                    )}
-                 </div>
-               </motion.div>
-            </div>
-          )}
-        </AnimatePresence>,
+                   </div>
+
+                   <div className="p-6 border-t border-slate-100 bg-white flex items-center justify-end gap-3 shrink-0">
+                      <button onClick={() => setEvolucionAEditar(null)} className="px-6 py-3 rounded-xl text-slate-500 hover:bg-slate-100 font-bold text-xs uppercase tracking-widest transition-colors">Cancelar</button>
+                      <button onClick={handleGuardarEdicion} disabled={guardandoEdicion || !textoEdicion.trim()} className="px-6 py-3 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-bold text-xs uppercase tracking-widest transition-colors flex items-center gap-2 disabled:opacity-50 shadow-md">
+                         {guardandoEdicion ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Guardar Cambios
+                      </button>
+                   </div>
+                 </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+        </>,
         document.body
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
         .custom-scrollbar::-webkit-scrollbar { width: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        
+        /* ESTILOS GLOBALES PARA EL TEXTO ENRIQUECIDO */
+        .rich-text-content b, .rich-text-content strong { font-weight: 800 !important; color: #0f172a; }
+        .rich-text-content i, .rich-text-content em { font-style: italic !important; }
+        .rich-text-content u { text-decoration: underline !important; text-underline-offset: 2px; }
+        .rich-text-content span[style*="background-color"] { padding: 0 4px; border-radius: 4px; color: #854d0e; font-weight: 600; }
+        .rich-text-content ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .rich-text-content { line-height: 1.6; }
+        
+        /* Placeholder para el div contenteditable vacío */
+        .rich-text-content[contenteditable]:empty:before {
+            content: "Escribe o modifica el detalle de la evolución aquí...";
+            color: #94a3b8;
+            pointer-events: none;
+            display: block;
+        }
       `}}></style>
     </div>
   )
