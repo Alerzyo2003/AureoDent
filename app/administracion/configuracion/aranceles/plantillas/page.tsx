@@ -4,7 +4,7 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { 
   ArrowLeft, Loader2, Plus, X, Save, Trash2, 
-  Search, Package, Layers, Edit3, Calculator, Minus, ChevronRight, FolderPlus, FolderOpen, RefreshCcw, Check
+  Search, Package, Layers, Edit3, Minus, ChevronRight, FolderPlus, FolderOpen, RefreshCcw, Check
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -66,6 +66,10 @@ function PlantillasContenido() {
   
   const [nombrePlantilla, setNombrePlantilla] = useState('')
   const [iconoPack, setIconoPack] = useState<string | null>(null)
+  
+  // 🔥 NUEVOS ESTADOS PARA MANEJAR FASES DENTRO DEL PACK 🔥
+  const [seccionesPack, setSeccionesPack] = useState<{id: string, nombre: string}[]>([{ id: 'default', nombre: 'FASE 1' }]);
+  const [seccionActivaId, setSeccionActivaId] = useState<string>('default');
   const [itemsSeleccionados, setItemsSeleccionados] = useState<any[]>([])
 
   useEffect(() => {
@@ -158,13 +162,25 @@ function PlantillasContenido() {
     setNombrePlantilla(pack.nombre);
     setIconoPack(pack.icono_tipo || null);
     
-    const { data } = await supabase.from('plantilla_items').select('prestacion_id, cantidad').eq('plantilla_id', pack.id);
-    if (data) {
+    const { data } = await supabase.from('plantilla_items').select('prestacion_id, cantidad, seccion').eq('plantilla_id', pack.id);
+    
+    if (data && data.length > 0) {
+        // Obtenemos los nombres únicos de las secciones que ya tenía el pack
+        const uniqueSecNames = Array.from(new Set(data.map(d => d.seccion || 'FASE 1')));
+        const newSecs = uniqueSecNames.map((name, i) => ({ id: `sec_${i}`, nombre: name }));
+        setSeccionesPack(newSecs);
+        setSeccionActivaId(newSecs[0].id);
+
         const items = data.map(d => {
             const p = prestacionesDisponibles.find(p => p.id === d.prestacion_id);
-            return p ? { ...p, cantidad: d.cantidad } : null;
+            const secMatch = newSecs.find(s => s.nombre === (d.seccion || 'FASE 1'));
+            return p ? { ...p, cantidad: d.cantidad, seccion_id: secMatch?.id || newSecs[0].id } : null;
         }).filter(Boolean);
         setItemsSeleccionados(items);
+    } else {
+        setSeccionesPack([{ id: 'default', nombre: 'FASE 1' }]);
+        setSeccionActivaId('default');
+        setItemsSeleccionados([]);
     }
     setModalAbierto(true);
   }
@@ -175,13 +191,21 @@ function PlantillasContenido() {
     setNombrePlantilla(''); 
     setIconoPack(null);
     setItemsSeleccionados([]); 
+    setSeccionesPack([{ id: 'default', nombre: 'FASE 1' }]);
+    setSeccionActivaId('default');
     setModalAbierto(true);
   }
 
   const toggleItem = (prestacion: any) => {
-    const existe = itemsSeleccionados.find(i => i.id === prestacion.id)
-    if (existe) setItemsSeleccionados(itemsSeleccionados.map(i => i.id === prestacion.id ? {...i, cantidad: i.cantidad+1} : i))
-    else setItemsSeleccionados([...itemsSeleccionados, {...prestacion, cantidad: 1}])
+    if (!seccionActivaId) return toast.error("Selecciona una fase en la derecha para añadir el tratamiento");
+
+    // Verifica si la prestación ya existe DENTRO de la fase activa
+    const existe = itemsSeleccionados.find(i => i.id === prestacion.id && i.seccion_id === seccionActivaId);
+    if (existe) {
+        setItemsSeleccionados(itemsSeleccionados.map(i => (i.id === prestacion.id && i.seccion_id === seccionActivaId) ? {...i, cantidad: i.cantidad+1} : i));
+    } else {
+        setItemsSeleccionados([...itemsSeleccionados, {...prestacion, cantidad: 1, seccion_id: seccionActivaId}]);
+    }
   }
 
   const handleGuardarIcono = async (iconoId: string | null) => {
@@ -223,17 +247,23 @@ function PlantillasContenido() {
 
       if (iconoPack) payload.icono_tipo = iconoPack; 
       
+      // Mapear la sección de cada item
+      const itemsMap = itemsSeleccionados.map(i => ({ 
+          prestacion_id: i.id, 
+          cantidad: i.cantidad, 
+          seccion: seccionesPack.find(s => s.id === i.seccion_id)?.nombre?.trim() || 'FASE 1' 
+      }));
+
       if (modo === 'crear') {
         const { data: newPack, error: insertError } = await supabase.from('plantillas').insert([payload]).select().single()
         
-        // 🔥 SI HAY ERROR DE COLUMNA, GUARDAMOS SIN ICONO 🔥
         if (insertError) {
              delete payload.icono_tipo;
              const fallbackRes = await supabase.from('plantillas').insert([payload]).select().single();
              if(fallbackRes.error) throw fallbackRes.error;
-             await supabase.from('plantilla_items').insert(itemsSeleccionados.map(i => ({ plantilla_id: fallbackRes.data.id, prestacion_id: i.id, cantidad: i.cantidad })));
+             await supabase.from('plantilla_items').insert(itemsMap.map(im => ({ ...im, plantilla_id: fallbackRes.data.id })));
         } else {
-             await supabase.from('plantilla_items').insert(itemsSeleccionados.map(i => ({ plantilla_id: newPack.id, prestacion_id: i.id, cantidad: i.cantidad })));
+             await supabase.from('plantilla_items').insert(itemsMap.map(im => ({ ...im, plantilla_id: newPack.id })));
         }
 
       } else {
@@ -243,7 +273,7 @@ function PlantillasContenido() {
              await supabase.from('plantillas').update(payload).eq('id', plantillaIdEditando);
         }
         await supabase.from('plantilla_items').delete().eq('plantilla_id', plantillaIdEditando)
-        await supabase.from('plantilla_items').insert(itemsSeleccionados.map(i => ({ plantilla_id: plantillaIdEditando, prestacion_id: i.id, cantidad: i.cantidad })))
+        await supabase.from('plantilla_items').insert(itemsMap.map(im => ({ ...im, plantilla_id: plantillaIdEditando })))
       }
       setModalAbierto(false); fetchData(); toast.success("Pack guardado");
     } catch (err: any) { 
@@ -435,8 +465,10 @@ function PlantillasContenido() {
                     <div className="p-6 border-b border-slate-100"><input type="text" placeholder="Buscar prestación para agregar..." value={busqueda} onChange={(e) => setBusqueda(e.target.value)} className="w-full py-4 px-6 rounded-2xl bg-white border-none text-xs font-bold outline-none shadow-sm focus:ring-2 ring-blue-500/20" /></div>
                     <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
                        {prestacionesFiltradas.slice(0, 100).map(p => {
-                         const seleccionado = itemsSeleccionados.find(i => i.id === p.id);
+                         const totalAgregados = itemsSeleccionados.filter(i => i.id === p.id).reduce((acc, curr) => acc + curr.cantidad, 0);
+                         const seleccionado = totalAgregados > 0;
                          const esInactiva = ['no', 'false', 'falso', '', 'n'].includes(String(p.Habilitado || '').trim().toLowerCase());
+                         
                          return (
                            <div key={p.id} className={`p-4 mb-3 rounded-2xl cursor-pointer transition-all flex items-start gap-3 border-l-8 ${seleccionado ? 'bg-blue-600 text-white border-blue-800 shadow-md' : esInactiva ? 'bg-red-50/70 text-slate-500 border-red-500/50' : 'bg-white hover:bg-emerald-50 text-slate-700 border-emerald-500/50 shadow-sm'}`}>
                               
@@ -459,7 +491,7 @@ function PlantillasContenido() {
                                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                                     <p className={`text-[8px] font-black uppercase ${seleccionado ? 'text-blue-200' : 'text-slate-400'}`}>{p["Nombre Categoria"]}</p>
                                     {esInactiva && !seleccionado && <span className="bg-red-600 text-white text-[7px] font-black px-1.5 py-0.5 rounded-sm">INACTIVA</span>}
-                                    {seleccionado && <span className="bg-white text-blue-600 text-[8px] font-black px-2 py-0.5 rounded-full shadow-sm">x{seleccionado.cantidad} agregados</span>}
+                                    {seleccionado && <span className="bg-white text-blue-600 text-[8px] font-black px-2 py-0.5 rounded-full shadow-sm">x{totalAgregados} agregados</span>}
                                  </div>
                                  <p className="text-xs font-black uppercase leading-snug break-words">{p["Nombre Accion"]}</p>
                               </div>
@@ -477,8 +509,8 @@ function PlantillasContenido() {
                     </div>
                  </div>
 
-                 <div className="w-full md:w-1/2 flex flex-col bg-white">
-                    <div className="p-8 space-y-4 shrink-0 border-b border-slate-50">
+                 <div className="w-full md:w-1/2 flex flex-col bg-slate-100">
+                    <div className="p-8 space-y-4 shrink-0 border-b border-slate-200 bg-white">
                        
                        <div className="flex gap-4 items-end">
                           <div className="space-y-1 flex-1">
@@ -509,50 +541,115 @@ function PlantillasContenido() {
                     </div>
 
                     <div className="flex-1 overflow-y-auto px-8 pb-8 pt-4 custom-scrollbar">
-                       {itemsSeleccionados.length === 0 ? (
-                         <div className="py-16 text-center border-2 border-dashed border-slate-100 rounded-[2.5rem]"><Package size={32} className="mx-auto text-slate-200 mb-3"/><p className="text-[10px] font-black text-slate-400 uppercase">Pack Vacío. Selecciona tratamientos a la izquierda.</p></div>
-                       ) : (
-                         <div className="space-y-3">
-                           {itemsSeleccionados.map(item => (
-                             <div key={item.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 mb-3 shadow-sm group flex flex-col">
-                                <div className="flex justify-between items-start mb-3">
-                                   <div className="flex items-center gap-3 flex-1 pr-4">
-                                      <button 
-                                          onClick={() => setModalIcono({abierto: true, prestacion: item, esParaPack: false})}
-                                          title="Cambiar Logo de Prestación Permanentemente" 
-                                          className="w-10 h-10 shrink-0 flex items-center justify-center bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-400 rounded-xl transition-all group/resumenlogo relative overflow-hidden"
-                                      >
-                                         <div className="w-6 h-6 group-hover/resumenlogo:opacity-0 transition-opacity">
-                                            <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
-                                               <LogoRender iconoKey={item.icono_tipo} hallazgo={item["Nombre Accion"]} colorOverride="#64748b" />
-                                            </svg>
-                                         </div>
-                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/resumenlogo:opacity-100 transition-opacity text-blue-600 flex-col">
-                                            <Edit3 size={14} />
-                                            <span className="text-[6px] font-black uppercase mt-0.5 tracking-widest">Logo</span>
-                                         </div>
-                                      </button>
-                                      
-                                      <span className="text-xs font-black uppercase leading-snug text-slate-800">{item["Nombre Accion"]}</span>
-                                   </div>
-                                   <button onClick={() => setItemsSeleccionados(itemsSeleccionados.filter(i => i.id !== item.id))} className="text-slate-300 hover:text-red-500 bg-white p-1.5 rounded-lg shadow-sm border border-slate-200 shrink-0"><Trash2 size={14}/></button>
-                                </div>
-                                <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-slate-200">
-                                   <div className="flex items-center gap-3">
-                                      <button onClick={() => { const n = Math.max(1, item.cantidad - 1); setItemsSeleccionados(itemsSeleccionados.map(i => i.id === item.id ? {...i, cantidad: n} : i)) }} className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600"><Minus size={14}/></button>
-                                      <span className="font-black text-sm w-4 text-center">{item.cantidad}</span>
-                                      <button onClick={() => setItemsSeleccionados(itemsSeleccionados.map(i => i.id === item.id ? {...i, cantidad: i.cantidad + 1} : i)) } className="w-8 h-8 rounded-lg bg-slate-900 hover:bg-blue-600 text-white flex items-center justify-center"><Plus size={14}/></button>
-                                   </div>
-                                   <span className="font-black text-blue-600 text-xs">${(item.Precio * item.cantidad).toLocaleString('es-CL')}</span>
-                                </div>
-                             </div>
-                           ))}
-                         </div>
+                       
+                       <div className="flex justify-between items-center border-b border-slate-200/50 pb-3 mb-5 mt-2">
+                           <div>
+                               <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Fases del Pack</h4>
+                               <p className="text-[9px] text-slate-400 font-bold mt-0.5">Selecciona una fase y añade los tratamientos desde la izquierda.</p>
+                           </div>
+                           <button onClick={() => {
+                               const newId = `sec_${Date.now()}`;
+                               setSeccionesPack([...seccionesPack, { id: newId, nombre: `FASE ${seccionesPack.length + 1}` }]);
+                               setSeccionActivaId(newId);
+                           }} className="text-[9px] font-black uppercase bg-blue-100 text-blue-700 px-3 py-2 rounded-lg hover:bg-blue-200 transition-colors shadow-sm flex items-center gap-1 shrink-0">
+                               <Plus size={12}/> Agregar Fase
+                           </button>
+                       </div>
+
+                       {seccionesPack.length === 0 && (
+                           <div className="py-10 text-center border-2 border-dashed border-slate-200 rounded-[2.5rem]">
+                               <Layers size={32} className="mx-auto text-slate-300 mb-3"/>
+                               <p className="text-[10px] font-black text-slate-400 uppercase">No hay fases creadas.</p>
+                           </div>
                        )}
+
+                       {seccionesPack.map(sec => {
+                           const itemsEnSec = itemsSeleccionados.filter(i => i.seccion_id === sec.id);
+                           const isActive = seccionActivaId === sec.id;
+                           
+                           return (
+                               <div 
+                                   key={sec.id} 
+                                   onClick={() => setSeccionActivaId(sec.id)} 
+                                   className={`p-4 rounded-[1.5rem] border-2 transition-all mb-4 ${isActive ? 'border-blue-500 bg-blue-50 shadow-md' : 'border-slate-200 bg-white opacity-70 hover:opacity-100 cursor-pointer hover:border-blue-300'}`}
+                               >
+                                   <div className="flex justify-between items-center mb-4 border-b border-slate-200/50 pb-3">
+                                       <div className="flex items-center gap-3 flex-1">
+                                           <div className={`w-3 h-3 rounded-full shrink-0 ${isActive ? 'bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)]' : 'bg-slate-300'}`}></div>
+                                           <input 
+                                               value={sec.nombre}
+                                               onChange={(e) => setSeccionesPack(seccionesPack.map(s => s.id === sec.id ? { ...s, nombre: e.target.value } : s))}
+                                               className={`bg-transparent font-black text-sm uppercase outline-none focus:border-b-2 border-blue-400 w-full transition-colors ${isActive ? 'text-blue-700' : 'text-slate-600'}`}
+                                               placeholder="NOMBRE DE FASE..."
+                                               onClick={(e) => { e.stopPropagation(); setSeccionActivaId(sec.id); }}
+                                           />
+                                       </div>
+                                       {seccionesPack.length > 1 && (
+                                           <button onClick={(e) => {
+                                               e.stopPropagation();
+                                               if(itemsEnSec.length > 0 && !confirm(`¿Eliminar la fase "${sec.nombre}" y todos sus tratamientos?`)) return;
+                                               setSeccionesPack(seccionesPack.filter(s => s.id !== sec.id));
+                                               setItemsSeleccionados(itemsSeleccionados.filter(i => i.seccion_id !== sec.id));
+                                               if(isActive) setSeccionActivaId(seccionesPack.find(s => s.id !== sec.id)?.id || '');
+                                           }} className="text-slate-400 hover:text-red-500 p-2 bg-white rounded-xl shadow-sm border border-slate-200 transition-colors ml-3"><Trash2 size={14}/></button>
+                                       )}
+                                   </div>
+                                   
+                                   {isActive && itemsEnSec.length === 0 && (
+                                       <div className="py-6 text-center bg-white/60 rounded-xl border border-blue-200 border-dashed">
+                                           <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest">
+                                               Fase Activa
+                                           </p>
+                                           <p className="text-[9px] font-bold text-slate-500 mt-1">Haz clic en los tratamientos del menú izquierdo para agregarlos aquí.</p>
+                                       </div>
+                                   )}
+
+                                   {itemsEnSec.length > 0 && (
+                                       <div className="space-y-3">
+                                           {itemsEnSec.map(item => (
+                                               <div key={item.id} className="p-3 bg-white border border-slate-200 rounded-xl shadow-sm flex items-center justify-between group">
+                                                   <div className="flex items-center gap-3 flex-1 min-w-0 pr-4">
+                                                       <button 
+                                                           onClick={(e) => { e.stopPropagation(); setModalIcono({abierto: true, prestacion: item, esParaPack: false}); }}
+                                                           title="Cambiar Logo" 
+                                                           className="w-10 h-10 shrink-0 flex items-center justify-center bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-400 rounded-lg transition-all group/resumenlogo relative overflow-hidden"
+                                                       >
+                                                           <div className="w-6 h-6 group-hover/resumenlogo:opacity-0 transition-opacity">
+                                                              <svg viewBox="-10 -10 120 140" className="w-full h-full drop-shadow-sm">
+                                                                 <LogoRender iconoKey={item.icono_tipo} hallazgo={item["Nombre Accion"]} colorOverride="#64748b" />
+                                                              </svg>
+                                                           </div>
+                                                           <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/resumenlogo:opacity-100 transition-opacity text-blue-600 flex-col">
+                                                              <Edit3 size={14} />
+                                                           </div>
+                                                       </button>
+                                                       
+                                                       <div className="truncate">
+                                                           <span className="text-[8px] font-black uppercase text-slate-400 block mb-0.5">{item["Nombre Categoria"]}</span>
+                                                           <span className="text-xs font-black uppercase leading-tight text-slate-800 truncate block">{item["Nombre Accion"]}</span>
+                                                       </div>
+                                                   </div>
+                                                   
+                                                   <div className="flex items-center gap-4 shrink-0">
+                                                       <div className="flex items-center gap-2 bg-slate-50 p-1.5 rounded-lg border border-slate-100">
+                                                          <button onClick={(e) => { e.stopPropagation(); const n = Math.max(1, item.cantidad - 1); setItemsSeleccionados(itemsSeleccionados.map(i => (i.id === item.id && i.seccion_id === sec.id) ? {...i, cantidad: n} : i)) }} className="w-6 h-6 rounded-md bg-white hover:bg-slate-200 flex items-center justify-center text-slate-600 shadow-sm"><Minus size={12}/></button>
+                                                          <span className="font-black text-xs w-4 text-center">{item.cantidad}</span>
+                                                          <button onClick={(e) => { e.stopPropagation(); setItemsSeleccionados(itemsSeleccionados.map(i => (i.id === item.id && i.seccion_id === sec.id) ? {...i, cantidad: i.cantidad + 1} : i)) }} className="w-6 h-6 rounded-md bg-slate-900 hover:bg-blue-600 text-white flex items-center justify-center shadow-sm"><Plus size={12}/></button>
+                                                       </div>
+                                                       <span className="font-black text-blue-600 text-xs w-16 text-right">${(item.Precio * item.cantidad).toLocaleString('es-CL')}</span>
+                                                       <button onClick={(e) => { e.stopPropagation(); setItemsSeleccionados(itemsSeleccionados.filter(i => !(i.id === item.id && i.seccion_id === sec.id))) }} className="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"><Trash2 size={14}/></button>
+                                                   </div>
+                                               </div>
+                                           ))}
+                                       </div>
+                                   )}
+                               </div>
+                           )
+                       })}
                     </div>
 
-                    <div className="p-8 bg-slate-50 border-t border-slate-100 space-y-4 shrink-0">
-                       <div className="flex justify-between items-center bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <div className="p-8 bg-white border-t border-slate-200 space-y-4 shrink-0">
+                       <div className="flex justify-between items-center bg-slate-50 p-5 rounded-2xl shadow-sm border border-slate-100">
                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Suma Real Total</span>
                            <span className="text-xl font-black text-emerald-600">${valorRealTotal.toLocaleString('es-CL')}</span>
                        </div>
