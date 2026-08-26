@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import { MessageSquareText, X, Send, Loader2, ChevronLeft, MessageSquarePlus, Paperclip, Smile } from 'lucide-react'
+import { MessageSquareText, X, Send, Loader2, ChevronLeft, MessageSquarePlus, Paperclip, Smile, Landmark, ShieldCheck } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react'
@@ -9,17 +9,8 @@ import EmojiPicker, { Theme, EmojiStyle } from 'emoji-picker-react'
 // --- Función auxiliar para fechas amigables ---
 const formatFechaAmigable = (fechaIso: string) => {
   const fecha = new Date(fechaIso);
-  const hoy = new Date();
-  const ayer = new Date(hoy);
-  ayer.setDate(ayer.getDate() - 1);
-
-  const esHoy = fecha.getDate() === hoy.getDate() && fecha.getMonth() === hoy.getMonth() && fecha.getFullYear() === hoy.getFullYear();
-  const esAyer = fecha.getDate() === ayer.getDate() && fecha.getMonth() === ayer.getMonth() && fecha.getFullYear() === ayer.getFullYear();
   const horaStr = fecha.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-  if (esHoy) return `Hoy, ${horaStr}`;
-  if (esAyer) return `Ayer, ${horaStr}`;
-  return `${fecha.toLocaleDateString([], { day: '2-digit', month: 'short' })}, ${horaStr}`;
+  return horaStr; 
 }
 
 export default function ChatGlobal({ session }: { session: any }) {
@@ -44,23 +35,33 @@ export default function ChatGlobal({ session }: { session: any }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  const audioRef = useRef<HTMLAudioElement>(null)
+  const audioRef = useRef<HTMLAudioElement>(null) // Audio para recibir
+  const audioSendRef = useRef<HTMLAudioElement>(null) // Audio para enviar
   const chatActivoRef = useRef(chatActivo)
   const isOpenRef = useRef(isOpen)
 
   useEffect(() => { chatActivoRef.current = chatActivo }, [chatActivo])
   useEffect(() => { isOpenRef.current = isOpen }, [isOpen])
 
-  const reproducirSonidoSuave = () => {
+  // --- Sonidos ULTRA soft ---
+  const reproducirSonidoRecibir = () => {
     if (audioRef.current) {
-      audioRef.current.volume = 0.3;
+      audioRef.current.volume = 0.15; // Volumen sutil
+      audioRef.current.currentTime = 0;
       audioRef.current.play().catch(() => {});
+    }
+  }
+
+  const reproducirSonidoEnviar = () => {
+    if (audioSendRef.current) {
+      audioSendRef.current.volume = 0.1; // Aún más sutil para el envío
+      audioSendRef.current.currentTime = 0;
+      audioSendRef.current.play().catch(() => {});
     }
   }
 
   useEffect(() => {
     if (!miUsuario?.id) return;
-
     fetchConversaciones(miUsuario.id)
     revisarMensajesNoLeidosHistoricos(miUsuario.id)
     
@@ -82,12 +83,13 @@ export default function ChatGlobal({ session }: { session: any }) {
     const msgChannel = supabase.channel('notificaciones_globales')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mensajes' }, (payload) => {
         if (payload.new.emisor_id === miUsuario.id) return;
+        
         const esChatActual = chatActivoRef.current?.id === payload.new.conversacion_id;
         const estaAbierto = isOpenRef.current;
 
         if (!estaAbierto || !esChatActual) {
           setUnread(true)
-          reproducirSonidoSuave()
+          reproducirSonidoRecibir()
         } else {
            marcarComoLeido(payload.new.conversacion_id)
         }
@@ -128,7 +130,6 @@ export default function ChatGlobal({ session }: { session: any }) {
 
   useEffect(() => {
     if (!chatActivo) return;
-
     fetchMensajes(chatActivo.id)
     marcarComoLeido(chatActivo.id)
     revisarMensajesNoLeidosHistoricos(miUsuario.id)
@@ -140,12 +141,18 @@ export default function ChatGlobal({ session }: { session: any }) {
           if (prev.find(m => m.id === payload.new.id)) return prev;
           return [...prev, payload.new];
         })
+        
+        // Sonido de recibir
+        if (payload.new.emisor_id !== miUsuario?.id) {
+          reproducirSonidoRecibir();
+        }
+
         setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100)
       })
       .subscribe()
     
     return () => { supabase.removeChannel(channel) }
-  }, [chatActivo?.id])
+  }, [chatActivo?.id, miUsuario?.id])
 
   async function fetchMensajes(cid: string) {
     setLoading(true)
@@ -177,6 +184,8 @@ export default function ChatGlobal({ session }: { session: any }) {
 
     if (error) return toast.error("No se pudo enviar el mensaje")
     if (data) {
+      // Reproducir sonido de envío exitoso
+      reproducirSonidoEnviar();
       setMensajes(prev => { if (prev.find(m => m.id === data.id)) return prev; return [...prev, data]; })
       setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
@@ -207,6 +216,8 @@ export default function ChatGlobal({ session }: { session: any }) {
           if (dbError) throw dbError;
 
           if (data) {
+            // Reproducir sonido de envío exitoso para imagen
+            reproducirSonidoEnviar();
             setMensajes(prev => { if (prev.find(m => m.id === data.id)) return prev; return [...prev, data]; })
             setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
           }
@@ -229,60 +240,89 @@ export default function ChatGlobal({ session }: { session: any }) {
   const isChatActivoOnline = usuariosConectados.includes(otroEnChatActivoId);
 
   return (
-    <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-[99999] font-sans">
+    <div className="fixed bottom-6 right-6 md:bottom-8 md:right-8 z-[99999] font-sans flex flex-col items-end">
       
-      <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3" preload="auto" />
+      {/* Audios para notificaciones (Recibir y Enviar) */}
+      <audio ref={audioRef} src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto" />
+      <audio ref={audioSendRef} src="https://assets.mixkit.co/active_storage/sfx/2358/2358-preview.mp3" preload="auto" />
+      
       <input type="file" accept="image/*" ref={fileInputRef} onChange={subirImagen} className="hidden" />
 
       <AnimatePresence>
         {isOpen && (
           <motion.div 
-            initial={{ opacity: 0, scale: 0.8, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            className="mb-4 w-[calc(100vw-2rem)] max-w-[320px] h-[65vh] max-h-[500px] md:w-[380px] md:h-[550px] bg-[#f0f2f5] rounded-[2.5rem] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.4)] border border-slate-200 overflow-hidden flex flex-col"
+            initial={{ opacity: 0, scale: 0.95, y: 15, transformOrigin: 'bottom right' }} 
+            animate={{ opacity: 1, scale: 1, y: 0 }} 
+            exit={{ opacity: 0, scale: 0.95, y: 15, transformOrigin: 'bottom right' }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }} 
+            className="mb-4 w-[calc(100vw-2rem)] max-w-[360px] h-[65vh] max-h-[550px] bg-[#FDFBF7] rounded-[1.5rem] shadow-[0_25px_60px_-15px_rgba(26,36,56,0.2)] flex flex-col overflow-hidden border border-[#EADFC8]"
           >
-            <div className="bg-white/90 backdrop-blur-xl border-b border-slate-200/60 p-4 md:p-5 text-slate-800 flex items-center justify-between shrink-0 shadow-sm z-20">
+            {/* Cabecera Estilo Roma Antigua */}
+            <div className="bg-white border-b border-[#EADFC8] p-4 text-[#1A2438] flex items-center justify-between shrink-0 shadow-[0_4px_20px_-10px_rgba(193,155,94,0.1)] z-20">
               <div className="flex items-center gap-3">
-                {view !== 'lista' && <button onClick={() => { setView('lista'); setChatActivo(null); revisarMensajesNoLeidosHistoricos(miUsuario.id); setShowEmoji(false); }} className="p-2 -ml-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all"><ChevronLeft size={22}/></button>}
-                
-                {view === 'lista' ? (
-                   <h3 className="font-black uppercase tracking-tighter text-xl text-slate-900 ml-2">Mensajes</h3>
-                ) : view === 'contactos' ? (
-                   <h3 className="font-black uppercase tracking-tighter text-lg text-slate-900">Directorio</h3>
-                ) : (
-                   <div className="flex items-center gap-3 cursor-pointer">
-                      <div className="relative">
-                        <div className="w-10 h-10 bg-gradient-to-br from-slate-800 to-slate-600 text-white rounded-full flex items-center justify-center font-black text-sm shadow-sm">
-                            {(chatActivo?.p1?.id === miUsuario.id ? chatActivo?.p2?.nombre_completo : chatActivo?.p1?.nombre_completo)?.[0] || 'U'}
-                        </div>
-                        {isChatActivoOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>}
-                      </div>
-                      <div className="flex flex-col">
-                        <h3 className="font-black text-sm uppercase tracking-tight leading-none text-slate-900">
-                            {chatActivo?.p1?.id === miUsuario.id ? chatActivo?.p2?.nombre_completo : chatActivo?.p1?.nombre_completo}
-                        </h3>
-                        <span className={`text-[10px] font-bold tracking-widest mt-1 ${isChatActivoOnline ? 'text-emerald-500' : 'text-slate-400'}`}>
-                           {isChatActivoOnline ? 'En línea' : 'Desconectado'}
-                        </span>
-                      </div>
-                   </div>
+                {view !== 'lista' && (
+                  <button onClick={() => { setView('lista'); setChatActivo(null); revisarMensajesNoLeidosHistoricos(miUsuario.id); setShowEmoji(false); }} className="p-1 -ml-1 text-[#C19B5E] hover:bg-[#FDFBF7] rounded-lg transition-colors duration-300">
+                    <ChevronLeft size={24} strokeWidth={2}/>
+                  </button>
                 )}
+                
+                <div className="w-9 h-9 rounded-full border border-[#EADFC8] bg-[#FDFBF7] flex items-center justify-center shrink-0">
+                  <Landmark size={18} className="text-[#C19B5E]" strokeWidth={2} />
+                </div>
+                
+                <div className="flex flex-col">
+                  {view === 'lista' ? (
+                     <>
+                        <span className="text-[9px] uppercase tracking-widest text-[#C19B5E] font-bold mb-0.5">Mensajería</span>
+                        <h3 className="font-serif text-[18px] leading-tight text-[#1A2438] italic">Clínica Dignidad</h3>
+                     </>
+                  ) : view === 'contactos' ? (
+                     <>
+                        <span className="text-[9px] uppercase tracking-widest text-[#C19B5E] font-bold mb-0.5">Directorio</span>
+                        <h3 className="font-serif text-[18px] leading-tight text-[#1A2438] italic">Personal</h3>
+                     </>
+                  ) : (
+                     <>
+                        <h3 className="font-serif text-[17px] leading-tight text-[#1A2438]">
+                           {chatActivo?.p1?.id === miUsuario.id ? chatActivo?.p2?.nombre_completo : chatActivo?.p1?.nombre_completo}
+                        </h3>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                           <div className={`w-1.5 h-1.5 rounded-full transition-colors duration-500 ${isChatActivoOnline ? 'bg-[#C19B5E]' : 'bg-slate-300'}`}></div>
+                           <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold transition-colors duration-500">
+                              {isChatActivoOnline ? 'En línea' : 'Desconectado'}
+                           </span>
+                        </div>
+                     </>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-1">
-                {view === 'lista' && <button onClick={() => { setView('contactos'); fetchContactos(); }} className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all" title="Nuevo chat"><MessageSquarePlus size={22} strokeWidth={2.5}/></button>}
-                <button onClick={() => { setIsOpen(false); revisarMensajesNoLeidosHistoricos(miUsuario.id); setShowEmoji(false); }} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-all"><X size={22}/></button>
+              
+              <div className="flex items-center gap-2">
+                {view === 'lista' && (
+                  <button onClick={() => { setView('contactos'); fetchContactos(); }} className="p-2 text-[#C19B5E] hover:bg-[#FDFBF7] rounded-full transition-colors duration-300" title="Nuevo chat">
+                    <MessageSquarePlus size={20} strokeWidth={2}/>
+                  </button>
+                )}
+                <button onClick={() => { setIsOpen(false); revisarMensajesNoLeidosHistoricos(miUsuario.id); setShowEmoji(false); }} className="p-2 text-slate-400 hover:text-[#1A2438] hover:bg-slate-50 rounded-full transition-colors duration-300">
+                  <X size={20} strokeWidth={2.5}/>
+                </button>
               </div>
             </div>
 
-            {/* 🔥 AQUÍ ESTÁ EL ARREGLO DEL SCROLL: overscroll-contain 🔥 */}
-            <div className="flex-1 overflow-y-auto bg-slate-50/50 p-4 custom-scrollbar text-slate-900 relative overscroll-contain">
+            {/* Área principal de contenido */}
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar relative overscroll-contain bg-[#FDFBF7]">
               
               {view === 'lista' && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {conversaciones.length === 0 ? (
-                    <div className="text-center mt-24 space-y-4">
-                      <div className="w-20 h-20 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-2"><MessageSquareText size={32} /></div>
-                      <p className="text-[11px] font-black uppercase text-slate-400 tracking-widest">Bandeja Vacía</p>
-                      <button onClick={() => { setView('contactos'); fetchContactos(); }} className="bg-slate-900 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase shadow-xl hover:scale-105 transition-transform">Iniciar Conversación</button>
+                    <div className="text-center mt-20 space-y-4 transition-opacity duration-500">
+                      <div className="w-16 h-16 rounded-full border-2 border-[#EADFC8] mx-auto flex items-center justify-center bg-white shadow-sm">
+                         <Landmark size={28} className="text-[#C19B5E]" strokeWidth={1.5} />
+                      </div>
+                      <p className="font-serif text-[16px] text-[#1A2438] italic">Sin mensajes recientes</p>
+                      <button onClick={() => { setView('contactos'); fetchContactos(); }} className="mt-2 bg-white border border-[#EADFC8] text-[#1A2438] px-6 py-2.5 rounded-full text-[11px] uppercase tracking-widest font-bold shadow-sm hover:border-[#C19B5E] transition-all duration-300">
+                        Iniciar Conversación
+                      </button>
                     </div>
                   ) : (
                     conversaciones.map(c => {
@@ -290,18 +330,16 @@ export default function ChatGlobal({ session }: { session: any }) {
                       const isOnline = usuariosConectados.includes(otro?.id);
 
                       return (
-                        <button key={c.id} onClick={() => { setChatActivo(c); setView('chat'); setUnread(false); }} className="w-full bg-white p-4 rounded-3xl border border-slate-100 hover:border-blue-300 transition-all flex items-center gap-4 text-left shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-md group">
-                          <div className="relative shrink-0">
-                            <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-600 group-hover:bg-blue-50 group-hover:text-blue-600 transition-all font-black text-lg">
-                               {otro?.nombre_completo?.[0] || 'U'}
-                            </div>
-                            {isOnline && <div className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-2 border-white rounded-full"></div>}
+                        <button key={c.id} onClick={() => { setChatActivo(c); setView('chat'); setUnread(false); }} className="w-full bg-white p-4 rounded-xl border border-[#EADFC8] hover:border-[#C19B5E] transition-all duration-300 flex items-center gap-4 text-left shadow-sm group">
+                          <div className="w-11 h-11 bg-[#FDFBF7] border border-[#EADFC8] rounded-full flex items-center justify-center text-[#1A2438] font-serif text-lg shrink-0 relative group-hover:text-[#C19B5E] transition-colors duration-300">
+                             {otro?.nombre_completo?.[0] || 'U'}
+                             {isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#C19B5E] border-2 border-white rounded-full transition-all duration-500"></div>}
                           </div>
                           <div className="flex-1 overflow-hidden">
                             <div className="flex justify-between items-center mb-1">
-                               <p className="font-black uppercase text-xs text-slate-800 truncate group-hover:text-blue-600 transition-colors">{otro?.nombre_completo || 'Usuario'}</p>
+                               <p className="font-serif text-[15px] text-[#1A2438] truncate group-hover:text-[#C19B5E] transition-colors duration-300">{otro?.nombre_completo || 'Usuario'}</p>
                             </div>
-                            <p className="text-[11px] text-slate-500 truncate font-medium">{c.ultimo_mensaje || 'Toca para conversar...'}</p>
+                            <p className="text-[12px] text-slate-500 truncate font-sans">{c.ultimo_mensaje || 'Toca para conversar...'}</p>
                           </div>
                         </button>
                       )
@@ -311,20 +349,20 @@ export default function ChatGlobal({ session }: { session: any }) {
               )}
 
               {view === 'contactos' && (
-                <div className="space-y-2">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 ml-2">Personal Clínico</p>
-                  {loading ? <Loader2 className="animate-spin mx-auto text-blue-500 mt-10" /> : (
+                <div className="space-y-3">
+                  <p className="text-[9px] uppercase tracking-widest text-[#C19B5E] font-bold mb-4 ml-1">Personal Clínico</p>
+                  {loading ? <Loader2 className="animate-spin mx-auto text-[#C19B5E] mt-10" /> : (
                     contactos.map(c => {
                       const isOnline = usuariosConectados.includes(c.id);
                       return (
-                        <button key={c.id} onClick={() => iniciarChatCon(c.id)} className="w-full bg-white p-4 rounded-2xl border border-slate-100 hover:border-blue-400 transition-all flex items-center gap-4 text-left shadow-sm">
-                          <div className="relative shrink-0">
-                            <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-600 font-black">{c.nombre_completo?.[0] || 'U'}</div>
-                            {isOnline && <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></div>}
+                        <button key={c.id} onClick={() => iniciarChatCon(c.id)} className="w-full bg-white p-4 rounded-xl border border-[#EADFC8] hover:border-[#C19B5E] transition-all duration-300 flex items-center gap-4 text-left shadow-sm">
+                          <div className="w-11 h-11 bg-[#FDFBF7] border border-[#EADFC8] rounded-full flex items-center justify-center text-[#1A2438] font-serif text-lg shrink-0 relative">
+                             {c.nombre_completo?.[0] || 'U'}
+                             {isOnline && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#C19B5E] border-2 border-white rounded-full transition-all duration-500"></div>}
                           </div>
-                          <div>
-                            <p className="font-black uppercase text-xs text-slate-800 leading-none">{c.nombre_completo}</p>
-                            <p className="text-[9px] text-blue-500 font-black uppercase mt-1.5">{c.rol}</p>
+                          <div className="flex-1">
+                            <p className="font-serif text-[15px] text-[#1A2438]">{c.nombre_completo}</p>
+                            <p className="text-[10px] uppercase tracking-wider text-slate-400 mt-1">{c.rol}</p>
                           </div>
                         </button>
                       )
@@ -334,36 +372,46 @@ export default function ChatGlobal({ session }: { session: any }) {
               )}
 
               {view === 'chat' && (
-                <div className="space-y-4 pb-2 flex flex-col pt-2" onClick={() => setShowEmoji(false)}>
-                  {loading ? <Loader2 className="animate-spin mx-auto mt-10 text-blue-500" /> : mensajes.map(m => (
-                    <div key={m.id} className={`flex w-full ${m.emisor_id === miUsuario.id ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-[80%] p-3.5 text-[13px] font-medium shadow-sm leading-relaxed break-words relative 
-                          ${m.emisor_id === miUsuario.id 
-                            ? 'bg-[#E3F2FD] text-slate-800 rounded-2xl rounded-br-sm border border-[#bfdbfe]' 
-                            : 'bg-white text-slate-800 rounded-2xl rounded-bl-sm border border-slate-200'}`}>
+                <div className="space-y-5 pb-2 flex flex-col font-sans" onClick={() => setShowEmoji(false)}>
+                  {loading ? <Loader2 className="animate-spin mx-auto mt-10 text-[#C19B5E]" /> : mensajes.map((m, i) => {
+                    const isMe = m.emisor_id === miUsuario.id;
+                    return (
+                      <div key={m.id} className={`flex w-full gap-2 transition-all duration-300 ${isMe ? 'justify-end' : 'justify-start'}`}>
                         
-                        {m.imagen_url && (
-                            <div className="mb-2 overflow-hidden rounded-xl bg-black/5 flex justify-center border border-black/5">
-                               <img src={m.imagen_url} alt="Adjunto" className="max-w-full h-auto object-cover hover:opacity-90 transition-opacity cursor-pointer" onClick={() => window.open(m.imagen_url, '_blank')} />
-                            </div>
+                        {!isMe && (
+                           <div className="w-7 h-7 rounded-full bg-white border border-[#EADFC8] flex items-center justify-center text-[#1A2438] font-serif text-[12px] shrink-0 mt-auto mb-1 shadow-sm">
+                             {(chatActivo?.p1?.id === miUsuario.id ? chatActivo?.p2?.nombre_completo : chatActivo?.p1?.nombre_completo)?.[0] || 'U'}
+                           </div>
                         )}
 
-                        {m.contenido !== '📷 Imagen adjunta' && (
-                            <span className="block mt-0.5">{m.contenido}</span>
-                        )}
+                        <div className={`max-w-[75%] px-4 py-3 text-[13.5px] shadow-sm relative flex flex-col
+                            ${isMe 
+                              ? 'bg-[#1A2438] text-[#FDFBF7] rounded-[1.2rem] rounded-br-sm' 
+                              : 'bg-white text-[#1A2438] rounded-[1.2rem] rounded-bl-sm border border-[#EADFC8]'}`}>
+                          
+                          {m.imagen_url && (
+                              <div className="mb-2 overflow-hidden rounded-xl bg-black/5 flex justify-center border border-white/10">
+                                 <img src={m.imagen_url} alt="Adjunto" className="max-w-full h-auto object-cover cursor-pointer transition-opacity duration-300 hover:opacity-90" onClick={() => window.open(m.imagen_url, '_blank')} />
+                              </div>
+                          )}
 
-                        <span className={`block text-[9px] font-bold mt-1.5 text-right opacity-50 ${m.emisor_id === miUsuario.id ? 'text-slate-600' : 'text-slate-500'}`}>
-                          {formatFechaAmigable(m.created_at)}
-                        </span>
+                          {m.contenido !== '📷 Imagen adjunta' && (
+                              <span className="leading-relaxed whitespace-pre-wrap">{m.contenido}</span>
+                          )}
+
+                          <span className={`text-[9px] self-end mt-1.5 font-semibold tracking-wider ${isMe ? 'text-[#C19B5E]' : 'text-slate-400'}`}>
+                            {formatFechaAmigable(m.created_at)}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                   
                   {uploadingImg && (
                       <div className="flex w-full justify-end">
-                         <div className="p-4 rounded-2xl bg-blue-50 border border-blue-100 rounded-br-sm flex items-center gap-2">
-                             <Loader2 size={14} className="animate-spin text-blue-600" />
-                             <span className="text-[10px] font-black uppercase text-blue-600 tracking-widest">Enviando...</span>
+                         <div className="px-4 py-3 rounded-[1.2rem] bg-white border border-[#EADFC8] rounded-br-sm flex items-center gap-2 shadow-sm">
+                             <Loader2 size={14} className="animate-spin text-[#C19B5E]" />
+                             <span className="text-[11px] uppercase tracking-widest text-[#1A2438] font-bold">Enviando...</span>
                          </div>
                       </div>
                   )}
@@ -373,12 +421,12 @@ export default function ChatGlobal({ session }: { session: any }) {
               )}
             </div>
 
+            {/* Input y Footer */}
             {view === 'chat' && (
-              <div className="relative bg-slate-100/50 border-t border-slate-200 p-3 md:p-4 shrink-0 z-30">
+              <div className="bg-white border-t border-[#EADFC8] px-4 pb-4 pt-3 shrink-0 z-30 flex flex-col gap-3 relative">
                 
-                {/* 🔥 SOLUCIÓN DE EMOJIS: emojiStyle="native" 🔥 */}
                 {showEmoji && (
-                   <div className="absolute bottom-[110%] mb-2 left-4 right-4 md:left-4 md:right-auto z-50 shadow-[0_-10px_40px_rgba(0,0,0,0.15)] rounded-2xl overflow-hidden border border-slate-200 bg-white">
+                   <div className="absolute bottom-[100%] mb-2 left-4 right-4 z-50 shadow-lg rounded-2xl overflow-hidden border border-[#EADFC8] bg-white transition-opacity duration-300">
                       <EmojiPicker 
                          onEmojiClick={onEmojiClick} 
                          theme={Theme.LIGHT} 
@@ -386,27 +434,32 @@ export default function ChatGlobal({ session }: { session: any }) {
                          searchDisabled={false} 
                          skinTonesDisabled 
                          width="100%" 
-                         height={320} 
+                         height={300} 
                       />
                    </div>
                 )}
 
-                <form onSubmit={enviar} className="flex items-center gap-2 bg-white p-1.5 rounded-[1.5rem] border border-slate-300 focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/10 transition-all shadow-sm">
+                <form onSubmit={enviar} className="flex items-center gap-2 bg-[#FDFBF7] px-2 py-1.5 rounded-full border border-[#EADFC8] shadow-inner focus-within:border-[#C19B5E] transition-all duration-300">
                   
-                  <button type="button" onClick={() => setShowEmoji(!showEmoji)} className="p-2.5 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-xl transition-colors shrink-0" title="Emojis">
-                     <Smile size={22} strokeWidth={2} />
+                  <button type="button" onClick={() => setShowEmoji(!showEmoji)} className="p-2 text-slate-400 hover:text-[#C19B5E] transition-colors duration-300 shrink-0">
+                     <Smile size={20} strokeWidth={2}/>
                   </button>
 
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-colors shrink-0" title="Adjuntar Imagen">
-                     <Paperclip size={20} strokeWidth={2} className="rotate-45" />
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="p-1 text-slate-400 hover:text-[#C19B5E] transition-colors duration-300 shrink-0">
+                     <Paperclip size={18} className="rotate-45" strokeWidth={2}/>
                   </button>
 
-                  <input autoFocus value={nuevoMsg} onChange={e => setNuevoMsg(e.target.value)} placeholder="Escribe un mensaje..." className="flex-1 bg-transparent px-2 py-2 outline-none text-sm font-medium text-slate-800 placeholder:text-slate-400" />
+                  <input autoFocus value={nuevoMsg} onChange={e => setNuevoMsg(e.target.value)} placeholder="Escribe un mensaje..." className="flex-1 bg-transparent px-2 py-2 outline-none text-[14px] text-[#1A2438] placeholder:text-slate-400 font-sans transition-colors duration-300" />
                   
-                  <button type="submit" disabled={(!nuevoMsg.trim() && !uploadingImg)} className="w-10 h-10 bg-slate-900 text-white rounded-[1rem] flex items-center justify-center hover:bg-blue-600 transition-all disabled:opacity-50 disabled:scale-95 shrink-0 shadow-md">
-                     <Send size={18} className="ml-0.5 pointer-events-none" strokeWidth={2.5}/>
+                  <button type="submit" disabled={(!nuevoMsg.trim() && !uploadingImg)} className="w-10 h-10 bg-[#1A2438] text-[#C19B5E] rounded-full flex items-center justify-center hover:bg-[#253043] transition-all duration-300 disabled:opacity-50 shrink-0 shadow-sm">
+                     <Send size={16} className="ml-0.5" strokeWidth={2.5} />
                   </button>
                 </form>
+
+                <div className="flex items-center justify-center gap-2 text-[9px] uppercase tracking-widest text-[#C19B5E] font-bold">
+                  <ShieldCheck size={12} className="text-[#C19B5E]" />
+                  <span>Comunicación Interna Segura</span>
+                </div>
               </div>
             )}
           </motion.div>
@@ -423,17 +476,18 @@ export default function ChatGlobal({ session }: { session: any }) {
                setUnread(false); 
             }
         }}
-        className={`w-[60px] h-[60px] rounded-full flex items-center justify-center transition-all duration-300 active:scale-95 relative z-50 
-          ${isOpen ? 'bg-slate-900 text-white rotate-90 shadow-none' : 'bg-slate-900 text-white hover:bg-black hover:-translate-y-1 shadow-[0_15px_40px_-10px_rgba(0,0,0,0.5)]'}
-          ${unread && !isOpen ? 'ring-[6px] ring-red-500/20' : ''}
+        className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] relative z-50 border-2 border-[#C19B5E]
+          ${isOpen 
+            ? 'bg-white text-[#1A2438] shadow-lg rotate-90 scale-95' 
+            : 'bg-[#1A2438] text-[#C19B5E] hover:scale-105 shadow-[0_10px_25px_-5px_rgba(26,36,56,0.5)]'}
         `}
       >
-        {isOpen ? <X size={28} /> : <MessageSquareText size={28} strokeWidth={2.5} />}
+        {isOpen ? <X size={26} strokeWidth={2} /> : <MessageSquareText size={26} strokeWidth={2} />}
         
         {unread && !isOpen && (
-          <span className="absolute top-0 right-0 flex h-4 w-4">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 border-[3px] border-white shadow-sm"></span>
+          <span className="absolute -top-1 -right-1 flex h-4 w-4">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C19B5E] opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-4 w-4 bg-[#C19B5E] border-2 border-[#1A2438]"></span>
           </span>
         )}
       </button>
