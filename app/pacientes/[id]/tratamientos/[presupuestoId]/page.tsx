@@ -659,6 +659,7 @@ export default function DetalleTratamientoPage() {
 
   const handleCambiarPrecio = async (tempId: string, id: string | null, nuevoPrecioStr: string) => {
     setEditandoPrecioId(null);
+    if (perfil?.rol !== 'ADMIN') return toast.error("Solo un Administrador puede modificar los precios base.");
     const val = nuevoPrecioStr.trim();
     if (val === '') return;
     const nuevoPrecio = Number(val);
@@ -2141,25 +2142,25 @@ if (profesionalRowId) {
 
                             {puedeVerFinanzas && (
                                 <>
-                                    <td className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]" onDoubleClick={() => setEditandoPrecioId(item.tempId)}>
-                                        {editandoPrecioId === item.tempId ? (
-                                            <input
-                                                type="number"
-                                                autoFocus
-                                                className="w-20 px-2 py-1 border border-slate-300 rounded text-right text-slate-900 outline-none focus:border-blue-500"
-                                                defaultValue={item.precio_base || item.precio_pactado || item.display_pactado}
-                                                onBlur={(e) => handleCambiarPrecio(item.tempId, item.id, e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter') handleCambiarPrecio(item.tempId, item.id, e.currentTarget.value);
-                                                    if (e.key === 'Escape') setEditandoPrecioId(null);
-                                                }}
-                                            />
-                                        ) : (
-                                            <span className="cursor-pointer hover:text-blue-600 transition-colors" title="Doble clic para editar precio original">
-                                                ${Number(item.display_pactado).toLocaleString('es-CL')}
-                                            </span>
-                                        )}
-                                    </td>
+                                    <td className="px-6 py-5 text-right font-bold text-slate-500 text-[11px]" onDoubleClick={() => { if (perfil?.rol === 'ADMIN') setEditandoPrecioId(item.tempId); }}>
+    {editandoPrecioId === item.tempId && perfil?.rol === 'ADMIN' ? (
+        <input
+            type="number"
+            autoFocus
+            className="w-20 px-2 py-1 border border-slate-300 rounded text-right text-slate-900 outline-none focus:border-blue-500"
+            defaultValue={item.precio_base || item.precio_pactado || item.display_pactado}
+            onBlur={(e) => handleCambiarPrecio(item.tempId, item.id, e.target.value)}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter') handleCambiarPrecio(item.tempId, item.id, e.currentTarget.value);
+                if (e.key === 'Escape') setEditandoPrecioId(null);
+            }}
+        />
+    ) : (
+        <span className={perfil?.rol === 'ADMIN' ? "cursor-pointer hover:text-blue-600 transition-colors" : ""} title={perfil?.rol === 'ADMIN' ? "Doble clic para editar precio original" : "Precio de la prestación"}>
+            ${Number(item.display_pactado).toLocaleString('es-CL')}
+        </span>
+    )}
+</td>
                                     <td className="px-6 py-5 text-right font-bold text-emerald-600 text-[11px]">${Number(item.display_abonado).toLocaleString('es-CL')}</td>
                                     <td className="px-6 py-5 text-right font-black text-slate-900 text-[11px]">${Number(item.display_saldo).toLocaleString('es-CL')}</td>
                                 </>
@@ -2182,11 +2183,11 @@ if (profesionalRowId) {
                                   <Loader2 className="animate-spin text-slate-400" size={16}/>
                                 ) : (
                                   <>
-                                    {item.estado !== 'cancelada' && item.estado !== 'realizado' && puedeVerFinanzas && (
-                                      <button onClick={() => { setModalEditarItem({abierto: true, item}); setDctoInput(item.descuento || 0); setCostoLabInput(item.costo_laboratorio || 0); setLabPorDoctorInput(item.lab_pagado_por_dr || false); }} className="text-slate-400 hover:text-blue-600 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm" title="Ajustes Clínicos (Descuento/Lab)">
-                                        <Settings size={14}/>
-                                      </button>
-                                    )}
+                                    {item.estado !== 'cancelada' && item.estado !== 'realizado' && perfil?.rol === 'ADMIN' && (
+  <button onClick={() => { setModalEditarItem({abierto: true, item}); setDctoInput(item.descuento || 0); setCostoLabInput(item.costo_laboratorio || 0); setLabPorDoctorInput(item.lab_pagado_por_dr || false); }} className="text-slate-400 hover:text-blue-600 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm" title="Ajustes Clínicos (Descuento/Lab)">
+    <Settings size={14}/>
+  </button>
+)}
                                     {item.estado !== 'cancelada' && (
                                       <button onClick={() => handleCancelarPrestacion(item)} className="text-slate-400 hover:text-red-500 transition-colors p-2 bg-white rounded-lg border border-slate-100 shadow-sm" title="Anular Prestación (Mueve pagos a Saldo a Favor)">
                                         <Ban size={14}/>
