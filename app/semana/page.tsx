@@ -85,6 +85,7 @@ export default function DiarioGlobalPage() {
   const [citasOcupadas, setCitasOcupadas] = useState<any[]>([]);
   const [bloqueosSemana, setBloqueosSemana] = useState<any[]>([]);
   const [citaEnReprogramacion, setCitaEnReprogramacion] = useState<any>(null);
+  const [citaArrastrada, setCitaArrastrada] = useState<any>(null);  
 
   const [modoNuevoPaciente, setModoNuevoPaciente] = useState(false);
   const [nuevoPaciente, setNuevoPaciente] = useState<NuevoPaciente>({ nombre: '', apellido: '', rut: '', telefono: '', fecha_nacimiento: '', sexo: '' });
@@ -105,6 +106,8 @@ export default function DiarioGlobalPage() {
   const [cargandoSlots, setCargandoSlots] = useState(false)
   const [reagendaProps, setReagendaProps] = useState({ fecha: '', hora: '', especialistaId: '', duracion: 30, box: 1 })
   const [guardandoConflicto, setGuardandoConflicto] = useState(false)
+
+
 
   const [esOtroDocumento, setEsOtroDocumento] = useState(false);
 
@@ -282,7 +285,87 @@ export default function DiarioGlobalPage() {
     const { data } = await supabase.from('citas').select('id, inicio, fin').eq('profesional_id', filtro.profesional_id).gte('inicio', inicioSemana).lte('inicio', finSemana).neq('estado', 'cancelada');
     setCitasOcupadas(citaEnReprogramacion ? (data || []).filter(c => c.id !== citaEnReprogramacion.id) : (data || []));
   }
+  const esDropValido = (profId: string, fecha: string, hora: string, citaObj: any) => {
+  if (!citaObj) return false;
+  const tInicio = new Date(citaObj.inicio.replace(' ', 'T')).getTime();
+  const tFin = new Date(citaObj.fin.replace(' ', 'T')).getTime();
+  const duracionMinutos = Math.round((tFin - tInicio) / 60000);
 
+  const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
+  const slotEnd = slotStart + duracionMinutos * 60000;
+
+  // Verifica choques con otras citas (ignorando la que se está arrastrando)
+  const chocaCita = citas.some(c => {
+    if (c.profesional_id !== profId || c.id === citaObj.id) return false;
+    const cInicio = new Date(c.inicio.replace(' ', 'T')).getTime();
+    const cFin = new Date(c.fin.replace(' ', 'T')).getTime();
+    return slotStart < cFin && slotEnd > cInicio;
+  });
+  if (chocaCita) return false;
+
+  // Verifica choques con bloqueos
+  const profObj = profesionales.find(p => p.user_id === profId);
+  const chocaBloqueo = bloqueos.some(b => {
+    if (b.profesional_id !== profObj?.id || b.fecha !== fecha) return false;
+    if (!b.hora_inicio || !b.hora_fin) return true;
+    const bStart = new Date(`${fecha}T${b.hora_inicio}`).getTime();
+    const bEnd = new Date(`${fecha}T${b.hora_fin}`).getTime();
+    return slotStart < bEnd && slotEnd > bStart;
+  });
+  if (chocaBloqueo) return false;
+
+  // Verifica que esté dentro del horario laboral
+  const diaSemanaActual = new Date(`${fecha}T12:00:00`).getDay();
+  const dispoProf = disponibilidades.filter(d => d.profesional_id === profId);
+  const dispoEspeciales = dispoProf.filter(d => d.fecha_especifica === fecha);
+  const dispoAUsar = dispoEspeciales.length > 0 ? dispoEspeciales : dispoProf.filter(d => d.dia_semana === diaSemanaActual && !d.fecha_especifica);
+
+  const slotInicioMins = tToMins(hora);
+  const slotFinMins = slotInicioMins + duracionMinutos;
+
+  return dispoAUsar.some(d => slotInicioMins >= tToMins(d.hora_inicio) && slotFinMins <= tToMins(d.hora_fin));
+};
+
+const handleDragStart = (e: React.DragEvent, cita: any) => {
+  setCitaArrastrada(cita);
+  e.dataTransfer.setData("text/plain", cita.id);
+  e.dataTransfer.effectAllowed = "move";
+};
+
+const handleDrop = async (e: React.DragEvent, profId: string, fecha: string, hora: string) => {
+  e.preventDefault();
+  if (!citaArrastrada) return;
+  if (!confirm("¿Confirmas que deseas reprogramar esta cita al nuevo horario?")) {
+    setCitaArrastrada(null);
+    return;
+  }
+
+  const tInicio = new Date(citaArrastrada.inicio.replace(' ', 'T')).getTime();
+  const tFin = new Date(citaArrastrada.fin.replace(' ', 'T')).getTime();
+  const duracionMin = Math.round((tFin - tInicio) / 60000);
+
+  const nuevoInicio = `${fecha}T${hora}:00`;
+  const fechaFinObj = new Date(new Date(nuevoInicio).getTime() + duracionMin * 60000);
+  const nuevoFin = `${fecha}T${fechaFinObj.getHours().toString().padStart(2, '0')}:${fechaFinObj.getMinutes().toString().padStart(2, '0')}:00`;
+
+  try {
+    toast.loading("Reprogramando cita...", { id: 'move-cita' });
+    await supabase.from('citas').update({
+      inicio: nuevoInicio,
+      fin: nuevoFin,
+      profesional_id: profId,
+      estado: 'reprogramada',
+      modificado_por: usuarioLogueado
+    }).eq('id', citaArrastrada.id);
+    
+    toast.success("Cita movida exitosamente", { id: 'move-cita' });
+    fetchDatos();
+  } catch (error) {
+    toast.error("Error al mover la cita", { id: 'move-cita' });
+  } finally {
+    setCitaArrastrada(null);
+  }
+};
   async function fetchHorariosDoctor() {
     const { data } = await supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', filtro.profesional_id);
     setHorariosConfigurados(data || []);
@@ -689,7 +772,17 @@ export default function DiarioGlobalPage() {
                                 const deshabilitado = esBloqueoDiaCompleto || !esLaboral || ocupadoCita || esBloqueado;
 
                                 return (
-                                  <div key={h} className="flex items-stretch h-10 border-b border-slate-100 group">
+    <div 
+      key={h} 
+      className={`flex items-stretch h-10 border-b border-slate-100 group ${citaArrastrada && esDropValido(p.user_id, fStr, h, citaArrastrada) ? 'bg-blue-50 border-dashed border-blue-200' : ''}`}
+      onDragOver={(e) => {
+        if (esDropValido(p.user_id, fStr, h, citaArrastrada)) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+        }
+      }}
+      onDrop={(e) => handleDrop(e, p.user_id, fStr, h)}
+    >
                                     <div className="w-16 text-center p-2 text-[9px] font-black border-r border-slate-100 flex items-center justify-center bg-slate-50/50 text-slate-400 group-hover:bg-slate-100">
                                       {h}
                                     </div>
@@ -719,12 +812,15 @@ export default function DiarioGlobalPage() {
                                 const iniciales = getIniciales(cita.pacientes?.nombre, cita.pacientes?.apellido);
 
                                 return (
-                                  <motion.div
-                                    key={cita.id}
-                                    initial={{ opacity: 0, scale: 0.9 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    onClick={() => iniciarReprogramacion(cita)}
-                                    className={`absolute z-10 w-[calc(100%-8px)] left-1 ${estadoStyle.bg} border ${estadoStyle.bg.replace('bg-', 'border-')} rounded-lg p-2 cursor-pointer hover:shadow-lg transition-all duration-200 flex flex-col justify-center overflow-hidden`}
+    <motion.div
+      key={cita.id}
+      draggable // AGREGADO
+      onDragStart={(e: any) => handleDragStart(e, cita)} // AGREGADO
+      onDragEnd={() => setCitaArrastrada(null)} // AGREGADO
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: citaArrastrada?.id === cita.id ? 0.4 : 1, scale: 1 }} // ACTUALIZADO
+      onClick={() => iniciarReprogramacion(cita)}
+      className={`absolute z-10 w-[calc(100%-8px)] left-1 ${estadoStyle.bg} border ${estadoStyle.bg.replace('bg-', 'border-')} rounded-lg p-2 ${citaArrastrada ? 'cursor-grabbing' : 'cursor-pointer'} hover:shadow-lg transition-all duration-200 flex flex-col justify-center overflow-hidden`} // ACTUALIZADO EL CURSOR
                                     style={{ top: `${top}rem`, height: `${height}rem` }}
                                     title={`${cita.pacientes?.nombre} ${cita.pacientes?.apellido} (${ini} - ${fin})`}
                                   >
