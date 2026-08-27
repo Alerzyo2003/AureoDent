@@ -112,15 +112,14 @@ export default function DiarioGlobalPage() {
   const [citaConfirmadaData, setCitaConfirmadaData] = useState<any>(null);
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null);
   const duracionesDisponibles = [15, 30, 45, 60, 90, 120, 150, 180, 210, 240, 270, 300];
-  const alertaRef = useRef(false); // Para evitar doble alerta en StrictMode
+  const alertaRef = useRef(false);
 
   const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Efecto para actualizar la hora cada minuto
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000); // Se actualiza cada 60 segundos
+    }, 60000); 
     return () => clearInterval(timer);
   }, []);
 
@@ -145,68 +144,63 @@ export default function DiarioGlobalPage() {
   useEffect(() => { supabase.auth.getSession().then(({ data }) => { if (data.session) setUsuarioLogueado(data.session.user.id); }); }, []);
   useEffect(() => { if (modalAbierto && filtro.profesional_id) { fetchCitasOcupadas(); fetchHorariosDoctor(); fetchBloqueosSemana(); } }, [semanaAgendamiento, modalAbierto, filtro.profesional_id]);
 
-  // Efecto para el modal de conflictos
   useEffect(() => {
     if (mostrarModalConflictos && citaEnEdicion) { calcularDisponibilidadSemanalConflicto() }
   }, [semanaReagenda, citaEnEdicion, reagendaProps.especialistaId, reagendaProps.duracion])
 
   async function fetchDatos() {
-  setCargando(true);
-  const dias = getDiasLunesSabado(semanaInicio);
-  const inicioSemana = dias[0].toISOString().split('T')[0];
-  const finSemana = dias[5].toISOString().split('T')[0];
-  
-  try {
-    // Obtenemos la sesión del usuario actual
-    const { data: { session } } = await supabase.auth.getSession();
-    const userId = session?.user?.id;
+    setCargando(true);
+    const dias = getDiasLunesSabado(semanaInicio);
+    const inicioSemana = dias[0].toISOString().split('T')[0];
+    const finSemana = dias[5].toISOString().split('T')[0];
     
-    // Obtenemos el perfil para saber si es ADMIN/RECEPCIONISTA
-    const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', userId).maybeSingle();
-    const esAdmin = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
-
-    let queryProfs = supabase.from('profesionales').select('id, nombre, apellido, user_id').eq('activo', true);
-    
-    // Si NO es admin, filtramos solo su profesional asociado
-    if (!esAdmin) {
-      queryProfs = queryProfs.eq('user_id', userId);
-    }
-
-    const { data: profs, error: profsError } = await queryProfs;
-    if (profsError) throw profsError;
-
-    const dentistas = profs || [];
-    const idsDentistas = dentistas.map(p => p.user_id);
-
-    if (dentistas.length > 0) {
-      const [citasRes, dispoRes, bloqueosRes] = await Promise.all([
-        supabase.from('citas').select('id, inicio, fin, estado, pacientes(nombre, apellido), profesional_id, motivo')
-          .in('profesional_id', idsDentistas)
-          .gte('inicio', `${inicioSemana}T00:00:00`)
-          .lte('inicio', `${finSemana}T23:59:59`)
-          .neq('estado', 'cancelada'),
-        supabase.from('disponibilidad_profesional').select('*').in('profesional_id', idsDentistas),
-        supabase.from('bloqueos_agenda').select('*').in('profesional_id', idsDentistas).gte('fecha', inicioSemana).lte('fecha', finSemana)
-      ]);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
       
-      setCitas(citasRes.data || []);
-      setDisponibilidades(dispoRes.data || []);
-      setBloqueos(bloqueosRes.data || []);
-      setProfesionales(dentistas);
+      const { data: perfil } = await supabase.from('perfiles').select('rol').eq('id', userId).maybeSingle();
+      const esAdmin = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
+
+      let queryProfs = supabase.from('profesionales').select('id, nombre, apellido, user_id').eq('activo', true);
       
-      // Si solo hay un profesional (el doctor logueado), fijamos el filtro automáticamente
-      if (!esAdmin && dentistas.length > 0) {
-        setFiltroDoctor(dentistas[0].user_id);
+      if (!esAdmin) queryProfs = queryProfs.eq('user_id', userId);
+
+      const { data: profs, error: profsError } = await queryProfs;
+      if (profsError) throw profsError;
+
+      const dentistas = profs || [];
+      const idsDentistasUserId = dentistas.map(p => p.user_id);
+      const idsDentistasId = dentistas.map(p => p.id); // CORRECCIÓN: Para bloqueos_agenda
+
+      if (dentistas.length > 0) {
+        const [citasRes, dispoRes, bloqueosRes] = await Promise.all([
+          supabase.from('citas').select('id, inicio, fin, estado, pacientes(nombre, apellido), profesional_id, motivo')
+            .in('profesional_id', idsDentistasUserId)
+            .gte('inicio', `${inicioSemana}T00:00:00`)
+            .lte('inicio', `${finSemana}T23:59:59`)
+            .neq('estado', 'cancelada'),
+          supabase.from('disponibilidad_profesional').select('*').in('profesional_id', idsDentistasUserId),
+          // CORRECCIÓN: Usamos idsDentistasId (UUID interno)
+          supabase.from('bloqueos_agenda').select('*').in('profesional_id', idsDentistasId).gte('fecha', inicioSemana).lte('fecha', finSemana)
+        ]);
+        
+        setCitas(citasRes.data || []);
+        setDisponibilidades(dispoRes.data || []);
+        setBloqueos(bloqueosRes.data || []);
+        setProfesionales(dentistas);
+        
+        if (!esAdmin && dentistas.length > 0) {
+          setFiltroDoctor(dentistas[0].user_id);
+        }
       }
+    } catch (error) {
+      console.error(error);
+      toast.error("Error al cargar la agenda");
+    } finally {
+      setCargando(false);
     }
-  } catch (error) {
-    console.error(error);
-    toast.error("Error al cargar la agenda");
-  } finally {
-    setCargando(false);
   }
-}
- 
+  
   const profesionalesFiltrados = useMemo(() => {
     const profsConActividad = profesionales.filter(p => {
         const tieneDispo = disponibilidades.some(d => d.profesional_id === p.user_id);
@@ -219,7 +213,7 @@ export default function DiarioGlobalPage() {
     return doctorSeleccionado ? [doctorSeleccionado] : [];
   }, [filtroDoctor, profesionales, disponibilidades, citas]);
 
-  // 🔥 VALIDADOR DE SLOT LIBRE (sin choque con citas ni bloqueos)
+  // VALIDADOR DE SLOT LIBRE (CORREGIDO PARA USAR ID DE PROFESIONAL EN BLOQUEOS)
   const esSlotLibre = (profId: string, fecha: string, hora: string, duracionMin: number) => {
     const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
     const slotEnd = slotStart + duracionMin * 60000;
@@ -232,8 +226,9 @@ export default function DiarioGlobalPage() {
     });
     if (chocaCita) return false;
 
+    const profObj = profesionales.find(p => p.user_id === profId);
     const chocaBloqueo = bloqueos.some(b => {
-      if (b.profesional_id !== profId || b.fecha !== fecha) return false;
+      if (b.profesional_id !== profObj?.id || b.fecha !== fecha) return false;
       if (!b.hora_inicio || !b.hora_fin) return true;
       const bStart = new Date(`${fecha}T${b.hora_inicio}`).getTime();
       const bEnd = new Date(`${fecha}T${b.hora_fin}`).getTime();
@@ -253,7 +248,6 @@ export default function DiarioGlobalPage() {
   };
 
   const agendarDesdeSlot = (profesional_id: string, hora: string, fecha: string) => {
-    // Validar que el slot con duración por defecto (15 min) esté libre
     if (!esSlotLibre(profesional_id, fecha, hora, 15)) {
       toast.error("El horario seleccionado se solapa con otra cita o con un bloqueo.");
       return;
@@ -298,16 +292,27 @@ export default function DiarioGlobalPage() {
     const dias = getDiasLunesSabado(semanaAgendamiento);
     const inicioSemana = dias[0].toLocaleDateString('sv-SE');
     const finSemana = dias[5].toLocaleDateString('sv-SE');
-    const { data } = await supabase.from('bloqueos_agenda').select('*').eq('profesional_id', filtro.profesional_id).gte('fecha', inicioSemana).lte('fecha', finSemana);
+    
+    // CORRECCIÓN: Buscamos usando el profObj.id
+    const profObj = profesionales.find(p => p.user_id === filtro.profesional_id);
+    if (!profObj) return;
+
+    const { data } = await supabase.from('bloqueos_agenda').select('*').eq('profesional_id', profObj.id).gte('fecha', inicioSemana).lte('fecha', finSemana);
     setBloqueosSemana(data || []);
   }
 
+  // ES HORARIO LABORAL PARA EL MODAL DE AGENDAMIENTO (CORREGIDO HORARIOS ESPECIALES)
   const esHorarioLaboral = (fecha: string, hora: string, duracionMinutos: number) => {
     const diaSemana = new Date(fecha + 'T00:00:00').getDay();
     const slotStart = new Date(`${fecha}T${hora}:00`).getTime();
     const slotEnd = slotStart + duracionMinutos * 60000;
-    return horariosConfigurados.some(h => {
-      if (h.dia_semana !== diaSemana) return false;
+
+    const horariosEspecialesDelDia = horariosConfigurados.filter(h => h.fecha_especifica === fecha);
+    let horariosAUsar = horariosEspecialesDelDia.length > 0 
+      ? horariosEspecialesDelDia 
+      : horariosConfigurados.filter(h => h.dia_semana === diaSemana && !h.fecha_especifica);
+
+    return horariosAUsar.some(h => {
       const inicioLab = new Date(`${fecha}T${h.hora_inicio.substring(0, 5)}:00`).getTime();
       const finLab = new Date(`${fecha}T${h.hora_fin.substring(0, 5)}:00`).getTime();
       return slotStart >= inicioLab && slotEnd <= finLab;
@@ -341,7 +346,6 @@ export default function DiarioGlobalPage() {
   };
 
   const handleSlotClick = (fecha: string, hora: string) => {
-    // Evitar doble alerta en StrictMode
     if (alertaRef.current) return;
     alertaRef.current = true;
     setTimeout(() => { alertaRef.current = false; }, 100);
@@ -365,34 +369,6 @@ export default function DiarioGlobalPage() {
     toggleHora(fecha, hora);
   };
 
-  const handleRevisarPendientes = async (profId: string, fecha: string) => {
-    const loadingToast = toast.loading("Buscando pacientes afectados...");
-    try {
-      const inicioDia = `${fecha}T00:00:00`;
-      const finDia = `${fecha}T23:59:59`;
-
-      const { data: citasAfectadas, error } = await supabase
-        .from('citas')
-        .select(`id, inicio, fin, pacientes (nombre, apellido, telefono, rut)`)
-        .eq('profesional_id', profId)
-        .gte('inicio', inicioDia)
-        .lte('inicio', finDia)
-        .neq('estado', 'cancelada')
-        .order('inicio', { ascending: true });
-
-      if (error) throw error;
-
-      setReagendaProps(prev => ({ ...prev, fecha, especialistaId: profId }));
-      setCitasConflictivas(citasAfectadas || []);
-      setSemanaReagenda(getLunes(new Date(`${fecha}T12:00:00`)));
-      setMostrarModalConflictos(true);
-      toast.dismiss(loadingToast);
-    } catch (error) {
-      toast.dismiss(loadingToast);
-      toast.error("Error al buscar pacientes afectados");
-    }
-  }
-
   async function calcularDisponibilidadSemanalConflicto() {
     setCargandoSlots(true);
     try {
@@ -400,25 +376,42 @@ export default function DiarioGlobalPage() {
       const inicioSemanaStr = dias[0].toISOString().split('T')[0];
       const finSemanaStr = dias[6].toISOString().split('T')[0];
 
-      const { data: b } = await supabase.from('bloqueos_agenda').select('fecha').eq('profesional_id', reagendaProps.especialistaId).gte('fecha', inicioSemanaStr).lte('fecha', finSemanaStr);
-      const { data: d } = await supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', reagendaProps.especialistaId);
-      const { data: c } = await supabase.from('citas').select('inicio, fin').eq('profesional_id', reagendaProps.especialistaId).gte('inicio', `${inicioSemanaStr}T00:00:00`).lte('inicio', `${finSemanaStr}T23:59:59`).neq('estado', 'cancelada');
+      const profNuevo = profesionales.find(p => p.user_id === reagendaProps.especialistaId);
+
+      const [bloqueosRes, dispoRes, citasRes] = await Promise.all([
+        supabase.from('bloqueos_agenda').select('fecha, hora_inicio, hora_fin').eq('profesional_id', profNuevo?.id).gte('fecha', inicioSemanaStr).lte('fecha', finSemanaStr),
+        supabase.from('disponibilidad_profesional').select('*').eq('profesional_id', reagendaProps.especialistaId),
+        supabase.from('citas').select('inicio, fin').eq('profesional_id', reagendaProps.especialistaId).gte('inicio', `${inicioSemanaStr}T00:00:00`).lte('inicio', `${finSemanaStr}T23:59:59`).neq('estado', 'cancelada')
+      ]);
 
       const semanaProcesada = dias.map(dateObj => {
         const dateStr = dateObj.toISOString().split('T')[0];
         const diaSemanaNum = dateObj.getDay();
-        if (b?.some(bl => bl.fecha === dateStr)) return { date: dateStr, dateObj, status: 'bloqueado', slots: [] };
-        const dispoDia = d?.filter(di => (di.dia_semana === diaSemanaNum && !di.fecha_especifica) || di.fecha_especifica === dateStr) || [];
+        
+        const bloqueosDia = bloqueosRes.data?.filter(bl => bl.fecha === dateStr) || [];
+        if (bloqueosDia.some(bl => !bl.hora_inicio || !bl.hora_fin)) return { date: dateStr, dateObj, status: 'bloqueado', slots: [] };
+        
+        // CORRECCIÓN: Separar horarios especiales
+        const dispoEspecialDia = dispoRes.data?.filter(di => di.fecha_especifica === dateStr) || [];
+        const dispoDia = dispoEspecialDia.length > 0 ? dispoEspecialDia : (dispoRes.data?.filter(di => di.dia_semana === diaSemanaNum && !di.fecha_especifica) || []);
+
         if (dispoDia.length === 0) return { date: dateStr, dateObj, status: 'sin_horario', slots: [] };
-        const citasDia = c?.filter(ci => ci.inicio.startsWith(dateStr)).map(ci => ({ inicio: getMinsFromDateStr(ci.inicio), fin: getMinsFromDateStr(ci.fin) })) || [];
+        
+        const citasDia = citasRes.data?.filter(ci => ci.inicio.startsWith(dateStr)).map(ci => ({ inicio: getMinsFromDateStr(ci.inicio), fin: getMinsFromDateStr(ci.fin) })) || [];
+        
         let slotsLibres: string[] = [];
         dispoDia.forEach(bloque => {
           let currTime = tToMins(bloque.hora_inicio);
           const endTime = tToMins(bloque.hora_fin);
           while (currTime + reagendaProps.duracion <= endTime) {
             const slotEnd = currTime + reagendaProps.duracion;
-            const choca = citasDia.some(cita => currTime < cita.fin && slotEnd > cita.inicio);
-            if (!choca) slotsLibres.push(minsToT(currTime));
+            const chocaCita = citasDia.some(cita => currTime < cita.fin && slotEnd > cita.inicio);
+            const chocaBloqueo = bloqueosDia.some(bl => {
+              if(!bl.hora_inicio || !bl.hora_fin) return true;
+              return currTime < tToMins(bl.hora_fin) && slotEnd > tToMins(bl.hora_inicio);
+            });
+
+            if (!chocaCita && !chocaBloqueo) slotsLibres.push(minsToT(currTime));
             currTime += 15;
           }
         });
@@ -617,7 +610,8 @@ export default function DiarioGlobalPage() {
             ) : profesionalesFiltrados.map(p => {
                 const citasDelProfesional = citas.filter(c => c.profesional_id === p.user_id);
                 const disponibilidadesDelProfesional = disponibilidades.filter(d => d.profesional_id === p.user_id);
-                const bloqueosDelProfesional = bloqueos.filter(b => b.profesional_id === p.user_id);
+                // CORRECCIÓN: Filtrar los bloqueos por p.id (UUID tabla) en vez de p.user_id
+                const bloqueosDelProfesional = bloqueos.filter(b => b.profesional_id === p.id);
                 const getHoraLimpias = (fechaString: string) => fechaString.includes('T') ? fechaString.split('T')[1].substring(0, 5) : fechaString.split(' ')[1].substring(0, 5);
 
                 return (
@@ -637,17 +631,24 @@ export default function DiarioGlobalPage() {
                     </div>
                     <div className="flex overflow-x-auto custom-scrollbar">
                       {getDiasLunesSabado(semanaInicio).map(dia => {
-                        const fechaISOActual = getLocalDateISO(dia);
+                        const fStr = getLocalDateISO(dia);
                         const diaSemanaActual = dia.getDay();
-                        const citasDelDia = citasDelProfesional.filter(c => c.inicio.startsWith(fechaISOActual));
-                        const esBloqueoDiaCompleto = bloqueosDelProfesional.some(b => b.fecha === fechaISOActual && (!b.hora_inicio || !b.hora_fin));
+                        const citasDelDia = citasDelProfesional.filter(c => c.inicio.startsWith(fStr));
+                        const esBloqueoDiaCompleto = bloqueosDelProfesional.some(b => b.fecha === fStr && (!b.hora_inicio || !b.hora_fin));
                         
+                        // CORRECCIÓN: Separar Especiales vs Semanales en la Grilla Principal
+                        const dispoEspeciales = disponibilidadesDelProfesional.filter(d => d.fecha_especifica === fStr);
+                        const dispoAUsar = dispoEspeciales.length > 0 
+                          ? dispoEspeciales 
+                          : disponibilidadesDelProfesional.filter(d => d.dia_semana === diaSemanaActual && !d.fecha_especifica);
+
                         const esHoy = getLocalDateISO(dia) === getLocalDateISO(currentTime);
                         const minutosDesdeLas8 = (currentTime.getHours() * 60 + currentTime.getMinutes()) - (8 * 60);
                         const topLineaTiempo = (minutosDesdeLas8 / 15) * 2.5;
-                        const mostrarLineaTiempo = esSemanaActual && minutosDesdeLas8 >= 0 && minutosDesdeLas8 <= ((21 - 8) * 60);
+                        const mostrarLineaTiempo = esSemanaActual && minutosDesdeLas8 >= 0 && minutosDesdeLas8 <= ((21 - 8) * 60) && esHoy;
+                        
                         return (
-                          <div key={fechaISOActual} className="flex-shrink-0 border-r border-slate-100" style={{ width: '180px' }}>
+                          <div key={fStr} className="flex-shrink-0 border-r border-slate-100" style={{ width: '180px' }}>
                             <div className="p-4 text-center border-b border-slate-100 h-[70px] flex flex-col justify-center">
                               <p className="text-xs font-black uppercase text-slate-500">{dia.toLocaleDateString('es-CL', { weekday: 'long' })}</p>
                               <p className="text-xl font-black text-slate-800">{dia.getDate()}</p>
@@ -659,40 +660,49 @@ export default function DiarioGlobalPage() {
                                   <div className="flex-1 border-b-2 border-red-500 border-dashed opacity-60"></div>
                                 </div>
                               )}
-                              {slotsHorarios.map(hora => {
-                              const slotInicioMins = parseInt(hora.split(':')[0]) * 60 + parseInt(hora.split(':')[1]);
+                              {slotsHorarios.map(h => {
+                                const slotInicioMins = parseInt(h.split(':')[0]) * 60 + parseInt(h.split(':')[1]);
+                                const slotStart = new Date(`${fStr}T${h}:00`).getTime();
+                                const slotEnd = slotStart + 15 * 60000;
+
+                                // Limpiado y aislado para este slot específico
                                 const esBloqueado = bloqueosDelProfesional.some(b => {
-                                  if (b.fecha !== fechaISOActual) return false;
+                                  if (b.fecha !== fStr) return false;
                                   if (!b.hora_inicio || !b.hora_fin) return true;
-                                  const bIni = parseInt(b.hora_inicio.split(':')[0]) * 60 + parseInt(b.hora_inicio.split(':')[1]);
-                                  const bFin = parseInt(b.hora_fin.split(':')[0]) * 60 + parseInt(b.hora_fin.split(':')[1]);
-                                  return slotInicioMins >= bIni && slotInicioMins < bFin;
+                                  const bStart = new Date(`${fStr}T${b.hora_inicio}`).getTime();
+                                  const bEnd = new Date(`${fStr}T${b.hora_fin}`).getTime();
+                                  return slotStart < bEnd && slotEnd > bStart;
                                 });
-                                const esDisponible = disponibilidadesDelProfesional.some(d => {
-                                const esDia = (d.fecha_especifica && d.fecha_especifica === fechaISOActual) || (!d.fecha_especifica && d.dia_semana === diaSemanaActual);
-                                if (esDia) {
+
+                                const ocupadoCita = citasDelProfesional.some(c => {
+                                  const cInicio = new Date(c.inicio.replace(' ', 'T')).getTime();
+                                  const cFin = new Date(c.fin.replace(' ', 'T')).getTime();
+                                  return slotStart < cFin && slotEnd > cInicio;
+                                });
+
+                                const esLaboral = dispoAUsar.some(d => {
                                   const dIni = parseInt(d.hora_inicio.split(':')[0]) * 60 + parseInt(d.hora_inicio.split(':')[1]);
                                   const dFin = parseInt(d.hora_fin.split(':')[0]) * 60 + parseInt(d.hora_fin.split(':')[1]);
-                                  return slotInicioMins >= dIni && slotInicioMins < dFin;
-                                }
-                                return false;
-                                }) && esSlotLibre(p.user_id, fechaISOActual, hora, 15);
+                                  return slotInicioMins >= dIni && (slotInicioMins + 15) <= dFin;
+                                });
+
+                                const deshabilitado = esBloqueoDiaCompleto || !esLaboral || ocupadoCita || esBloqueado;
 
                                 return (
-                                  <div key={hora} className="flex items-stretch h-10 border-b border-slate-100 group">
+                                  <div key={h} className="flex items-stretch h-10 border-b border-slate-100 group">
                                     <div className="w-16 text-center p-2 text-[9px] font-black border-r border-slate-100 flex items-center justify-center bg-slate-50/50 text-slate-400 group-hover:bg-slate-100">
-                                      {hora}
+                                      {h}
                                     </div>
                                     <div className="flex-1 relative p-1">
-                                      {esBloqueoDiaCompleto || esBloqueado ? (
+                                      {esBloqueado || esBloqueoDiaCompleto ? (
                                         <div className="h-full w-full rounded-xl bg-rose-50/50 border border-rose-200 border-dashed flex items-center justify-center" title="Horario Bloqueado">
                                           <Ban size={16} className="text-rose-300" />
                                         </div>
-                                      ) : esDisponible ? (
-                                        <div onClick={() => agendarDesdeSlot(p.user_id, hora, fechaISOActual)} className="h-full w-full rounded-xl bg-emerald-100 border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-200 cursor-pointer transition-all flex items-center justify-center" title="Agendar nueva cita">
-                                          <Plus size={16} className="text-emerald-500" />
-                                        </div>
-                                      ) : <div className="h-full w-full rounded-xl bg-slate-50/40" />}
+                                      ) : esLaboral && !ocupadoCita && !deshabilitado ? (
+  <div onClick={() => agendarDesdeSlot(p.user_id, h, fStr)} className="h-full w-full rounded-xl bg-emerald-100 border border-emerald-200 hover:border-emerald-400 hover:bg-emerald-200 cursor-pointer transition-all flex items-center justify-center" title="Agendar nueva cita">
+    <Plus size={16} className="text-emerald-700" />
+  </div>
+) : <div className="h-full w-full rounded-xl bg-slate-50/40" />}
                                     </div>
                                   </div>
                                 );
