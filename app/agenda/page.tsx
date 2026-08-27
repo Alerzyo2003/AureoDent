@@ -1177,6 +1177,8 @@ export default function AgendaPage() {
                                     <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400 uppercase">
                                         <span>RUT: {c.pacientes?.rut || 'S/N'}</span>
                                         <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
+                                        <span className="flex items-center gap-1"><Phone className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> {c.pacientes?.telefono || 'Sin teléfono'}</span>
+                                        <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
                                         <span className="flex items-center gap-1"><User className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> Dr. {doctor?.apellido || 'S/A'}</span>
                                     </div>
                                     
