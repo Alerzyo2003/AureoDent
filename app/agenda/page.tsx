@@ -76,6 +76,8 @@ export default function AgendaPage() {
   const [busquedaAgenda, setBusquedaAgenda] = useState('')
   const [anuladasCount, setAnuladasCount] = useState(0);
   const dateInputRef = useRef<HTMLInputElement>(null);
+  const [citasAnuladas, setCitasAnuladas] = useState<any[]>([]);
+  const [modalAnuladasAbierto, setModalAnuladasAbierto] = useState(false);
   const [realtimeTrigger, setRealtimeTrigger] = useState(0);
   const [modalOnlineAbierto, setModalOnlineAbierto] = useState(false);
 
@@ -258,8 +260,9 @@ export default function AgendaPage() {
         return;
     }
 
-    const anuladas = citasData.filter((c: any) => c.estado === 'cancelada').length;
-    setAnuladasCount(anuladas);
+    const anuladas = citasData.filter((c: any) => c.estado === 'cancelada');
+    setAnuladasCount(anuladas.length);
+    setCitasAnuladas(anuladas);
 
     const citasActivas = citasData.filter((c: any) => c.estado !== 'cancelada');
     const pacienteIds = [...new Set(citasActivas.map((c: any) => c.paciente_id).filter(Boolean))];
@@ -1092,11 +1095,13 @@ export default function AgendaPage() {
             <CalendarDays className="text-[#C9A24B] md:w-[16px] md:h-[16px]" size={18} />
             <span className="font-bold text-sm md:text-xs uppercase tracking-widest">{citasFiltradas.length} Citas hoy</span>
             {anuladasCount > 0 && (
-                <>
-                   <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300 mx-1"></span>
-                   <span className="font-bold text-sm md:text-xs uppercase tracking-widest text-red-500">{anuladasCount} Anuladas</span>
-                </>
-            )}
+        <>
+            <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300 mx-1"></span>
+            <button onClick={() => setModalAnuladasAbierto(true)} className="font-bold text-sm md:text-xs uppercase tracking-widest text-red-500 hover:text-red-700 transition-colors">
+                {anuladasCount} Anuladas
+            </button>
+        </>
+    )}
          </div>
       </div>
 
@@ -1174,13 +1179,13 @@ export default function AgendaPage() {
                                     <h3 className="text-base font-black text-[#0A111F] uppercase tracking-wide leading-tight">{pNombre} {pApellido}</h3>
                                 </div>
                                 <div className="flex flex-col gap-1 mt-1.5">
-                                    <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400 uppercase">
-                                        <span>RUT: {c.pacientes?.rut || 'S/N'}</span>
-                                        <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
-                                        <span className="flex items-center gap-1"><Phone className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> {c.pacientes?.telefono || 'Sin teléfono'}</span>
-                                        <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
-                                        <span className="flex items-center gap-1"><User className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> Dr. {doctor?.apellido || 'S/A'}</span>
-                                    </div>
+                              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-400 uppercase">
+                                  <span>RUT: {c.pacientes?.rut || 'S/N'}</span>
+                                  <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
+                                  <span className="flex items-center gap-1"><Phone className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> {c.pacientes?.telefono || 'Sin teléfono'}</span>
+                                  <span className="hidden sm:inline-block w-1 h-1 rounded-full bg-slate-300"></span>
+                                  <span className="flex items-center gap-1"><User className="text-slate-400 md:w-[12px] md:h-[12px]" size={14} /> Dr. {doctor?.apellido || 'S/A'}</span>
+                              </div>
                                     
                                     {c.motivo && !c.motivo.includes('Online') && (
                                         <div className="flex items-center gap-1.5 text-[11px] md:text-[10px] font-black uppercase tracking-widest mt-1 w-fit px-2 py-1 rounded-md bg-slate-50 text-slate-500 border border-slate-200">
@@ -2021,6 +2026,64 @@ if(seleccionado) {
                         Finalizar sin enviar
                       </button>
                     </div>
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+          {/* MODAL DE CITAS ANULADAS */}
+          <AnimatePresence>
+            {modalAnuladasAbierto && (
+              <div className="fixed inset-0 z-[99999] flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
+                <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-2xl max-h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative text-slate-900 text-left">
+                  <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left" style={{ background: `linear-gradient(135deg, ${NAVY}, #081420)` }}>
+                    <div className="flex items-center gap-4 text-left">
+                      <div className="p-3 rounded-2xl shadow-sm" style={{ backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.6)' }}><Trash2 className="text-red-400" size={24} /></div>
+                      <div>
+                        <h2 className="font-display text-lg md:text-xl tracking-tight text-white leading-none">Citas Anuladas</h2>
+                        <p className="text-[11px] md:text-[10px] font-bold uppercase tracking-widest mt-1 text-red-300">Pacientes que cancelaron</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setModalAnuladasAbierto(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-all text-left"><X className="md:w-[20px] md:h-[20px]" size={24} /></button>
+                  </div>
+                  
+                  <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50/50 custom-scrollbar space-y-4">
+                    {citasAnuladas.map(cita => {
+                      const horaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+                      const doctor = profesionales.find(p => p.user_id === cita.profesional_id);
+                      
+                      return (
+                        <div key={cita.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 opacity-75 hover:opacity-100 transition-opacity">
+                          <div className="flex items-center gap-4">
+                             <div className="w-12 h-12 rounded-xl bg-red-50 text-red-500 flex items-center justify-center font-black shrink-0 border border-red-100">
+                                 {horaFormat}
+                             </div>
+                             <div>
+                                 <h4 className="font-black text-sm text-slate-800 uppercase leading-none">{cita.pacientes?.nombre} {cita.pacientes?.apellido}</h4>
+                                 <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                    <span>RUT: {cita.pacientes?.rut || 'S/N'}</span>
+                                    <span>•</span>
+                                    <span>Tel: {cita.pacientes?.telefono || 'N/A'}</span>
+                                 </div>
+                                 <div className="mt-1 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                    <span>Dr(a). {doctor?.apellido || 'S/A'}</span>
+                                 </div>
+                             </div>
+                          </div>
+                          
+                          <div className="flex gap-2 w-full sm:w-auto">
+                             {cita.pacientes?.telefono && (
+                               <a href={`https://wa.me/${cita.pacientes?.telefono.replace(/\D/g, '')}`} target="_blank" rel="noreferrer" className="flex-1 sm:flex-none p-3 sm:p-2 bg-slate-50 text-slate-600 hover:text-emerald-500 rounded-xl border border-slate-200 transition-colors flex justify-center items-center" title="Contactar por WhatsApp">
+                                 <MessageSquareText size={18} />
+                               </a>
+                             )}
+                             <Link href={`/pacientes/${cita.paciente_id}`} onClick={() => setModalAnuladasAbierto(false)} className="flex-1 sm:flex-none p-3 sm:p-2 bg-slate-50 text-slate-600 hover:text-blue-500 rounded-xl border border-slate-200 transition-colors flex justify-center items-center" title="Ver ficha del paciente">
+                                <User size={18} />
+                             </Link>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </motion.div>
               </div>
