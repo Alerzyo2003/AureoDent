@@ -95,18 +95,29 @@ export default function GestionCajasPage() {
       const { data: { user }, error: authError } = await supabase.auth.getUser()
       if (authError || !user) throw new Error("No autenticado")
 
+      // 1. BUSCAR EL ÚLTIMO NÚMERO DE CAJA
+      const { data: ultimaCaja } = await supabase
+        .from('sesiones_caja')
+        .select('numero_caja')
+        .order('numero_caja', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      
+      const siguienteNumero = (ultimaCaja?.numero_caja || 0) + 1;
+
       const nuevaCaja = {
         usuario_id: user.id,
         nombre_responsable: responsable,
         monto_apertura: Number(montoInicial) || 0,
         estado: 'abierta',
-        fecha_apertura: new Date().toISOString()
+        fecha_apertura: new Date().toISOString(),
+        numero_caja: siguienteNumero // 2. ASIGNAMOS EL NÚMERO
       }
 
       const { error } = await supabase.from('sesiones_caja').insert([nuevaCaja])
       if (error) throw error
 
-      toast.success("Caja abierta correctamente")
+      toast.success(`Caja #${siguienteNumero} abierta correctamente`)
       setModalApertura(false)
       setMontoInicial('0')
       fetchCajas()
@@ -231,7 +242,7 @@ export default function GestionCajasPage() {
             <div className="lg:col-span-2 bg-[#0A1629] rounded-3xl p-8 relative flex flex-col justify-between shadow-xl min-h-[340px]">
               <div className="relative z-10">
                 <span className="bg-[#C49A5C] text-white text-[10px] font-bold uppercase tracking-widest px-5 py-2 rounded-full inline-block mb-6 shadow-sm">
-                  Turno Activo
+                  Turno Activo {cajaActiva.numero_caja ? `#${cajaActiva.numero_caja}` : ''}
                 </span>
                 <h3 className="text-3xl md:text-4xl font-black text-white uppercase tracking-tight">{cajaActiva.nombre_responsable}</h3>
                 <div className="flex items-center gap-6 text-slate-300 text-xs font-medium mt-3">
@@ -255,12 +266,21 @@ export default function GestionCajasPage() {
                   </div>
                 </div>
 
-                <button 
-                  onClick={() => handleCerrarCaja(cajaActiva)}
-                  className="bg-[#C49A5C] text-white px-8 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest flex items-center gap-2.5 hover:bg-[#b58b4f] transition-all shadow-lg shadow-[#C49A5C]/20 w-full md:w-auto justify-center"
-                >
-                  <Lock size={18} /> Cerrar Turno
-                </button>
+                <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto mt-6 md:mt-0">
+                  <button 
+                    onClick={() => router.push(`/cajas/${cajaActiva.id}`)}
+                    className="bg-white/10 text-white px-8 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2.5 hover:bg-white/20 transition-all border border-white/20 w-full sm:w-auto"
+                  >
+                    <Eye size={18} /> Ver Info
+                  </button>
+                  
+                  <button 
+                    onClick={() => handleCerrarCaja(cajaActiva)}
+                    className="bg-[#C49A5C] text-white px-8 py-4 rounded-2xl font-bold text-xs uppercase tracking-widest flex items-center justify-center gap-2.5 hover:bg-[#b58b4f] transition-all shadow-lg shadow-[#C49A5C]/20 w-full sm:w-auto"
+                  >
+                    <Lock size={18} /> Cerrar Turno
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -330,6 +350,7 @@ export default function GestionCajasPage() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-transparent text-[10px] text-[#C49A5C] uppercase tracking-[0.15em] font-black border-b border-slate-100">
+                  <th className="px-8 py-5">N°</th>
                   <th className="px-8 py-5">Fecha</th>
                   <th className="px-8 py-5">Usuario</th>
                   <th className="px-8 py-5">Hora Inicio</th>
@@ -342,6 +363,9 @@ export default function GestionCajasPage() {
               <tbody className="divide-y divide-slate-50 text-sm">
                 {cajasCerradas.map((caja) => (
                   <tr key={caja.id} className="hover:bg-slate-50/50 transition-colors group">
+                    <td className="px-8 py-6 font-black text-[#C49A5C]">
+                      {caja.numero_caja ? `#${caja.numero_caja}` : '-'}
+                    </td>
                     <td className="px-8 py-6 font-bold text-[#0B1527]">{new Date(caja.fecha_apertura).toLocaleDateString('es-CL')}</td>
                     <td className="px-8 py-6 font-bold text-[#0B1527]">{caja.nombre_responsable}</td>
                     <td className="px-8 py-6 text-slate-500 font-medium">{new Date(caja.fecha_apertura).toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})}</td>
@@ -352,6 +376,7 @@ export default function GestionCajasPage() {
                       <button 
                         onClick={() => router.push(`/cajas/${caja.id}`)}
                         className="p-2.5 bg-[#FCF8F2] text-[#C49A5C] rounded-xl hover:bg-[#C49A5C] hover:text-white transition-all inline-flex"
+                        title="Ver Detalles"
                       >
                         <Eye size={18} />
                       </button>
