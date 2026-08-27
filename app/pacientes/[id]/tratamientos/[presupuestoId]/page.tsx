@@ -36,14 +36,21 @@ const LESIONES_LISTA = [
 ];
 
 const ICONOS_DISPONIBLES = [
-  { id: "extraccion", label: "Extracción", icon: "extraccion" },
+  { id: "extraccion", label: "Extracción Simple", icon: "extraccion" },
+  { id: "cirugia", label: "Ext. Compleja / Cirugía", icon: "cirugia" },
   { id: "endodoncia", label: "Endodoncia", icon: "endodoncia" },
-  { id: "restauracion", label: "Restauración", icon: "restauracion" },
+  { id: "restauracion", label: "Restauración (Resina)", icon: "restauracion" },
+  { id: "incrustacion", label: "Incrustación", icon: "incrustacion" },
+  { id: "carilla", label: "Carilla Estética", icon: "carilla" },
   { id: "corona", label: "Corona", icon: "corona" },
   { id: "implante", label: "Implante", icon: "implante" },
+  { id: "implante_corona", label: "Implante + Corona", icon: "implante_corona" },
   { id: "perno", label: "Perno Muñón", icon: "perno" },
-  { id: "rayos", label: "Rayos-X", icon: "rayos" },
+  { id: "ortodoncia", label: "Ortodoncia (Bracket)", icon: "ortodoncia" },
   { id: "removible", label: "Prótesis Removible", icon: "removible" },
+  { id: "fija", label: "Prótesis Fija / Puente", icon: "fija" },
+  { id: "sellante", label: "Sellante", icon: "sellante" },
+  { id: "rayos", label: "Rayos-X", icon: "rayos" },
   { id: "limpieza", label: "Limpieza/Pulido", icon: "limpieza" },
   { id: "caries", label: "Caries", icon: "caries" },
   { id: "sano", label: "Diente Sano", icon: "sano" },
@@ -177,14 +184,11 @@ export default function DetalleTratamientoPage() {
       !acciones.some(a => a.id === h.id || a.tempId === h.tempId)
     );
 
-    const esImportado = presupuestoData && presupuestoData.id_dentalink;
-    const accionesParaOdontograma = acciones.filter(a => {
-        if (esImportado) return a.estado === 'realizado';
-        return true; 
-    });
+    // Quitamos la restricción para que los pendientes SÍ se dibujen en rojo
+    const accionesParaOdontograma = acciones.filter(a => a.estado !== 'cancelada');
 
     return [...historicasFiltradas, ...accionesParaOdontograma];
-  }, [acciones, historialPaciente, presupuestoData]);
+  }, [acciones, historialPaciente]);
   
   const obtenerItemsDelDiente = (id: number) => {
     return todasLasAccionesBoca.filter(a => 
@@ -1747,7 +1751,13 @@ if (profesionalRowId) {
                           <tr key={`print-item-${idx}`} style={{ borderBottom: '1px solid #e2e8f0' }}>
                             <td style={{ padding: '8px', fontWeight: 600 }}>{estadoBase}<br/><span style={{fontSize: 9, color: '#64748b', fontWeight: 'normal'}}>{labInfo}</span></td>
                             <td style={{ padding: '8px', textAlign: 'center' }}>{item.zona ? item.zona : (item.diente_id || '-')}{item.cara ? ` (${item.cara})` : ''}</td>
-                            <td style={{ padding: '8px' }}>{item.display_nombre}</td>
+                            <td style={{ padding: '6px 8px' }}>
+  {item.display_nombre}
+  <br/>
+  <span style={{fontSize: 9, color: '#64748b', fontWeight: 'normal'}}>
+    Dr(a). {profesionales.find(p => p.user_id === item.profesional_id)?.apellido || 'Sin asignar'}
+  </span>
+</td>
                             <td style={{ padding: '8px', textAlign: 'right' }}>${Number(item.precio_base || item.display_pactado).toLocaleString('es-CL')}</td>
                             <td style={{ padding: '8px', textAlign: 'right' }}>{item.descuento > 0 ? `${item.descuento}%` : '0%'}</td>
                             <td style={{ padding: '8px', textAlign: 'right', fontWeight: 700 }}>${Number(item.display_pactado).toLocaleString('es-CL')}</td>
@@ -2105,7 +2115,13 @@ if (profesionalRowId) {
                                 {item.cara && <span className="text-[8px] opacity-70 mt-1">CARA {item.cara}</span>}
                               </div>
                             </td>
-                            <td className="px-6 py-5 font-black uppercase text-slate-800 text-[11px]">{item.display_nombre}</td>
+                            <td className="px-6 py-5 font-black uppercase text-slate-800 text-[11px]">
+  {item.display_nombre}
+  <div className="text-[9px] font-bold text-slate-400 mt-1 flex items-center gap-1 normal-case tracking-normal">
+     <User size={10} />
+     {profesionales.find(p => p.user_id === item.profesional_id) ? `Dr(a). ${profesionales.find(p => p.user_id === item.profesional_id)?.apellido}` : 'Sin asignar'}
+  </div>
+</td>
                             
                             <td className="px-6 py-5 text-center">
                               <div className="flex items-center justify-center gap-1">
@@ -2841,11 +2857,15 @@ if (profesionalRowId) {
                                       {isSelected && <CheckCircle2 className="text-white" size={16}/>}
                                    </div>
                                    <div>
-                                     <p className="text-[10px] font-black text-slate-400 uppercase leading-none">
-                                       {item.zona ? item.zona : `Pieza ${item.diente_id || 'General'}`} {item.cara && `- Cara ${item.cara}`}
-                                     </p>
-                                     <p className="text-xs font-black text-slate-800 uppercase mt-1 leading-tight">{item.display_nombre}</p>
-                                   </div>
+  <p className="text-[10px] font-black text-slate-400 uppercase leading-none">
+    {item.zona ? item.zona : `Pieza ${item.diente_id || 'General'}`} {item.cara && `- Cara ${item.cara}`}
+  </p>
+  <p className="text-xs font-black text-slate-800 uppercase mt-1 leading-tight">{item.display_nombre}</p>
+  <p className="text-[9px] font-bold text-slate-500 mt-1 flex items-center gap-1 normal-case">
+     <User size={10} /> 
+     {profesionales.find(p => p.user_id === item.profesional_id) ? `Dr(a). ${profesionales.find(p => p.user_id === item.profesional_id)?.apellido}` : 'Sin asignar'}
+  </p>
+</div>
                                 </div>
                               )
                             })
@@ -3030,9 +3050,13 @@ if (profesionalRowId) {
                                    </svg>
                                  </div>
                                  <div className="flex flex-col">
-                                    {item.zona && <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{item.zona}</span>}
-                                    <p className="text-[10px] font-black uppercase text-slate-800 leading-tight mt-0.5">{item.display_nombre}</p>
-                                 </div>
+   {item.zona && <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{item.zona}</span>}
+   <p className="text-[10px] font-black uppercase text-slate-800 leading-tight mt-0.5">{item.display_nombre}</p>
+   <span className="text-[8px] font-bold text-slate-400 mt-1 flex items-center gap-1 normal-case tracking-normal">
+      <User size={8} /> 
+      {profesionales.find(p => p.user_id === item.profesional_id) ? `Dr(a). ${profesionales.find(p => p.user_id === item.profesional_id)?.apellido}` : 'Sin asignar'}
+   </span>
+</div>
                               </div>
 
                               <div className="flex justify-between items-center">
@@ -3268,12 +3292,16 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
   const tienePendientes = tratamientosEnPieza.some((i:any) => i.estado !== 'realizado');
   
   const isAusenteManual = hallazgos.includes('Ausente');
-  const isExodonciaRealizada = Array.isArray(itemsDiente) && itemsDiente.some((i:any) => {
+  const exodonciaItem = Array.isArray(itemsDiente) ? itemsDiente.find((i:any) => {
       const n = String(i.display_nombre).toLowerCase();
       const ico = String(i.icono_tipo || "").toLowerCase();
       return n.includes('extrac') || n.includes('exodoncia') || ico.includes('extrac');
-  });
-  const isAusente = isAusenteManual || isExodonciaRealizada;
+  }) : null;
+  const isAusente = isAusenteManual || !!exodonciaItem;
+  let strokeExodoncia = "#0f172a";
+  if (exodonciaItem) {
+      strokeExodoncia = exodonciaItem.estado === 'realizado' ? "#059669" : "#ef4444";
+  }
   
   let elementosRaiz: any[] = hallazgos.map((h: string) => ({ nombre: h, icono: null, isManual: true }));
   
@@ -3333,7 +3361,7 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
           <path d={getP(id)} fill={`url(#g-${id})`} stroke={stroke} strokeWidth="4" strokeLinejoin="round" />
           
           {isAusente ? (
-             <g stroke={isExodonciaRealizada ? "#059669" : "#ef4444"} strokeWidth="12" strokeLinecap="round" opacity="0.8">
+             <g stroke={strokeExodoncia} strokeWidth="12" strokeLinecap="round" opacity="0.8">
                <line x1="10" y1="20" x2="90" y2="100" />
                <line x1="90" y1="20" x2="10" y2="100" />
              </g>
@@ -3363,36 +3391,64 @@ function LogoRender({ hallazgo, iconoKey, colorOverride, isRealizado, isPendient
   const isLesion = LESIONES_LISTA.some(l => l.toLowerCase() === originalName);
   const isMalEstado = originalName.includes("mal estado") || originalName.includes("fractu") || originalName.includes("infec");
   
-  let color = "#2563eb"; 
+  let color = "#2563eb"; // Azul por defecto
   if (colorOverride) color = colorOverride;
-  else if (isRealizado) color = "#059669"; 
-  else if (isPendiente) color = "#ef4444"; 
-  else if (isLesion || isMalEstado) color = "#0f172a"; 
-
+  else if (isRealizado) color = "#059669"; // Verde realizado
+  else if (isPendiente) color = "#ef4444"; // Rojo pendiente
+  else if (isLesion || isMalEstado) color = "#0f172a"; // Negro lesión
+  
   const patternId = `hash-${Math.random().toString(36).substr(2, 9)}`;
   const pattern = isMalEstado ? (<defs><pattern id={patternId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke={color} strokeWidth="3" /></pattern></defs>) : null;
   const fill = isMalEstado ? `url(#${patternId})` : color;
   
+  // -- FORMAS ESPECÍFICAS SEGÚN TIPO --
   if (h === "otro" || h.includes("estrella")) return <g>{pattern}<polygon points="50,15 61,35 83,38 68,54 71,76 50,66 29,76 32,54 17,38 39,35" fill={fill} /></g>;
   if (h.includes("erosi") || h.includes("abfrac")) return <g>{pattern}<path d="M 25 80 Q 50 100 75 80" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" /></g>;
   if (h.includes("atrici")) return <g>{pattern}<line x1="20" y1="10" x2="80" y2="10" stroke={color} strokeWidth="10" strokeLinecap="round" /></g>;
   if (h.includes("infecci")) return <g>{pattern}<circle cx="50" cy="110" r="14" fill={fill} /></g>;
   if (h.includes("fractu")) return <path d="M 65 10 L 45 50 L 60 50 L 35 100" stroke={color} strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" fill="none" />;
   if (h.includes("movilidad")) return <g stroke={color} strokeWidth="6" fill="none" strokeLinecap="round"><path d="M 15 30 Q -5 60 15 90" /><path d="M 85 30 Q 105 60 85 90" /></g>;
+  
+  // Endodoncia
   if (h.includes("endo")) return <g><path d="M 35 25 L 35 95 M 65 25 L 65 95" stroke={isMalEstado ? "url(#" + patternId + ")" : color} strokeWidth="8" strokeLinecap="round" /></g>;
+  
+  // Implantes
+  if (h.includes("implante_corona") || (h.includes("implante") && h.includes("corona"))) return <g><rect x="42" y="55" width="16" height="40" fill={fill} rx="4" /><path d="M 25 55 Q 50 10 75 55 Z" fill="none" stroke={color} strokeWidth="8" strokeLinejoin="round" /></g>;
   if (h.includes("impla")) return <g fill={fill}><rect x="40" y="20" width="20" height="70" rx="4" /><line x1="32" y1="35" x2="68" y2="35" stroke={color} strokeWidth="6" strokeLinecap="round"/><line x1="32" y1="55" x2="68" y2="55" stroke={color} strokeWidth="6" strokeLinecap="round"/><line x1="32" y1="75" x2="68" y2="75" stroke={color} strokeWidth="6" strokeLinecap="round"/></g>;
+  
+  // Rehabilitación / Prótesis Fija
   if (h.includes("perno") || h.includes("muñón") || h.includes("munon")) return <path d="M 25 20 L 75 20 L 50 90 Z" fill={fill} stroke={color} strokeWidth="4" strokeLinejoin="round" />;
+  if (h.includes("incrustaci")) return <polygon points="30,30 70,30 60,70 40,70" fill={fill} />;
+  if (h.includes("carilla")) return <path d="M 20 20 Q 80 50 20 80 Q 40 50 20 20 Z" fill={fill} opacity="0.9" />;
   if (h.includes("provisoria")) return <g><circle cx="50" cy="50" r="35" fill={isMalEstado ? fill : "none"} stroke={color} strokeWidth="6" /><text x="50" y="65" textAnchor="middle" fontSize="40" fontWeight="900" fill={isMalEstado ? "#fff" : color}>P</text></g>;
   if (h.includes("corona")) return <circle cx="50" cy="50" r="35" fill={isMalEstado ? fill : "none"} stroke={color} strokeWidth="6" />;
+  
+  // Prótesis Removible y Fija
+  if (h.includes("fija") || h.includes("puente")) return <g stroke={color} strokeWidth="14" strokeLinecap="round"><line x1="10" y1="50" x2="90" y2="50" /><path d="M 20 50 L 20 80 M 80 50 L 80 80" strokeWidth="8"/></g>;
   if (h.includes("protesis") || h.includes("removible")) return <g stroke={color} strokeWidth="8" strokeLinecap="round"><line x1="15" y1="40" x2="85" y2="40" /><line x1="15" y1="60" x2="85" y2="60" /></g>;
-  if (h.includes("sellante")) return <path d="M 20 30 Q 50 50 80 30" fill="none" stroke={color} strokeWidth="8" strokeLinecap="round" />;
+  
+  // Ortodoncia
+  if (h.includes("ortodoncia") || h.includes("bracket")) return <g><rect x="35" y="35" width="30" height="30" fill="none" stroke={color} strokeWidth="8" rx="6" /><line x1="5" y1="50" x2="95" y2="50" stroke={color} strokeWidth="6" strokeLinecap="round" /></g>;
+  
+  // Prevención
+  if (h.includes("sellante")) return <path d="M 15 35 Q 35 15 50 35 T 85 35" fill="none" stroke={color} strokeWidth="10" strokeLinecap="round" />;
+  if (h.includes("limpieza") || h.includes("pulido") || h.includes("destartraje") || h.includes("profilaxis")) return <g fill={color}><circle cx="30" cy="30" r="10"/><circle cx="75" cy="45" r="8"/><circle cx="45" cy="75" r="14"/></g>;
+  
+  // Cirugía y Exodoncias
+  if (h.includes("cirugia") || h.includes("compleja")) return <g stroke={color} strokeWidth="8" strokeLinecap="round"><circle cx="50" cy="50" r="38" fill="none"/><line x1="30" y1="30" x2="70" y2="70" /><line x1="70" y1="30" x2="30" y2="70" /></g>;
   if (h.includes("rr") || h.includes("residuo radicular")) return <g><rect x="15" y="30" width="70" height="40" rx="8" fill={color} /><text x="50" y="58" fill="#fff" fontSize="28" fontWeight="900" textAnchor="middle">RR</text></g>;
   if (h.includes("extrac") || h.includes("exodoncia") || h.includes("ausente")) return <g stroke={color} strokeWidth="12" strokeLinecap="round" opacity="0.8"><line x1="15" y1="15" x2="85" y2="85" /><line x1="85" y1="15" x2="15" y2="85" /></g>;
-  if (h.includes("limpieza") || h.includes("pulido") || h.includes("destartraje") || h.includes("profilaxis")) return <g fill={color}><circle cx="30" cy="30" r="10"/><circle cx="75" cy="45" r="8"/><circle cx="45" cy="75" r="14"/></g>;
+  
+  // Diagnóstico
   if (h.includes("rayos") || h.includes("radiografia") || h.includes("scanner") || h.includes("panoramica")) return <g stroke={color} strokeWidth="8" fill="none"><rect x="15" y="20" width="70" height="60" rx="8" /><circle cx="50" cy="50" r="16"/></g>;
+  
   if (h.includes("sano")) return <path d="M 25 50 L 45 70 L 80 30" stroke={color} strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" fill="none" />;
-  if (h.includes("caries") || h.includes("restauraci") || h.includes("amalgama") || h.includes("resina") || h.includes("ionomero")) return <g>{pattern}<path d="M 35 35 Q 50 20 65 35 Q 80 50 65 65 Q 50 80 35 65 Q 20 50 35 35 Z" fill={fill} /></g>;
+  
+  // Caries y Restauraciones Genéricas
+  if (h.includes("restauraci") || h.includes("resina") || h.includes("ionomero")) return <g>{pattern}<rect x="30" y="30" width="40" height="40" rx="10" fill={fill} /></g>;
 
+  // Caries y Amalgamas (Diseño irregular / trébol)
+  if (h.includes("caries") || h.includes("amalgama")) return <g>{pattern}<path d="M 35 35 Q 50 20 65 35 Q 80 50 65 65 Q 50 80 35 65 Q 20 50 35 35 Z" fill={fill} /></g>;
   return <circle cx="50" cy="50" r="25" fill={fill} opacity="0.8" />;
 }
 const commonSvgProps = { viewBox: "0 0 100 100", className: "w-4 h-4 text-slate-400 group-hover:text-blue-500", stroke: "currentColor", fill: "none", strokeWidth: "10" };
