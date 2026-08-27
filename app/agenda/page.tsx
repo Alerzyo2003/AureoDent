@@ -396,8 +396,7 @@ export default function AgendaPage() {
             const fechaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' });
             const horaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
             const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
-            const mensaje = `Hola ${cita.pacientes?.nombre}, tu solicitud de hora para el día ${fechaFormat} a las ${horaFormat} hrs ha sido validada y agendada con éxito.\n\nPor favor confirma tu asistencia haciendo clic en el siguiente enlace:\n${link}\n\n¡Te esperamos en Clínica Dignidad!`;
-            window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
+const mensaje = `Hola ${cita.pacientes?.nombre} ${cita.pacientes?.apellido}, tu solicitud de hora para el día ${fechaFormat} a las ${horaFormat} hrs ha sido validada y agendada con éxito.\n\nPor favor confirma tu asistencia haciendo clic en el siguiente enlace:\n${link}\n\n¡Te esperamos en Clínica Dignidad!`;            window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
         } else {
             toast.warning('La cita fue aprobada, pero el paciente no tiene teléfono registrado.');
         }
@@ -602,8 +601,7 @@ export default function AgendaPage() {
       
       const link = `https://confirmar-cita-dignidad.vercel.app/confirmar/${cita.id}`;
       
-      const mensaje = `Hola ${cita.pacientes?.nombre}, te escribimos de Clínica Dignidad para recordar tu cita con el/la ${nombreDoctor} el día ${fechaCita} a las ${hora} hrs.\n\n📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n⚠️ Importante: Debido a la alta demanda de horas, si tu cita no es confirmada el bloque será asignado a otro paciente.\n\nPor favor confirma tu asistencia en el siguiente enlace:\n${link}`;
-      
+const mensaje = `Hola ${cita.pacientes?.nombre} ${cita.pacientes?.apellido}, te escribimos de Clínica Dignidad para recordar tu cita con el/la ${nombreDoctor} el día ${fechaCita} a las ${hora} hrs.\n\n📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n⚠️ Importante: Debido a la alta demanda de horas, si tu cita no es confirmada el bloque será asignado a otro paciente.\n\nPor favor confirma tu asistencia en el siguiente enlace:\n${link}`;      
       window.open(`https://wa.me/${num}?text=${encodeURIComponent(mensaje)}`, '_blank');
   }
   
@@ -613,8 +611,7 @@ export default function AgendaPage() {
         const { data: items } = await supabase.from('presupuesto_items').select('observacion, precio_pactado, abonado, prestaciones:prestacion_id("Nombre Accion", "Nombre")').eq('presupuesto_id', presupuestoId).neq('estado', 'cancelada');
         if (!items || items.length === 0) { toast.error("El plan seleccionado no contiene tratamientos activos.", { id: toastId }); return; }
         let total = 0; let abonado = 0;
-        let detalleText = `Hola ${cita.pacientes?.nombre}, te compartimos el detalle actualizado de tu Plan de Tratamiento Dental:\n\n`;
-        items.forEach((item: any) => {
+let detalleText = `Hola ${cita.pacientes?.nombre} ${cita.pacientes?.apellido}, te compartimos el detalle actualizado de tu Plan de Tratamiento Dental:\n\n`;        items.forEach((item: any) => {
             let nombreDisplay = item.prestaciones?.["Nombre Accion"] || item.prestaciones?.["Nombre"] || 'Tratamiento';
             if (item.observacion && item.observacion.includes('|')) nombreDisplay = item.observacion.split('|')[0].trim();
             let precio = Number(item.precio_pactado || 0);
@@ -1533,8 +1530,7 @@ if(seleccionado) {
                        <button onClick={() => setModalEnvioPresupuesto({...modalEnvioPresupuesto, abierto: false})} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-colors"><X className="md:w-[18px] md:h-[18px]" size={20} /></button>
                     </div>
                     <div className="p-6 md:p-8 space-y-4">
-                        <p className="text-sm md:text-xs font-bold text-slate-500 leading-relaxed">Puedes editar el texto antes de enviarlo. Al hacer clic en enviar, se abrirá WhatsApp Web/Móvil con este mensaje listo para tu paciente <span className="font-black text-slate-800">{modalEnvioPresupuesto.cita?.pacientes?.nombre}</span>.</p>
-                        <textarea 
+<p className="text-sm md:text-xs font-bold text-slate-500 leading-relaxed">Puedes editar el texto antes de enviarlo. Al hacer clic en enviar, se abrirá WhatsApp Web/Móvil con este mensaje listo para tu paciente <span className="font-black text-slate-800">{modalEnvioPresupuesto.cita?.pacientes?.nombre} {modalEnvioPresupuesto.cita?.pacientes?.apellido}</span>.</p>                        <textarea 
                             className="w-full h-64 p-4 bg-slate-50 border border-slate-200 rounded-xl font-medium text-base md:text-sm outline-none focus:border-[#C9A24B] transition-all shadow-inner resize-none custom-scrollbar"
                             value={modalEnvioPresupuesto.texto}
                             onChange={(e) => setModalEnvioPresupuesto({...modalEnvioPresupuesto, texto: e.target.value})}
