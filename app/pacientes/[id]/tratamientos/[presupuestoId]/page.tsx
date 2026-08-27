@@ -3311,13 +3311,16 @@ function DienteVisual({ id, seleccionado, onSelect, onContextMenu, onFaceClick, 
           const n = String(t.display_nombre).toLowerCase();
           const ico = String(t.icono_tipo || "").toLowerCase();
           const esRaiz = n.includes("endo") || ico.includes("endo") || 
-                         n.includes("impla") || ico.includes("impla") || 
-                         n.includes("perno") || ico.includes("perno") || 
-                         n.includes("corona") || ico.includes("corona") || 
-                         n.includes("extra") || ico.includes("extra") || 
-                         n.includes("exodoncia") ||
-                         ico === "default" || 
-                         ico === "otro"; 
+                 n.includes("impla") || ico.includes("impla") || 
+                 n.includes("perno") || ico.includes("perno") || 
+                 n.includes("corona") || ico.includes("corona") || 
+                 n.includes("extra") || ico.includes("extra") || 
+                 n.includes("exodoncia") ||
+                 n.includes("restauraci") || ico.includes("restauraci") ||
+                 n.includes("resina") || ico.includes("resina") ||
+                 n.includes("amalgama") || ico.includes("amalgama") ||
+                 ico === "default" || 
+                 ico === "otro";
           
           if (!t.cara || esRaiz) {
               if (!elementosRaiz.some(e => e.nombre === t.display_nombre)) {
