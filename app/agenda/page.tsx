@@ -1044,8 +1044,7 @@ export default function AgendaPage() {
            <Users size={16} className="text-[#C9A24B] shrink-0"/>
            <select className="text-base sm:text-sm md:text-[11px] font-bold uppercase text-slate-600 bg-transparent outline-none cursor-pointer pr-4 w-full" value={filtroEspecialista} onChange={(e) => setFiltroEspecialista(e.target.value)}>
              <option value="Todos">Todos los especialistas</option>
-             {profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
-           </select>
+{profesionales.map(p => <option key={p.id} value={p.user_id}>Dr. {p.apellido}</option>)}           </select>
         </div>
 
         <div className="flex items-center justify-between bg-white rounded-full p-1 border border-slate-200 shadow-sm w-full md:w-auto">
@@ -1444,8 +1443,7 @@ export default function AgendaPage() {
                              <h3 className="text-sm font-black uppercase text-slate-800 flex items-center gap-2"><Clock size={16} className="text-[#C9A24B]"/> 3. Fecha y Hora</h3>
                              <div className="flex items-center gap-2 w-full md:w-auto">
                                 <select className="w-full md:w-auto p-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none" value={filtro.profesional_id} onChange={e => setFiltro({...filtro, profesional_id: e.target.value})}>
-                                   {profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.nombre} {p.apellido}</option>)}
-                                </select>
+{profesionales.map(p => <option key={p.user_id} value={p.user_id}>Dr. {p.apellido}</option>)}                                </select>
                                 <select className="w-full md:w-auto p-2 text-xs font-bold bg-slate-50 border border-slate-200 rounded-lg outline-none" value={filtro.duracionDefault} onChange={e => setFiltro({...filtro, duracionDefault: Number(e.target.value)})}>
                                    {duracionesDisponibles.map(d => <option key={d} value={d}>{d} min</option>)}
                                 </select>
@@ -1967,60 +1965,72 @@ if(seleccionado) {
                     <div className="flex flex-col gap-3 md:gap-2">
                       <button
                         onClick={() => {
-  if (!citaConfirmadaData) return;
-  const { paciente, citas, telefono, citaId } = citaConfirmadaData;
-  if (!telefono) {
-    toast.error("El paciente no tiene un número de teléfono registrado.");
-    return;
-  }
+                          if (!citaConfirmadaData) return;
+                          const { paciente, citas, telefono, citaId } = citaConfirmadaData;
+                          if (!telefono) {
+                            toast.error("El paciente no tiene un número de teléfono registrado.");
+                            return;
+                          }
 
-  const doctor = profesionales.find(p => p.user_id === filtro.profesional_id);
-  const nombreDoctor = doctor ? `Dr(a). ${doctor.nombre} ${doctor.apellido}` : "nuestro especialista";
+                          const doctor = profesionales.find(p => p.user_id === filtro.profesional_id);
+                          const nombreDoctor = doctor ? `Dr(a). ${doctor.nombre} ${doctor.apellido}` : "nuestro especialista";
 
-  const fechaObj = new Date(citas[0].fecha + 'T00:00:00');
-  let fechaCita = fechaObj.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '');
-  fechaCita = fechaCita.charAt(0).toUpperCase() + fechaCita.slice(1);
-  
-  const hora = citas[0].hora;
-  
-  const hoy = new Date();
-  const hoyStr = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
-  
-  const manana = new Date(hoy);
-  manana.setDate(manana.getDate() + 1);
-  const mananaStr = new Date(manana.getTime() - manana.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+                          const fechaObj = new Date(citas[0].fecha + 'T00:00:00');
+                          let fechaCita = fechaObj.toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'long' }).replace(',', '');
+                          fechaCita = fechaCita.charAt(0).toUpperCase() + fechaCita.slice(1);
+                          
+                          const hora = citas[0].hora;
+                          
+                          const hoy = new Date();
+                          const hoyStr = new Date(hoy.getTime() - hoy.getTimezoneOffset() * 60000).toISOString().split('T')[0];
+                          
+                          const manana = new Date(hoy);
+                          manana.setDate(manana.getDate() + 1);
+                          const mananaStr = new Date(manana.getTime() - manana.getTimezoneOffset() * 60000).toISOString().split('T')[0];
 
-  const esHoy = citas[0].fecha === hoyStr;
-  const esManana = citas[0].fecha === mananaStr;
+                          const esHoy = citas[0].fecha === hoyStr;
+                          const esManana = citas[0].fecha === mananaStr;
 
-  let mensaje = "";
+                          let mensaje = "";
 
-  if (esHoy || esManana) {
-    const textoDia = esHoy ? "HOY" : "MAÑANA";
-    
-    mensaje = `Hola ${paciente}, hemos agendado tu cita con el/la ${nombreDoctor} para ${textoDia} a las ${hora} hrs.\n\n`;
-    mensaje += `📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n`;
-    if (citaId) {
-      mensaje += `⚠️ Importante: Debido a la alta demanda de horas, si tu cita no es confirmada el bloque será asignado a otro paciente.\n\n`;
-      mensaje += `Por favor confirma tu asistencia en el siguiente enlace:\nhttps://confirmar-cita-dignidad.vercel.app/confirmar/${citaId}\n\n`;
-    }
-    mensaje += `¡Te esperamos en Clínica Dignidad!`;
-  } else {
-    mensaje = `Hola ${paciente}, hemos agendado exitosamente tu cita con el/la ${nombreDoctor} para el día ${fechaCita} a las ${hora} hrs.\n\n`;
-    mensaje += `📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n`;
-    mensaje += `¡Te esperamos en Clínica Dignidad!`;
-  }
+                          if (esHoy || esManana) {
+                            const textoDia = esHoy ? "HOY" : "MAÑANA";
+                            
+                            mensaje = `Hola ${paciente}, hemos agendado tu cita con el/la ${nombreDoctor} para ${textoDia} a las ${hora} hrs.\n\n`;
+                            mensaje += `📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n`;
+                            if (citaId) {
+                              mensaje += `⚠️ Importante: Debido a la alta demanda de horas, si tu cita no es confirmada el bloque será asignado a otro paciente.\n\n`;
+                              mensaje += `Por favor confirma tu asistencia en el siguiente enlace:\nhttps://confirmar-cita-dignidad.vercel.app/confirmar/${citaId}\n\n`;
+                            }
+                            mensaje += `¡Te esperamos en Clínica Dignidad!`;
+                          } else {
+                            mensaje = `Hola ${paciente}, hemos agendado exitosamente tu cita con el/la ${nombreDoctor} para el día ${fechaCita} a las ${hora} hrs.\n\n`;
+                            mensaje += `📍 Dirección: Av. Venancia Leiva 1871, La Pintana.\n\n`;
+                            mensaje += `¡Te esperamos en Clínica Dignidad!`;
+                          }
 
-  const numLimpio = telefono.replace(/\D/g, '');
-  const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
-  
-  window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
-  
-  setMostrarTicket(false);
-  setModalAbierto(false);
-  resetEstados();
-  fetchCitasAgenda();
-}}
+                          const numLimpio = telefono.replace(/\D/g, '');
+                          const numFinal = numLimpio.length === 9 ? `56${numLimpio}` : numLimpio;
+                          
+                          window.open(`https://wa.me/${numFinal}?text=${encodeURIComponent(mensaje)}`, '_blank');
+                          
+                          setMostrarTicket(false);
+                          setModalAbierto(false);
+                          resetEstados();
+                          fetchCitasAgenda();
+                        }}
+                        className="w-full py-4 bg-emerald-500 rounded-2xl font-black text-xs md:text-[10px] uppercase tracking-widest text-white shadow-md hover:bg-emerald-600 transition-all flex items-center justify-center gap-2"
+                      >
+                         <MessageCircle size={16}/> Confirmar y Enviar
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setMostrarTicket(false);
+                          setModalAbierto(false);
+                          resetEstados();
+                          fetchCitasAgenda();
+                        }}
                         className="w-full py-4 md:py-3 bg-slate-100 text-slate-600 rounded-2xl font-black text-xs md:text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all"
                       >
                         Finalizar sin enviar
