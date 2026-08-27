@@ -175,7 +175,9 @@ export default function DetalleCajaPage() {
               <Receipt size={36} />
             </div>
             <div className="text-left">
-              <p className="text-[11px] font-bold text-[#C49A5C] uppercase tracking-[0.2em] text-left">Resumen de Caja</p>
+             <p className="text-[11px] font-bold text-[#C49A5C] uppercase tracking-[0.2em] text-left">
+                Resumen de Caja {caja.numero_caja ? `#${caja.numero_caja}` : ''}
+              </p>
               <h1 className="text-3xl md:text-4xl font-black uppercase italic text-[#0B1527] tracking-tight text-left mt-1">
                 {caja.nombre_responsable}
               </h1>
@@ -311,7 +313,7 @@ export default function DetalleCajaPage() {
                     <div>
                        <h1 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 2px 0', textTransform: 'uppercase' }}>CENTRO MEDICO Y DENTAL DIGNIDAD SPA</h1>
                        <p style={{ fontSize: '9px', margin: '0 0 2px 0', color: '#555' }}>Fecha Impresión: {new Date().toLocaleDateString('es-CL')}</p>
-                       <p style={{ fontSize: '9px', margin: '0', color: '#555' }}>ID Caja: {caja?.id?.substring(0, 8).toUpperCase()}</p>
+                       <p style={{ fontSize: '9px', margin: '0', color: '#555' }}>Turno Nº: {caja?.numero_caja || '-'}</p>
                     </div>
                  </div>
                  <div>
@@ -324,6 +326,7 @@ export default function DetalleCajaPage() {
                  <h3 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>Detalles del Turno:</h3>
                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#333' }}>
                     <div style={{ width: '48%' }}>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Turno Nº:</span> {caja?.numero_caja || '-'}</p>
                        <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Responsable:</span> {caja?.nombre_responsable}</p>
                        <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Estado:</span> {caja?.estado?.toUpperCase()}</p>
                     </div>
