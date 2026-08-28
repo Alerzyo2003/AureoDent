@@ -30,7 +30,7 @@ export default function DetalleCajaPage() {
         .eq('id', cajaId)
         .maybeSingle() 
 
-      // 2. Obtener Pagos de la Caja actual
+      // 2. Obtener Pagos de la Caja actual (SOLO DINERO FÍSICO Y NO ANULADOS)
       const { data: listaPagos } = await supabase
         .from('pagos')
         .select(`
@@ -39,108 +39,12 @@ export default function DetalleCajaPage() {
           pacientes(nombre, apellido)
         `)
         .eq('caja_id', cajaId)
+        .neq('estado', 'Anulado') // OCULTA LOS PAGOS ELIMINADOS
+        .neq('metodo_pago', 'Saldo a Favor') // OCULTA LOS PAGOS HECHOS CON LA BILLETERA VIRTUAL
         .order('fecha_pago', { ascending: true })
 
-      if (!listaPagos) {
-        setCaja(sesion); setPagos([]); setCargando(false); return;
-      }
-
-      // --- 3. LÓGICA FIFO PARA DISTRIBUIR MÚLTIPLES ABONOS DE SALDO ---
-      // Obtenemos solo los pacientes únicos que usaron Saldo a Favor en esta caja
-      const pacientesConSaldo = [...new Set(listaPagos.filter(p => p.metodo_pago === 'Saldo a Favor').map(p => p.paciente_id))];
-      let distribucionGlobal: any = {}; 
-
-      for (const pacId of pacientesConSaldo) {
-          // A) Obtener TODOS los ingresos históricos a la billetera
-          const { data: abonos } = await supabase.from('pagos')
-              .select('id, monto, metodo_pago, numero_boleta, numero_referencia, fecha_pago')
-              .eq('paciente_id', pacId)
-              .is('item_id', null) 
-              .neq('metodo_pago', 'Saldo a Favor')
-              .neq('estado', 'Anulado') 
-              .order('fecha_pago', { ascending: true });
-
-          // B) Obtener TODOS los usos históricos de la billetera
-          const { data: usos } = await supabase.from('pagos')
-              .select('id, monto, fecha_pago')
-              .eq('paciente_id', pacId)
-              .eq('metodo_pago', 'Saldo a Favor')
-              .neq('estado', 'Anulado') 
-              .order('fecha_pago', { ascending: true });
-
-          let colaAbonos = (abonos || []).map(a => ({ ...a, disponible: Number(a.monto) }));
-
-          // C) Simular el gasto cronológico
-          for (const uso of (usos || [])) {
-              let montoRestanteParaPagar = Number(uso.monto);
-              distribucionGlobal[uso.id] = [];
-
-              while (montoRestanteParaPagar > 0 && colaAbonos.length > 0) {
-                  let abonoActual = colaAbonos[0];
-
-                  if (abonoActual.disponible <= 0) {
-                      colaAbonos.shift(); 
-                      continue;
-                  }
-
-                  let aDescontar = Math.min(montoRestanteParaPagar, abonoActual.disponible);
-                  abonoActual.disponible -= aDescontar;
-                  montoRestanteParaPagar -= aDescontar;
-
-                  distribucionGlobal[uso.id].push({
-                      id_origen: abonoActual.id, // 🔥 AQUÍ GUARDAMOS EL ID DE LA TRANSACCIÓN ORIGINAL
-                      metodo_pago: abonoActual.metodo_pago,
-                      monto: aDescontar,
-                      numero_boleta: abonoActual.numero_boleta,
-                      numero_referencia: `(Desde Saldo) ${abonoActual.numero_referencia || ''}`.trim()
-                  });
-
-                  if (abonoActual.disponible <= 0) {
-                      colaAbonos.shift();
-                  }
-              }
-          }
-      }
-
-      // 4. Reconstruir la lista de pagos visual para la pantalla
-      let pagosProcesados = [];
-      for (const pago of listaPagos) {
-          if (pago.metodo_pago === 'Saldo a Favor' && distribucionGlobal[pago.id]) {
-              const splits = distribucionGlobal[pago.id];
-              
-              splits.forEach((split: any, index: number) => {
-                  pagosProcesados.push({
-                      ...pago,
-                      // Combinamos el ID original de la recarga, el ID del pago en caja y el índice para garantizar que sea 100% único en React
-                      id: split.id_origen ? `${split.id_origen}-split-${pago.id}-${index}` : `${pago.id}-split-${index}`, 
-                      id_origen_real: split.id_origen || pago.id, // Guardamos el ID real para mostrarlo en pantalla
-                      metodo_pago: split.metodo_pago,
-                      monto: split.monto,
-                      numero_boleta: split.numero_boleta || pago.numero_boleta,
-                      numero_referencia: split.numero_referencia
-                  });
-              });
-              
-              const sumaSplits = splits.reduce((acc: number, s: any) => acc + s.monto, 0);
-              if (sumaSplits < Number(pago.monto)) {
-                  pagosProcesados.push({
-                      ...pago,
-                      id: `${pago.id}-remanente`,
-                      id_origen_real: pago.id,
-                      monto: Number(pago.monto) - sumaSplits
-                  });
-              }
-          } else {
-              // A los pagos normales también les agregamos la propiedad para estandarizar la tabla
-              pagosProcesados.push({
-                  ...pago,
-                  id_origen_real: pago.id 
-              });
-          }
-      }
-
       setCaja(sesion)
-      setPagos(pagosProcesados)
+      setPagos(listaPagos || [])
     } catch (error) {
       console.error("Error cargando detalle:", error)
     } finally {
@@ -148,11 +52,17 @@ export default function DetalleCajaPage() {
     }
   }
 
+  // TOTALES
+  const totalRecaudado = useMemo(() => {
+    if (!pagos) return 0;
+    return pagos.reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
+  }, [pagos]);
+
   const resumenPagos = useMemo(() => {
     if (!pagos || pagos.length === 0) return null;
 
-    const resumen = pagos.reduce((acc: Record<string, { count: number; total: number }>, pago) => {
-      const metodo = pago.metodo_pago?.toLowerCase() || 'desconocido';
+    return pagos.reduce((acc: Record<string, { count: number; total: number }>, pago) => {
+      const metodo = (pago.metodo_pago || 'Desconocido').toUpperCase();
       const monto = Number(pago.monto || 0);
       
       if (!acc[metodo]) {
@@ -162,13 +72,6 @@ export default function DetalleCajaPage() {
       acc[metodo].total += monto;
       return acc;
     }, {});
-
-    return resumen;
-  }, [pagos]);
-
-  const totalRecaudado = useMemo(() => {
-    if (!pagos) return 0;
-    return pagos.reduce((sum, pago) => sum + Number(pago.monto || 0), 0);
   }, [pagos]);
 
   const handlePrint = async () => {
@@ -184,9 +87,8 @@ export default function DetalleCajaPage() {
         return;
       }
 
-      // 🔥 LÍMITE DE BORDE APLICADO: 700px de ancho estricto 🔥
       const opt: any = { 
-        margin: [15, 10, 15, 10], // [top, left, bottom, right]
+        margin: [15, 10, 15, 10],
         filename: `Cierre_Caja_${caja?.nombre_responsable?.replace(' ', '_') || 'reporte'}.pdf`,
         image: { type: 'jpeg', quality: 1 },
         html2canvas: { 
@@ -195,7 +97,7 @@ export default function DetalleCajaPage() {
           letterRendering: true, 
           backgroundColor: '#ffffff', 
           scrollY: 0,
-          windowWidth: 700 // Sincronizado con el ancho del contenedor oculto
+          windowWidth: 700
         }, 
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.avoid-break'] } 
@@ -233,14 +135,13 @@ export default function DetalleCajaPage() {
   return (
     <main className="min-h-screen bg-white p-6 md:p-10 font-sans text-slate-900 text-left relative overflow-hidden z-0">
       
-      {/* IMAGEN DE FONDO GLOBAL - Opacidad reducida al 50% */}
       <div 
         className="absolute top-0 right-0 w-[800px] h-[900px] bg-[url('/fondo-caja.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-50"
       ></div>
 
       <div className="max-w-[1400px] mx-auto relative z-10">
         
-        {/* HEADER - No imprimible */}
+        {/* HEADER */}
         <div className="flex justify-between items-center print:hidden mb-8">
           <button 
             onClick={() => router.push('/cajas')}
@@ -261,7 +162,6 @@ export default function DetalleCajaPage() {
         {/* RESUMEN SUPERIOR */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-8 mb-12 max-w-[1000px]">
           
-          {/* Info Principal */}
           <div className="flex items-center gap-6 text-left">
             <div className="bg-blue-500 p-5 rounded-3xl text-white shadow-blue-500/30 shadow-lg shrink-0">
               <Receipt size={36} />
@@ -280,7 +180,6 @@ export default function DetalleCajaPage() {
             </div>
           </div>
 
-          {/* Tarjeta de Montos */}
           <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-6 md:px-10 border border-slate-100 shadow-xl flex items-center gap-8 md:gap-12 shrink-0">
              <div className="text-center">
                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Fondo Inicial</p>
@@ -289,10 +188,9 @@ export default function DetalleCajaPage() {
              <div className="w-px h-12 bg-slate-200"></div>
              <div className="text-center">
                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1.5">Total Recaudado</p>
-               <p className="text-3xl font-black text-blue-600">${Number(caja.monto_cierre || 0).toLocaleString('es-CL')}</p>
+               <p className="text-3xl font-black text-blue-600">${totalRecaudado.toLocaleString('es-CL')}</p>
              </div>
           </div>
-
         </div>
 
         {/* DESGLOSE DE MÉTODOS DE PAGO */}
@@ -304,8 +202,8 @@ export default function DetalleCajaPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
               {Object.entries(resumenPagos).map(([metodo, stats]) => (
                 <div key={metodo} className="bg-white/90 backdrop-blur-sm p-5 rounded-[2rem] border border-slate-100 shadow-sm flex items-center gap-5 transition-all hover:bg-slate-50">
-                  <div className={`p-4 rounded-2xl flex-shrink-0 ${metodo.includes('efectivo') ? 'bg-emerald-100/50 text-emerald-600' : 'bg-blue-100/50 text-blue-600'}`}>
-                    {metodo.includes('efectivo') ? <Banknote size={24} /> : <CreditCard size={24} />}
+                  <div className={`p-4 rounded-2xl flex-shrink-0 ${metodo.includes('EFECTIVO') ? 'bg-emerald-100/50 text-emerald-600' : 'bg-blue-100/50 text-blue-600'}`}>
+                    {metodo.includes('EFECTIVO') ? <Banknote size={24} /> : <CreditCard size={24} />}
                   </div>
                   <div>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest leading-tight">{metodo}</p>
@@ -344,7 +242,6 @@ export default function DetalleCajaPage() {
                       <td className="px-6 py-5 text-[11px] font-medium text-slate-400 italic text-left">
                         {String(index + 1).padStart(2, '0')}
                       </td>
-                      
                       <td className="px-6 py-5 text-left">
                         <p className="text-xs font-bold uppercase text-[#0B1527] text-left">
                           {pac ? `${pac.nombre} ${pac.apellido}` : 'Sin nombre'}
@@ -392,14 +289,12 @@ export default function DetalleCajaPage() {
         <div style={{ position: 'absolute', top: '-9999px', left: '0' }}>
            <div id="reporte-impresion-contenido" style={{ width: '700px', boxSizing: 'border-box', backgroundColor: '#ffffff', color: '#111827', padding: '30px', fontFamily: 'Arial, sans-serif' }}>
               
-              {/* Estilos para forzar cortes de página correctos */}
               <style>{`
                 #reporte-impresion-contenido tr { page-break-inside: avoid; }
                 #reporte-impresion-contenido thead { display: table-header-group; }
                 #reporte-impresion-contenido tfoot { display: table-footer-group; }
               `}</style>
 
-              {/* Cabecera */}
               <div className="avoid-break" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', pageBreakInside: 'avoid' }}>
                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                     <img src="https://yqdpmaopnvrgdqbfaiok.supabase.co/storage/v1/object/public/documentos_imagenes/440749454_122171956712064634_7168698893214813270_n.jpg" alt="Logo" style={{ height: '40px', width: 'auto' }} crossOrigin="anonymous" />
@@ -414,7 +309,6 @@ export default function DetalleCajaPage() {
                  </div>
               </div>
 
-              {/* Datos de la Caja */}
               <div className="avoid-break" style={{ marginBottom: '15px', pageBreakInside: 'avoid' }}>
                  <h3 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>Detalles del Turno:</h3>
                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#333' }}>
@@ -430,7 +324,6 @@ export default function DetalleCajaPage() {
                  </div>
               </div>
 
-              {/* Resumen de Montos */}
               <div className="avoid-break" style={{ marginBottom: '15px', pageBreakInside: 'avoid' }}>
                  <h3 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>Resumen de Montos:</h3>
                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '10px', color: '#333' }}>
@@ -438,15 +331,14 @@ export default function DetalleCajaPage() {
                        <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Fondo Inicial:</span> ${Number(caja?.monto_apertura || 0).toLocaleString('es-CL')}</p>
                     </div>
                     <div style={{ width: '30%' }}>
-                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Total Recaudado:</span> ${Number((caja?.monto_cierre || 0) - (caja?.monto_apertura || 0)).toLocaleString('es-CL')}</p>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Total Recaudado:</span> ${totalRecaudado.toLocaleString('es-CL')}</p>
                     </div>
                     <div style={{ width: '30%' }}>
-                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Total en Caja:</span> ${Number(caja?.monto_cierre || 0).toLocaleString('es-CL')}</p>
+                       <p style={{ margin: '0 0 3px 0' }}><span style={{ fontWeight: 'bold' }}>Total en Caja:</span> ${(totalRecaudado + Number(caja?.monto_apertura || 0)).toLocaleString('es-CL')}</p>
                     </div>
                  </div>
               </div>
 
-              {/* Desglose por Medio de Pago */}
               {resumenPagos && Object.keys(resumenPagos).length > 0 && (
               <div className="avoid-break" style={{ marginBottom: '20px', pageBreakInside: 'avoid' }}>
                  <h3 style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px' }}>Desglose por Medio de Pago:</h3>
@@ -471,7 +363,6 @@ export default function DetalleCajaPage() {
               </div>
               )}
 
-              {/* Detalle de Transacciones */}
               <div style={{ marginBottom: '20px' }}>
                  <h3 className="avoid-break" style={{ fontSize: '11px', fontWeight: 'bold', margin: '0 0 6px 0', borderBottom: '1px solid #ddd', paddingBottom: '4px', pageBreakInside: 'avoid' }}>Detalle de Transacciones:</h3>
                  <table style={{ width: '100%', fontSize: '9px', borderCollapse: 'collapse' }}>
@@ -500,18 +391,15 @@ export default function DetalleCajaPage() {
                           </tr>
                        )}
                     </tbody>
-                    
-                    {/* TOTAL EN EL FOOTER DE LA TABLA */}
                     <tfoot>
                        <tr style={{ borderTop: '2px solid #333', pageBreakInside: 'avoid' }}>
                           <td colSpan={4} style={{ textAlign: 'right', padding: '10px 4px', fontWeight: 'bold', fontSize: '10px', textTransform: 'uppercase' }}>Total Transacciones:</td>
-                          <td style={{ textAlign: 'right', padding: '10px 4px', fontWeight: 'bold', fontSize: '11px', color: '#059669' }}>${Number(totalRecaudado).toLocaleString('es-CL')}</td>
+                          <td style={{ textAlign: 'right', padding: '10px 4px', fontWeight: 'bold', fontSize: '11px', color: '#059669' }}>${totalRecaudado.toLocaleString('es-CL')}</td>
                        </tr>
                     </tfoot>
                  </table>
               </div>
 
-              {/* Footer Fijo para el final del documento */}
               <div className="avoid-break" style={{ fontSize: '8px', color: '#666', textAlign: 'center', marginTop: '30px', paddingTop: '10px', borderTop: '1px solid #eee', pageBreakInside: 'avoid' }}>
                  <p style={{ fontWeight: 'bold', margin: '0 0 2px 0', color: '#333' }}>CENTRO MEDICO Y DENTAL DIGNIDAD SPA</p>
                  <p style={{ margin: '0 0 2px 0' }}>Venancia Leiva 1871, Región Metropolitana, La Pintana</p>
