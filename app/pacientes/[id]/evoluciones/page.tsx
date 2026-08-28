@@ -303,7 +303,7 @@ export default function EvolucionesPage() {
               const creador = ev.creador_nombre;
               const esAdmin = sessionUserProfile?.rol === 'ADMIN';
               const esCreadorOriginal = ev.creado_por === sessionUser?.id;
-              const puedeModificar = esAdmin || esCreadorOriginal;
+              const puedeModificar = true;
               const isHtml = /<[a-z][\s\S]*>/i.test(ev.descripcion_limpia);
               
               return (
