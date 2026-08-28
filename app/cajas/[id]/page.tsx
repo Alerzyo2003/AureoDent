@@ -30,25 +30,117 @@ export default function DetalleCajaPage() {
         .eq('id', cajaId)
         .maybeSingle() 
 
-      // 2. Pagos con casting de tipo para evitar errores de compilación
+      // 2. Obtener Pagos de la Caja actual
       const { data: listaPagos } = await supabase
         .from('pagos')
         .select(`
-          id,
-          monto,
-          metodo_pago,
-          convenio,
-          fecha_vencimiento,
-          numero_referencia,
-          numero_boleta,
-          fecha_pago,
+          id, monto, metodo_pago, convenio, fecha_vencimiento, 
+          numero_referencia, numero_boleta, fecha_pago, paciente_id, 
           pacientes(nombre, apellido)
         `)
         .eq('caja_id', cajaId)
         .order('fecha_pago', { ascending: true })
 
+      if (!listaPagos) {
+        setCaja(sesion); setPagos([]); setCargando(false); return;
+      }
+
+      // --- 3. LÓGICA FIFO PARA DISTRIBUIR MÚLTIPLES ABONOS DE SALDO ---
+      // Obtenemos solo los pacientes únicos que usaron Saldo a Favor en esta caja
+      const pacientesConSaldo = [...new Set(listaPagos.filter(p => p.metodo_pago === 'Saldo a Favor').map(p => p.paciente_id))];
+      let distribucionGlobal: any = {}; 
+
+      for (const pacId of pacientesConSaldo) {
+          // A) Obtener TODOS los ingresos históricos a la billetera
+          const { data: abonos } = await supabase.from('pagos')
+              .select('id, monto, metodo_pago, numero_boleta, numero_referencia, fecha_pago')
+              .eq('paciente_id', pacId)
+              .is('item_id', null) 
+              .neq('metodo_pago', 'Saldo a Favor')
+              .neq('estado', 'Anulado') 
+              .order('fecha_pago', { ascending: true });
+
+          // B) Obtener TODOS los usos históricos de la billetera
+          const { data: usos } = await supabase.from('pagos')
+              .select('id, monto, fecha_pago')
+              .eq('paciente_id', pacId)
+              .eq('metodo_pago', 'Saldo a Favor')
+              .neq('estado', 'Anulado') 
+              .order('fecha_pago', { ascending: true });
+
+          let colaAbonos = (abonos || []).map(a => ({ ...a, disponible: Number(a.monto) }));
+
+          // C) Simular el gasto cronológico
+          for (const uso of (usos || [])) {
+              let montoRestanteParaPagar = Number(uso.monto);
+              distribucionGlobal[uso.id] = [];
+
+              while (montoRestanteParaPagar > 0 && colaAbonos.length > 0) {
+                  let abonoActual = colaAbonos[0];
+
+                  if (abonoActual.disponible <= 0) {
+                      colaAbonos.shift(); 
+                      continue;
+                  }
+
+                  let aDescontar = Math.min(montoRestanteParaPagar, abonoActual.disponible);
+                  abonoActual.disponible -= aDescontar;
+                  montoRestanteParaPagar -= aDescontar;
+
+                  distribucionGlobal[uso.id].push({
+                      id_origen: abonoActual.id, // 🔥 AQUÍ GUARDAMOS EL ID DE LA TRANSACCIÓN ORIGINAL
+                      metodo_pago: abonoActual.metodo_pago,
+                      monto: aDescontar,
+                      numero_boleta: abonoActual.numero_boleta,
+                      numero_referencia: `(Desde Saldo) ${abonoActual.numero_referencia || ''}`.trim()
+                  });
+
+                  if (abonoActual.disponible <= 0) {
+                      colaAbonos.shift();
+                  }
+              }
+          }
+      }
+
+      // 4. Reconstruir la lista de pagos visual para la pantalla
+      let pagosProcesados = [];
+      for (const pago of listaPagos) {
+          if (pago.metodo_pago === 'Saldo a Favor' && distribucionGlobal[pago.id]) {
+              const splits = distribucionGlobal[pago.id];
+              
+              splits.forEach((split: any, index: number) => {
+                  pagosProcesados.push({
+                      ...pago,
+                      // Combinamos el ID original de la recarga, el ID del pago en caja y el índice para garantizar que sea 100% único en React
+                      id: split.id_origen ? `${split.id_origen}-split-${pago.id}-${index}` : `${pago.id}-split-${index}`, 
+                      id_origen_real: split.id_origen || pago.id, // Guardamos el ID real para mostrarlo en pantalla
+                      metodo_pago: split.metodo_pago,
+                      monto: split.monto,
+                      numero_boleta: split.numero_boleta || pago.numero_boleta,
+                      numero_referencia: split.numero_referencia
+                  });
+              });
+              
+              const sumaSplits = splits.reduce((acc: number, s: any) => acc + s.monto, 0);
+              if (sumaSplits < Number(pago.monto)) {
+                  pagosProcesados.push({
+                      ...pago,
+                      id: `${pago.id}-remanente`,
+                      id_origen_real: pago.id,
+                      monto: Number(pago.monto) - sumaSplits
+                  });
+              }
+          } else {
+              // A los pagos normales también les agregamos la propiedad para estandarizar la tabla
+              pagosProcesados.push({
+                  ...pago,
+                  id_origen_real: pago.id 
+              });
+          }
+      }
+
       setCaja(sesion)
-      setPagos(listaPagos || [])
+      setPagos(pagosProcesados)
     } catch (error) {
       console.error("Error cargando detalle:", error)
     } finally {
@@ -252,6 +344,7 @@ export default function DetalleCajaPage() {
                       <td className="px-6 py-5 text-[11px] font-medium text-slate-400 italic text-left">
                         {String(index + 1).padStart(2, '0')}
                       </td>
+                      
                       <td className="px-6 py-5 text-left">
                         <p className="text-xs font-bold uppercase text-[#0B1527] text-left">
                           {pac ? `${pac.nombre} ${pac.apellido}` : 'Sin nombre'}
@@ -393,14 +486,14 @@ export default function DetalleCajaPage() {
                     </thead>
                     <tbody>
                        {pagos.map((p: any, idx: number) => (
-                          <tr key={idx} style={{ borderBottom: '1px solid #eee', pageBreakInside: 'avoid' }}>
-                             <td style={{ padding: '6px 2px' }}>{p.id.substring(0, 8).toUpperCase()}</td>
-                             <td style={{ padding: '6px 2px', textTransform: 'uppercase' }}>{p.pacientes ? `${p.pacientes.nombre} ${p.pacientes.apellido}` : 'S/N'}</td>
-                             <td style={{ padding: '6px 2px' }}>{p.numero_boleta && p.numero_boleta !== 'S/N' ? p.numero_boleta : '-'}</td>
-                             <td style={{ padding: '6px 2px', textTransform: 'uppercase' }}>{p.metodo_pago} {p.numero_referencia && p.numero_referencia !== 'S/N' ? `(Ref: ${p.numero_referencia.split('- Ref: ')[1] || p.numero_referencia})` : ''}</td>
-                             <td style={{ textAlign: 'right', padding: '6px 2px', fontWeight: 'bold' }}>${Number(p.monto || 0).toLocaleString('es-CL')}</td>
-                          </tr>
-                       ))}
+                           <tr key={idx} style={{ borderBottom: '1px solid #eee', pageBreakInside: 'avoid' }}>
+                              <td style={{ padding: '6px 2px' }}>{(p.id_origen_real || p.id).substring(0, 8).toUpperCase()}</td>
+                              <td style={{ padding: '6px 2px', textTransform: 'uppercase' }}>{p.pacientes ? `${p.pacientes.nombre} ${p.pacientes.apellido}` : 'S/N'}</td>
+                              <td style={{ padding: '6px 2px' }}>{p.numero_boleta && p.numero_boleta !== 'S/N' ? p.numero_boleta : '-'}</td>
+                              <td style={{ padding: '6px 2px', textTransform: 'uppercase' }}>{p.metodo_pago} {p.numero_referencia && p.numero_referencia !== 'S/N' ? `(Ref: ${p.numero_referencia.split('- Ref: ')[1] || p.numero_referencia})` : ''}</td>
+                              <td style={{ textAlign: 'right', padding: '6px 2px', fontWeight: 'bold' }}>${Number(p.monto || 0).toLocaleString('es-CL')}</td>
+                           </tr>
+                        ))}
                        {pagos.length === 0 && (
                           <tr style={{ pageBreakInside: 'avoid' }}>
                              <td colSpan={5} style={{ textAlign: 'center', padding: '10px' }}>No hay transacciones registradas</td>
