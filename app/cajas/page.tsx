@@ -121,13 +121,14 @@ export default function GestionCajasPage() {
       if (authError || !user) throw new Error("No autenticado")
 
       const { data: ultimaCaja } = await supabase
-        .from('sesiones_caja')
-        .select('numero_caja')
-        .order('numero_caja', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      
-      const siguienteNumero = (ultimaCaja?.numero_caja || 0) + 1;
+  .from('sesiones_caja')
+  .select('numero_caja')
+  .not('numero_caja', 'is', null) // Fuerza a ignorar registros antiguos sin número
+  .order('numero_caja', { ascending: false })
+  .limit(1)
+  .maybeSingle();
+
+const siguienteNumero = (ultimaCaja?.numero_caja || 0) + 1;
 
       const nuevaCaja = {
         usuario_id: user.id,
