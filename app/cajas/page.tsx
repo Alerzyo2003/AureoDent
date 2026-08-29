@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-// 1. IMPORTAMOS CREATEPORTAL
 import { createPortal } from 'react-dom'
 import { 
   Wallet, Plus, Lock, Unlock, Users, Info, 
@@ -20,14 +19,13 @@ export default function GestionCajasPage() {
   const [modalApertura, setModalApertura] = useState(false)
   const [abriendoCaja, setAbriendoCaja] = useState(false)
   
-  // 2. ESTADO PARA SABER SI EL COMPONENTE YA CARGÓ EN EL CLIENTE (Necesario para los Portals)
   const [isMounted, setIsMounted] = useState(false)
   
   const [responsable, setResponsable] = useState('Cargando...')
   const [montoInicial, setMontoInicial] = useState('0')
 
   useEffect(() => {
-    setIsMounted(true) // Indicamos que ya cargó en el navegador
+    setIsMounted(true)
     fetchCajas()
     obtenerNombreUsuario()
   }, [])
@@ -52,30 +50,57 @@ export default function GestionCajasPage() {
   async function fetchCajas() {
     setCargando(true)
     try {
+      // 1. Buscamos cajas abiertas
       const { data: abiertas, error: errAb } = await supabase
         .from('sesiones_caja')
-        .select(`*, pagos(monto)`)
+        .select(`*, pagos(monto, estado, metodo_pago)`)
         .eq('estado', 'abierta')
         .order('fecha_apertura', { ascending: false })
 
       if (errAb) throw errAb
 
+      // 2. Buscamos cajas cerradas (AHORA TAMBIÉN TRAEMOS SUS PAGOS)
       const { data: cerradas, error: errCe } = await supabase
         .from('sesiones_caja')
-        .select('*')
+        .select(`*, pagos(monto, estado, metodo_pago)`)
         .eq('estado', 'cerrada')
         .limit(15)
         .order('fecha_cierre', { ascending: false })
       
       if (errCe) throw errCe
       
+      // Función auxiliar para procesar los pagos con la lógica correcta
+      const procesarPagos = (caja: any) => {
+        const pagosValidos = (caja.pagos as any[])?.filter((p: any) => {
+          const estadoValido = p.estado !== 'Anulado' && p.estado !== null && p.estado !== undefined;
+          const metodoValido = p.metodo_pago !== 'Saldo a Favor' && p.metodo_pago !== null && p.metodo_pago !== undefined;
+          return estadoValido && metodoValido;
+        }) || [];
+
+        const sumaPagos = pagosValidos.reduce((acc: number, p: any) => acc + Number(p.monto || 0), 0);
+        return { pagosValidos, sumaPagos };
+      };
+
       const abiertasProcesadas = abiertas?.map((caja: any) => {
-        const sumaPagos = (caja.pagos as any[])?.reduce((acc: number, p: any) => acc + Number(p.monto), 0) || 0
-        return { ...caja, acumulado: Number(caja.monto_apertura) + sumaPagos }
+        const { pagosValidos, sumaPagos } = procesarPagos(caja);
+        return { 
+          ...caja, 
+          acumulado: Number(caja.monto_apertura || 0) + sumaPagos,
+          pagos: pagosValidos 
+        }
+      }) || []
+
+      const cerradasProcesadas = cerradas?.map((caja: any) => {
+        const { sumaPagos } = procesarPagos(caja);
+        return {
+          ...caja,
+          // Recalculamos el monto de cierre al vuelo para ignorar si se guardó mal antes
+          monto_cierre: Number(caja.monto_apertura || 0) + sumaPagos 
+        }
       }) || []
 
       setCajasAbiertas(abiertasProcesadas)
-      setCajasCerradas(cerradas || [])
+      setCajasCerradas(cerradasProcesadas) // Guardamos las procesadas
     } catch (error) {
       toast.error("Error al sincronizar datos de caja")
     } finally {
@@ -95,7 +120,6 @@ export default function GestionCajasPage() {
       const { data: { user }, error: authError } = await supabase.auth.getUser()
       if (authError || !user) throw new Error("No autenticado")
 
-      // 1. BUSCAR EL ÚLTIMO NÚMERO DE CAJA
       const { data: ultimaCaja } = await supabase
         .from('sesiones_caja')
         .select('numero_caja')
@@ -111,7 +135,7 @@ export default function GestionCajasPage() {
         monto_apertura: Number(montoInicial) || 0,
         estado: 'abierta',
         fecha_apertura: new Date().toISOString(),
-        numero_caja: siguienteNumero // 2. ASIGNAMOS EL NÚMERO
+        numero_caja: siguienteNumero
       }
 
       const { error } = await supabase.from('sesiones_caja').insert([nuevaCaja])
@@ -163,14 +187,12 @@ export default function GestionCajasPage() {
   return (
     <main className="min-h-screen bg-white p-6 md:p-10 font-sans text-slate-900 relative overflow-hidden z-0">
       
-      {/* IMAGEN DE FONDO GLOBAL */}
       <div 
         className="absolute top-0 right-0 w-[800px] h-[900px] bg-[url('/fondo-caja.png')] bg-contain bg-right-top bg-no-repeat -z-10 pointer-events-none opacity-100"
       ></div>
 
       <div className="max-w-[1400px] mx-auto space-y-8 relative z-10">
         
-        {/* HEADER */}
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
           <div className="space-y-1">
             <h1 className="text-4xl md:text-5xl font-black uppercase italic tracking-tight text-[#0B1527] leading-[1.1]">
@@ -203,7 +225,6 @@ export default function GestionCajasPage() {
           </button>
         </header>
 
-        {/* ALERTA / BANNER INFORMATIVO */}
         {hayCajaAbierta && (
           <div className="flex flex-col md:flex-row items-center bg-white rounded-2xl p-5 border border-slate-100 shadow-sm gap-6 md:gap-0 max-w-[950px]">
             <div className="flex items-center gap-5 flex-1">
@@ -234,11 +255,9 @@ export default function GestionCajasPage() {
           </div>
         )}
 
-        {/* MAIN GRID: TURNO ACTIVO & RESUMEN */}
         {hayCajaAbierta ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 relative">
             
-            {/* TARJETA TURNO ACTIVO (Oscura) */}
             <div className="lg:col-span-2 bg-[#0A1629] rounded-3xl p-8 relative flex flex-col justify-between shadow-xl min-h-[340px]">
               <div className="relative z-10">
                 <span className="bg-[#C49A5C] text-white text-[10px] font-bold uppercase tracking-widest px-5 py-2 rounded-full inline-block mb-6 shadow-sm">
@@ -251,7 +270,6 @@ export default function GestionCajasPage() {
                 </div>
               </div>
 
-              {/* Línea divisoria sutil */}
               <div className="w-full h-px bg-white/10 my-8"></div>
 
               <div className="flex flex-col md:flex-row items-start md:items-end justify-between relative z-10 gap-6 md:gap-0">
@@ -284,7 +302,6 @@ export default function GestionCajasPage() {
               </div>
             </div>
 
-            {/* TARJETA RESUMEN DEL DÍA (Blanca) */}
             <div className="bg-white/95 backdrop-blur-sm rounded-3xl p-8 shadow-sm border border-slate-100 flex flex-col justify-between">
               <div>
                 <div className="flex items-center gap-3 text-[#0B1527] font-black text-sm uppercase tracking-wide mb-8">
@@ -298,7 +315,7 @@ export default function GestionCajasPage() {
                       <div className="p-2 bg-[#FCF8F2] rounded-lg text-[#C49A5C]"><ReceiptText size={16} /></div>
                       Ingresos Totales
                     </div>
-                    <div className="font-black text-[#C49A5C] text-xl">${Number(cajaActiva.acumulado || 0).toLocaleString('es-CL')}</div>
+                    <div className="font-black text-[#C49A5C] text-xl">${(Number(cajaActiva.acumulado || 0) - Number(cajaActiva.monto_apertura)).toLocaleString('es-CL')}</div>
                   </div>
                   <div className="flex justify-between items-center border-b border-slate-100 pb-5">
                     <div className="flex items-center gap-4 text-[13px] text-slate-600 font-bold uppercase tracking-wider">
@@ -313,7 +330,7 @@ export default function GestionCajasPage() {
                       Promedio por Transacción
                     </div>
                     <div className="font-black text-[#0B1527] text-xl">
-                      ${cajaActiva.pagos?.length ? Math.round(Number(cajaActiva.acumulado) / cajaActiva.pagos.length).toLocaleString('es-CL') : 0}
+                      ${cajaActiva.pagos?.length ? Math.round((Number(cajaActiva.acumulado) - Number(cajaActiva.monto_apertura)) / cajaActiva.pagos.length).toLocaleString('es-CL') : 0}
                     </div>
                   </div>
                   <div className="flex justify-between items-center pt-1">
@@ -334,7 +351,6 @@ export default function GestionCajasPage() {
           </div>
         )}
 
-        {/* REGISTRO HISTÓRICO (Tabla) */}
         <section className="bg-white/95 backdrop-blur-sm rounded-3xl shadow-sm border border-slate-100 overflow-hidden mt-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between p-6 md:p-8 border-b border-slate-100 gap-4">
             <h2 className="text-sm font-black uppercase text-[#0B1527] tracking-wide flex items-center gap-3">
@@ -385,7 +401,7 @@ export default function GestionCajasPage() {
                 ))}
                 {cajasCerradas.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-8 py-8 text-center text-slate-400 font-medium text-sm">
+                    <td colSpan={8} className="px-8 py-8 text-center text-slate-400 font-medium text-sm">
                       No hay registros históricos disponibles.
                     </td>
                   </tr>
@@ -396,7 +412,6 @@ export default function GestionCajasPage() {
         </section>
       </div>
 
-      {/* 3. ENVOLVEMOS EL MODAL EN CREATEPORTAL AL FINAL DEL ARCHIVO */}
       {isMounted && typeof document !== 'undefined' ? createPortal(
         <AnimatePresence>
           {modalApertura && (
