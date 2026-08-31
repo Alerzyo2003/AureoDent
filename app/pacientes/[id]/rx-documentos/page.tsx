@@ -546,8 +546,51 @@ export default function DocumentosPage() {
                   
                   {/* BOTONES DE GUARDAR / ELIMINAR */}
                   <div className="pt-4 lg:pt-8 space-y-2.5 lg:space-y-3 text-left shrink-0 bg-white">
-                    <button onClick={guardarCambios} className="w-full bg-blue-600 text-white py-3.5 lg:py-5 rounded-xl lg:rounded-2xl font-black text-[10px] lg:text-xs uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2"><Save size={16} strokeWidth={2.5}/> Guardar</button>
-                    <button onClick={eliminarArchivo} className="w-full bg-red-50 text-red-500 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-black text-[9px] lg:text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2"><Trash2 size={16} strokeWidth={2.5}/> Eliminar</button>
+                    
+                    {/* NUEVO BOTÓN DE DESCARGA */}
+                    <button 
+                      onClick={async () => {
+                        const toastId = toast.loading("Preparando descarga...");
+                        try {
+                          // 1. Obtenemos el archivo mediante fetch
+                          const response = await fetch(seleccionado.signedUrl);
+                          if (!response.ok) throw new Error('Error en la red');
+                          
+                          // 2. Lo convertimos a blob (archivo binario)
+                          const blob = await response.blob();
+                          
+                          // 3. Creamos una URL local temporal
+                          const url = window.URL.createObjectURL(blob);
+                          
+                          // 4. Forzamos la descarga
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.download = seleccionado.titulo || seleccionado.nombre_archivo || 'documento_clinico';
+                          document.body.appendChild(link);
+                          link.click();
+                          
+                          // 5. Limpiamos
+                          document.body.removeChild(link);
+                          window.URL.revokeObjectURL(url);
+                          
+                          toast.success("Descarga completada", { id: toastId });
+                        } catch (error) {
+                          console.error("Error al descargar:", error);
+                          toast.error("Error al descargar el archivo", { id: toastId });
+                        }
+                      }} 
+                      className="w-full bg-emerald-50 text-emerald-600 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-black text-[9px] lg:text-[10px] uppercase tracking-widest hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-2"
+                    >
+                      <Download size={16} strokeWidth={2.5}/> Descargar Archivo
+                    </button>
+
+                    <button onClick={guardarCambios} className="w-full bg-blue-600 text-white py-3.5 lg:py-5 rounded-xl lg:rounded-2xl font-black text-[10px] lg:text-xs uppercase tracking-widest shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2">
+                      <Save size={16} strokeWidth={2.5}/> Guardar Cambios
+                    </button>
+                    
+                    <button onClick={eliminarArchivo} className="w-full bg-red-50 text-red-500 py-3 lg:py-4 rounded-xl lg:rounded-2xl font-black text-[9px] lg:text-[10px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2">
+                      <Trash2 size={16} strokeWidth={2.5}/> Eliminar
+                    </button>
                   </div>
                 </div>
               </motion.div>
