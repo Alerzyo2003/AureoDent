@@ -2095,6 +2095,82 @@ if(seleccionado) {
               </div>
             )}
           </AnimatePresence>
+          <AnimatePresence>
+            {modalOnlineAbierto && (
+              <div className="fixed inset-0 z-[99999] flex items-start justify-center px-4 pb-4 pt-16 md:pt-24 bg-slate-900/60 backdrop-blur-sm text-slate-900 text-left">
+                <motion.div initial={{ scale: 0.95, opacity: 0, y: 20 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 20 }} className="bg-white w-full max-w-3xl max-h-[85vh] rounded-[2.5rem] shadow-2xl flex flex-col overflow-hidden relative text-slate-900 text-left">
+                  <div className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center shrink-0 text-left" style={{ background: `linear-gradient(135deg, ${NAVY}, #081420)` }}>
+                    <div className="flex items-center gap-4 text-left">
+                      <div className="p-3 rounded-2xl shadow-sm" style={{ backgroundColor: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.6)' }}>
+                        <Globe className="text-blue-400" size={24} />
+                      </div>
+                      <div>
+                        <h2 className="font-display text-lg md:text-xl tracking-tight text-white leading-none">Citas Web Pendientes</h2>
+                        <p className="text-[11px] md:text-[10px] font-bold uppercase tracking-widest mt-1 text-blue-300">Aprobar y notificar</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setModalOnlineAbierto(false)} className="p-2 text-white/60 hover:bg-white/10 rounded-full transition-all text-left">
+                      <X className="md:w-[20px] md:h-[20px]" size={24} />
+                    </button>
+                  </div>
+                  
+                  <div className="flex-1 p-6 md:p-8 overflow-y-auto bg-slate-50/50 custom-scrollbar space-y-4">
+                    {citasOnlinePendientes.length === 0 ? (
+                      <div className="h-full py-12 flex flex-col items-center justify-center text-slate-400 gap-4 opacity-60">
+                        <CheckCircle2 className="text-emerald-500" size={60} />
+                        <p className="text-base md:text-sm font-black uppercase tracking-widest text-slate-600">Al día</p>
+                        <p className="text-sm md:text-xs mt-1">No hay citas web pendientes de validación.</p>
+                      </div>
+                    ) : (
+                      citasOnlinePendientes.map(cita => {
+                        const fechaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleDateString('es-CL', { weekday: 'long', day: 'numeric', month: 'short' });
+                        const horaFormat = new Date(cita.inicio.replace(' ', 'T')).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Santiago' });
+                        const doctor = profesionales.find(p => p.user_id === cita.profesional_id);
+
+                        return (
+                          <div key={cita.id} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 transition-all hover:border-blue-300 hover:shadow-md">
+                            <div className="flex items-center gap-4">
+                              <div className="w-12 h-12 rounded-xl bg-blue-50 text-blue-600 flex flex-col items-center justify-center font-black shrink-0 border border-blue-100">
+                                <span className="text-sm">{horaFormat}</span>
+                              </div>
+                              <div>
+                                <h4 className="font-black text-sm text-slate-800 uppercase leading-none">{cita.pacientes?.nombre} {cita.pacientes?.apellido}</h4>
+                                <div className="flex flex-wrap items-center gap-2 mt-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                                  <span className="text-slate-700">{fechaFormat}</span>
+                                  <span>•</span>
+                                  <span className="flex items-center gap-1"><Phone size={12}/> {cita.pacientes?.telefono || 'Sin teléfono'}</span>
+                                </div>
+                                <div className="mt-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                                  <Stethoscope size={12}/> Dr(a). {doctor?.apellido || 'S/A'}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex gap-2 w-full md:w-auto mt-2 md:mt-0">
+                              <button 
+                                onClick={() => rechazarCitaOnline(cita.id)} 
+                                disabled={cargandoAccion} 
+                                className="flex-1 md:flex-none p-3 bg-red-50 text-red-600 hover:bg-red-500 hover:text-white rounded-xl border border-red-100 transition-all font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50"
+                              >
+                                <Ban size={16} /> Rechazar
+                              </button>
+                              <button 
+                                onClick={() => validarCitaOnline(cita)} 
+                                disabled={cargandoAccion} 
+                                className="flex-1 md:flex-none p-3 bg-emerald-500 text-white hover:bg-emerald-600 rounded-xl transition-all font-black text-[10px] uppercase tracking-widest flex items-center justify-center gap-2 disabled:opacity-50 shadow-md"
+                              >
+                                {cargandoAccion ? <Loader2 size={16} className="animate-spin" /> : <MessageCircle size={16} />} Validar y Avisar
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </>,
         document.body
       )}
