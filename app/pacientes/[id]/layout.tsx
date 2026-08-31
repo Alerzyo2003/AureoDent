@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import { 
   User, ClipboardList, Activity, Camera, Wallet, 
   ArrowLeft, UserCircle, History, Pill, FileCheck, 
-  ClipboardCheck, Tag, Loader2,
+  ClipboardCheck, Tag, Loader2, Plus, Trash2, Edit2, // <-- Agregados aquí
   AlertCircle, ImageIcon, Fingerprint, Clock,
   VenusAndMars, Cake, Coins, AlertTriangle, Lock, ShieldAlert, Spline,
   CalendarClock, CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2, Save, X, MessageCircle
@@ -41,6 +41,8 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
   const [paciente, setPaciente] = useState<any>(null)
   const [datosPresupuesto, setDatosPresupuesto] = useState<any>(null)
   const [antecedentes, setAntecedentes] = useState<any[]>([])
+  const [proximasCitas, setProximasCitas] = useState<any[]>([])
+  const [dropdownCitasAbierto, setDropdownCitasAbierto] = useState(false)
   const [perfil, setPerfil] = useState<any>(null)
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null)
 
@@ -61,6 +63,48 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
   const [guardandoCita, setGuardandoCita] = useState(false)
   const [mostrarTicket, setMostrarTicket] = useState(false)
   const [citaConfirmadaData, setCitaConfirmadaData] = useState<any>(null)
+
+  const [modalEdicionAntecedentes, setModalEdicionAntecedentes] = useState(false);
+  const [categoriaActiva, setCategoriaActiva] = useState<'alerta' | 'enfermedad' | 'medicamento'>('alerta');
+  const [nuevoItemTexto, setNuevoItemTexto] = useState('');
+  const [procesandoItem, setProcesandoItem] = useState(false);
+
+  const abrirEdicionRapida = (categoria: 'alerta' | 'enfermedad' | 'medicamento') => {
+    setCategoriaActiva(categoria);
+    setNuevoItemTexto('');
+    setModalEdicionAntecedentes(true);
+  };
+
+  const agregarItemRapido = async () => {
+    if (!nuevoItemTexto.trim()) return;
+    setProcesandoItem(true);
+    try {
+      await supabase.from('antecedentes').insert([{ paciente_id: id, categoria: categoriaActiva, contenido: nuevoItemTexto.trim() }]);
+      toast.success("Registro añadido");
+      setNuevoItemTexto('');
+      fetchDatosMaestros(); // Actualiza la tarjeta inmediatamente
+      window.dispatchEvent(new Event('pacienteActualizado')); // Avisa a las otras páginas
+    } catch (error) {
+      toast.error("Error al guardar");
+    } finally {
+      setProcesandoItem(false);
+    }
+  };
+
+  const eliminarItemRapido = async (itemId: string) => {
+    setProcesandoItem(true);
+    try {
+      await supabase.from('antecedentes').delete().eq('id', itemId);
+      toast.success("Registro eliminado");
+      fetchDatosMaestros(); // Actualiza la tarjeta
+      window.dispatchEvent(new Event('pacienteActualizado'));
+    } catch (error) {
+      toast.error("Error al eliminar");
+    } finally {
+      setProcesandoItem(false);
+    }
+  };
+
 
   const presupuestoId = pathname.match(/\/tratamientos\/([a-f0-9-]{36})/)?.[1] || null;
 
@@ -112,12 +156,34 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
 
   async function fetchDatosMaestros() {
     try {
-      const [resPac, resAnt] = await Promise.all([
+      const hoy = new Date().toISOString();
+      const [resPac, resAnt, resCitas, resProfs] = await Promise.all([
         supabase.from('pacientes').select('*').eq('id', id).maybeSingle(),
-        supabase.from('antecedentes').select('*').eq('paciente_id', id)
+        supabase.from('antecedentes').select('*').eq('paciente_id', id),
+        supabase.from('citas')
+          .select('*')
+          .eq('paciente_id', id)
+          .gte('inicio', hoy)
+          .neq('estado', 'cancelada')
+          .order('inicio', { ascending: true })
+          .limit(3), // Traerá las 3 más próximas
+        supabase.from('profesionales').select('user_id, nombre, apellido')
       ]);
+      
       if (resPac.data) setPaciente(resPac.data);
       if (resAnt.data) setAntecedentes(resAnt.data);
+      
+      if (resCitas.data) {
+        const citasMapeadas = resCitas.data.map((cita: any) => {
+          const prof = resProfs.data?.find((p: any) => p.user_id === cita.profesional_id);
+          return {
+            ...cita,
+            // Extraemos solo el primer nombre y apellido para que quepa bien visualmente
+            profesional_nombre: prof ? `Dr. ${prof.nombre.split(' ')[0]} ${prof.apellido.split(' ')[0]}` : 'Especial.'
+          };
+        });
+        setProximasCitas(citasMapeadas);
+      }
     } catch (err) { console.error(err) }
   }
 
@@ -345,25 +411,40 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
           </div>
 
           <div className="flex w-full xl:w-auto overflow-x-auto snap-x snap-mandatory no-scrollbar gap-3 pb-2 xl:pb-0 pt-1 xl:pt-0">
-            <div className="snap-center shrink-0 w-[75%] sm:w-44 bg-red-50/40 border border-red-100 rounded-xl p-2.5 flex flex-col gap-1.5 transition-all duration-300 hover:shadow-md cursor-default">
-              <h3 className="text-[8px] font-black text-red-800 uppercase tracking-widest flex items-center gap-1.5"><AlertTriangle size={10}/> Alertas</h3>
+            {/* TARJETA ALERTAS */}
+            <div onClick={() => abrirEdicionRapida('alerta')} className="snap-center shrink-0 w-[75%] sm:w-44 bg-red-50/40 border border-red-100 rounded-xl p-2.5 flex flex-col gap-1.5 transition-all duration-300 hover:shadow-md hover:border-red-300 cursor-pointer group">
+              <div className="flex justify-between items-center">
+                <h3 className="text-[8px] font-black text-red-800 uppercase tracking-widest flex items-center gap-1.5"><AlertTriangle size={10}/> Alertas</h3>
+                <Edit2 size={10} className="text-red-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
               <div className="flex flex-wrap gap-1">
                 {alertas.length > 0 ? alertas.map(a => <span key={a.id} className="bg-red-100/80 text-red-700 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase leading-tight">{a.contenido}</span>) : <span className="text-[8px] text-red-400/70 font-bold italic uppercase tracking-widest">Ninguna</span>}
               </div>
             </div>
-            <div className="snap-center shrink-0 w-[75%] sm:w-44 bg-blue-50/40 border border-blue-100 rounded-xl p-2.5 flex flex-col gap-1.5 transition-all duration-300 hover:shadow-md cursor-default">
-              <h3 className="text-[8px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5"><Activity size={10}/> Enfermedades</h3>
+            
+            {/* TARJETA ENFERMEDADES */}
+            <div onClick={() => abrirEdicionRapida('enfermedad')} className="snap-center shrink-0 w-[75%] sm:w-44 bg-blue-50/40 border border-blue-100 rounded-xl p-2.5 flex flex-col gap-1.5 transition-all duration-300 hover:shadow-md hover:border-blue-300 cursor-pointer group">
+              <div className="flex justify-between items-center">
+                <h3 className="text-[8px] font-black text-blue-800 uppercase tracking-widest flex items-center gap-1.5"><Activity size={10}/> Enfermedades</h3>
+                <Edit2 size={10} className="text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
               <div className="flex flex-wrap gap-1">
                 {enfermedades.length > 0 ? enfermedades.map(e => <span key={e.id} className="bg-blue-100/80 text-blue-700 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase leading-tight">{e.contenido}</span>) : <span className="text-[8px] text-blue-400/70 font-bold italic uppercase tracking-widest">Ninguna</span>}
               </div>
             </div>
-            <div className="snap-center shrink-0 w-[75%] sm:w-44 bg-purple-50/40 border border-purple-100 rounded-xl p-2.5 flex flex-col gap-1.5 transition-all duration-300 hover:shadow-md cursor-default">
-              <h3 className="text-[8px] font-black text-purple-800 uppercase tracking-widest flex items-center gap-1.5"><Pill size={10}/> Medicamentos</h3>
+            
+            {/* TARJETA MEDICAMENTOS */}
+            <div onClick={() => abrirEdicionRapida('medicamento')} className="snap-center shrink-0 w-[75%] sm:w-44 bg-purple-50/40 border border-purple-100 rounded-xl p-2.5 flex flex-col gap-1.5 transition-all duration-300 hover:shadow-md hover:border-purple-300 cursor-pointer group">
+              <div className="flex justify-between items-center">
+                <h3 className="text-[8px] font-black text-purple-800 uppercase tracking-widest flex items-center gap-1.5"><Pill size={10}/> Medicamentos</h3>
+                <Edit2 size={10} className="text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </div>
               <div className="flex flex-wrap gap-1">
                 {medicamentos.length > 0 ? medicamentos.map(m => <span key={m.id} className="bg-purple-100/80 text-purple-700 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase leading-tight">{m.contenido}</span>) : <span className="text-[8px] text-purple-400/70 font-bold italic uppercase tracking-widest">Ninguno</span>}
               </div>
             </div>
           </div>
+          
         </div>
 
         <div className="bg-slate-50/50 border-t border-slate-100 px-4 lg:px-6 py-2">
@@ -383,12 +464,82 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
             </nav>
 
             {/* BOTÓN AGENDAR NATIVO */}
-            <button 
-              onClick={abrirModalAgendar}
-              className="flex items-center gap-2 px-4 py-2 bg-[#C9A24B] text-white rounded-[1rem] font-black text-[10px] uppercase tracking-widest hover:bg-[#B38D3A] transition-all shrink-0 shadow-sm"
-            >
-              <CalendarClock size={14} /> <span className="hidden sm:inline">Agendar Cita</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {/* DROPDOWN: PRÓXIMAS CITAS */}
+              <div className="relative shrink-0">
+                <button 
+                  onClick={() => setDropdownCitasAbierto(!dropdownCitasAbierto)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-[1rem] font-black text-[10px] uppercase tracking-widest transition-all shadow-sm border ${dropdownCitasAbierto ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  <CalendarClock size={14} className={dropdownCitasAbierto ? "text-[#C9A24B]" : "text-slate-400"} /> 
+                  <span className="hidden xl:inline">Próximas Citas</span>
+                  {proximasCitas.length > 0 && (
+                    <span className="bg-[#C9A24B] text-white px-1.5 py-0.5 rounded-full text-[9px] shadow-sm">
+                      {proximasCitas.length}
+                    </span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {dropdownCitasAbierto && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setDropdownCitasAbierto(false)}></div>
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }} 
+                        animate={{ opacity: 1, y: 0, scale: 1 }} 
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }} 
+                        transition={{ duration: 0.2 }}
+                        className="absolute right-0 mt-3 w-[280px] bg-slate-900 rounded-2xl shadow-2xl border border-slate-800 z-50 overflow-hidden"
+                      >
+                        <div className="p-4 border-b border-white/10 flex items-center justify-between bg-slate-900/50">
+                          <h3 className="text-[10px] font-black text-[#C9A24B] uppercase tracking-widest flex items-center gap-1.5">
+                            <CalendarClock size={14}/> Citas Agendadas
+                          </h3>
+                        </div>
+                        <div className="p-3 flex flex-col gap-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                          {proximasCitas.length > 0 ? proximasCitas.map((cita, idx) => (
+                            <div key={cita.id} className={`p-3 rounded-xl flex flex-col gap-2 ${idx === 0 ? 'bg-[#C9A24B] text-white shadow-md' : 'bg-white/5 text-slate-300 border border-white/5'}`}>
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-2">
+                                  {idx === 0 && <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />}
+                                  <span className={`text-[10px] font-black uppercase tracking-widest ${idx === 0 ? 'text-white' : 'text-slate-200'}`}>
+                                    {new Date(cita.inicio).toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: 'short' })}
+                                  </span>
+                                </div>
+                                <span className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${idx === 0 ? 'bg-black/20 text-white' : 'bg-black/40 text-white/70'}`}>
+                                  {new Date(cita.inicio).toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})} hrs
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center mt-1">
+                                <span className={`text-[9px] font-bold uppercase truncate max-w-[130px] ${idx === 0 ? 'text-white/90' : 'text-slate-400'}`}>
+                                  {cita.motivo || 'CONSULTA'}
+                                </span>
+                                <span className={`text-[8px] font-black uppercase tracking-wider ${idx === 0 ? 'text-white/80' : 'text-slate-500'}`}>
+                                  {cita.profesional_nombre}
+                                </span>
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="py-6 flex flex-col items-center justify-center text-center gap-2">
+                              <CalendarIcon size={32} className="text-white/10" />
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">El paciente no tiene<br/>citas futuras</p>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* BOTÓN AGENDAR NATIVO */}
+              <button 
+                onClick={abrirModalAgendar}
+                className="flex items-center gap-2 px-4 py-2 bg-[#C9A24B] text-white rounded-[1rem] font-black text-[10px] uppercase tracking-widest hover:bg-[#B38D3A] transition-all shrink-0 shadow-sm"
+              >
+                <CalendarClock size={14} /> <span className="hidden sm:inline">Agendar Cita</span>
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -603,6 +754,70 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
                       </button>
                     </div>
                   </div>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+          <AnimatePresence>
+            {modalEdicionAntecedentes && (
+              <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm text-left">
+                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden border border-slate-200 flex flex-col max-h-[80vh]">
+                  
+                  {/* Cabecera dinámica según color */}
+                  <div className={`p-5 flex justify-between items-center text-white shrink-0 ${categoriaActiva === 'alerta' ? 'bg-red-600' : categoriaActiva === 'enfermedad' ? 'bg-blue-600' : 'bg-purple-600'}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="bg-white/20 p-2 rounded-xl">
+                        {categoriaActiva === 'alerta' ? <AlertTriangle size={20}/> : categoriaActiva === 'enfermedad' ? <Activity size={20}/> : <Pill size={20}/>}
+                      </div>
+                      <div>
+                        <h3 className="font-black text-sm uppercase tracking-widest">Editar {categoriaActiva}s</h3>
+                        <p className="text-[9px] font-bold text-white/80 uppercase">Gestión rápida</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setModalEdicionAntecedentes(false)} className="p-2 hover:bg-white/20 rounded-xl transition-colors"><X size={18}/></button>
+                  </div>
+                  
+                  <div className="flex-1 overflow-y-auto p-5 bg-slate-50 flex flex-col gap-3 custom-scrollbar">
+                    {/* Lista de items actuales */}
+                    {antecedentes.filter(a => a.categoria === categoriaActiva).length === 0 ? (
+                       <p className="text-center text-[10px] font-bold uppercase tracking-widest text-slate-400 py-6">No hay registros</p>
+                    ) : (
+                      antecedentes.filter(a => a.categoria === categoriaActiva).map(item => (
+                        <div key={item.id} className="flex justify-between items-center bg-white border border-slate-200 p-3 rounded-xl shadow-sm">
+                          <span className="text-[11px] font-bold text-slate-700 uppercase">{item.contenido}</span>
+                          <button 
+                            onClick={() => eliminarItemRapido(item.id)}
+                            disabled={procesandoItem}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Agregar nuevo */}
+                  <div className="p-5 bg-white border-t border-slate-100 shrink-0">
+                    <div className="flex gap-2">
+                      <input 
+                        type="text" 
+                        placeholder={`Nuevo/a ${categoriaActiva}...`}
+                        className="flex-1 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold text-slate-800 outline-none focus:border-slate-400 transition-all"
+                        value={nuevoItemTexto}
+                        onChange={(e) => setNuevoItemTexto(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && agregarItemRapido()}
+                      />
+                      <button 
+                        onClick={agregarItemRapido}
+                        disabled={procesandoItem || !nuevoItemTexto.trim()}
+                        className={`p-3 text-white rounded-xl font-black transition-all shadow-md disabled:opacity-50 flex items-center justify-center ${categoriaActiva === 'alerta' ? 'bg-red-600 hover:bg-red-700' : categoriaActiva === 'enfermedad' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'}`}
+                      >
+                        {procesandoItem ? <Loader2 className="animate-spin" size={18}/> : <Plus size={18}/>}
+                      </button>
+                    </div>
+                  </div>
+
                 </motion.div>
               </div>
             )}
