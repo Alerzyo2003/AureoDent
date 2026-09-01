@@ -2,10 +2,12 @@
 
 import { useParams, useSearchParams } from 'next/navigation'
 import React, { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
-import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, History, AlertCircle, Download } from 'lucide-react'
+import { ChevronLeft, Printer, DollarSign, Loader2, FlaskConical, CheckCircle2, History, AlertCircle, Download, Eye, X, Wallet } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export default function DetalleLiquidacionPage() {
   const { id } = useParams()
@@ -18,8 +20,13 @@ export default function DetalleLiquidacionPage() {
   const [resumenMes, setResumenMes] = useState({ totalMes: 0, totalPagado: 0, saldoPendiente: 0 })
   const [cargando, setCargando] = useState(true)
   const [fechaEmision, setFechaEmision] = useState('')
+  const [detalleItem, setDetalleItem] = useState<any>(null)
+
+  // Estado para los Portals
+  const [isMounted, setIsMounted] = useState(false)
 
   useEffect(() => {
+    setIsMounted(true)
     if (id) fetchData()
   }, [id, mesSeleccionado])
 
@@ -30,7 +37,10 @@ export default function DetalleLiquidacionPage() {
       const ultimoDiaNum = new Date(Number(year), Number(month), 0).getDate();
       const ultimoDia = String(ultimoDiaNum).padStart(2, '0');
       
-      // 1. Obtener datos del profesional
+      const finMes = `${year}-${month}-${ultimoDia} 23:59:59`
+      const fechaCortaFin = `${year}-${month}-${ultimoDia}`;
+      
+      // 1. Obtener datos del profesional (usando el ID de la URL)
       const { data: prof, error: errProf } = await supabase.from('profesionales').select('*').eq('user_id', id).single()
       if (errProf) throw errProf;
       if (!prof) return;
@@ -40,39 +50,41 @@ export default function DetalleLiquidacionPage() {
       
       const porcentajeDr = Number(prof.porcentaje_comision || 40) / 100;
 
-      // 2. Obtener Liquidaciones Cerradas del doctor
-      const { data: liqsData } = await supabase
-        .from('liquidaciones')
-        .select('*')
-        .eq('profesional_id', prof.id)
-        .eq('estado', 'Finalizada')
-        .order('fecha_pago', { ascending: true });
+      // 2. Obtener Atenciones Directas del doctor
+      let todasLasAtenciones: any[] = [];
+      let fetchMoreAt = true;
+      let fromAt = 0;
+      while (fetchMoreAt) {
+        const { data } = await supabase.from('atenciones_realizadas')
+          .select(`id, fecha, monto_cobrado, profesional_id, paciente_id, observacion, pacientes(id, nombre, apellido), prestaciones!atenciones_realizadas_prestacion_id_fkey(id, "Nombre Accion")`)
+          .eq('profesional_id', prof.user_id)
+          .lte('fecha', finMes)
+          .range(fromAt, fromAt + 999);
+        if (data?.length) { todasLasAtenciones.push(...data); fromAt += 1000; } else { fetchMoreAt = false; }
+      }
 
-      const liqsCerradas = liqsData || [];
-
-      // 3. Obtener Pagos Históricos con Paginación
+      // 3. Obtener Pagos Históricos de Presupuestos
       let todosLosPagos: any[] = [];
       let fetchMorePagos = true;
       let fromPagos = 0;
       const step = 1000;
-
       while (fetchMorePagos) {
         const { data: pagosChunk, error: errPagos } = await supabase
           .from('pagos')
           .select(`
-            id, monto, fecha_pago, profesional_id, item_id,
-            pacientes ( nombre, apellido ),
-            presupuesto_items!pagos_item_id_fkey ( 
-              id, profesional_id, nombre_prestacion, precio_pactado, 
+            id, monto, fecha_pago, profesional_id, paciente_id,
+            pacientes ( id, nombre, apellido ),
+            presupuesto_items ( 
+              id, presupuesto_id, profesional_id, nombre_prestacion, precio_pactado, 
               abonado, costo_laboratorio, lab_pagado_por_dr, 
-              estado, tipo_reparto, porcentaje_forzado, diente_id, cara 
+              estado, tipo_reparto, porcentaje_forzado, diente_id, cara, observacion, progreso
             )
           `)
           .not('estado', 'eq', 'Anulado')
+          .lte('fecha_pago', finMes)
           .range(fromPagos, fromPagos + step - 1);
 
         if (errPagos) throw errPagos;
-
         if (pagosChunk && pagosChunk.length > 0) {
           todosLosPagos = [...todosLosPagos, ...pagosChunk];
           fromPagos += step;
@@ -81,27 +93,57 @@ export default function DetalleLiquidacionPage() {
         }
       }
 
-      // Filtro estricto: Pertenece al doctor Y el ítem está 100% pagado (abonado >= precio_pactado)
-      const pagosDelDoctor = todosLosPagos.filter((pago: any) => {
+      // 4. Obtener Liquidaciones Cerradas del doctor
+      const { data: liqsData } = await supabase
+        .from('liquidaciones')
+        .select('*')
+        .eq('profesional_id', prof.id)
+        .eq('estado', 'Finalizada')
+        .lte('periodo_hasta', fechaCortaFin)
+        .order('fecha_pago', { ascending: true });
+
+      const liqsCerradas = liqsData || [];
+
+      // 5. Formatear y Aplicar Regla del 100% Pagado
+      const atencionesFormateadas = todasLasAtenciones.map((a: any) => ({
+        id_origen: a.id,
+        fecha: a.fecha,
+        paciente: a.pacientes ? `${a.pacientes.nombre} ${a.pacientes.apellido}` : 'Paciente no encontrado',
+        prestacion: a.prestaciones?.["Nombre Accion"] || 'Atención Directa',
+        montoPago: Number(a.monto_cobrado),
+        descuentoLab: 0,
+        esReembolso: false,
+        imponible: Number(a.monto_cobrado),
+        honorario: Number(a.monto_cobrado) * porcentajeDr,
+        tipo: 'Atención',
+        paciente_id: a.paciente_id,
+        presupuesto_id: null,
+        tratamiento_id: a.id,
+        estaEvolucionado: true,
+        paymentStatus: 'paid',
+        costoTotalPrestacion: Number(a.monto_cobrado),
+        pagadoTotalPrestacion: Number(a.monto_cobrado),
+        observacion: a.observacion
+      }));
+
+      const abonosFormateados = todosLosPagos.filter((pago: any) => {
          const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
          const docId = pItem.profesional_id || pago.profesional_id || null; 
-         
          if (docId !== prof.user_id) return false;
 
          const precioPactado = Number(pItem.precio_pactado || 0);
          const abonadoTotal = Number(pItem.abonado || 0);
 
+         // REGLA INQUEBRANTABLE (Liquidables solo si 100% pagado)
          return precioPactado > 0 && abonadoTotal >= precioPactado;
-      });
-
-      // 4. Formatear los pagos reales a comisiones
-      const produccionCombinada = pagosDelDoctor.map((pago: any) => {
+      }).map((pago: any) => {
         const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
         
         const montoPago = Number(pago.monto || 0); 
         const costoLab = Number(pItem.costo_laboratorio || 0);
         const precioPactado = Number(pItem.precio_pactado || montoPago || 1);
         const pagadoPorDr = Boolean(pItem.lab_pagado_por_dr);
+        const totalAbonado = Number(pItem.abonado || 0);
         
         const itemEstado = pItem.estado?.toLowerCase() || '';
         const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(itemEstado);
@@ -125,21 +167,33 @@ export default function DetalleLiquidacionPage() {
         const reembolso = estaTerminado ? (pagadoPorDr ? labAplicado : 0) : 0;
         const totalAlDoctor = comision + reembolso;
 
-        const infoPieza = pItem.diente_id ? ` (Pza ${pItem.diente_id})` : '';
-
         return {
           id_origen: pago.id,
           fecha: pago.fecha_pago,
           paciente: pago.pacientes ? `${pago.pacientes.nombre} ${pago.pacientes.apellido}` : 'Paciente',
-          prestacion: `${pItem.nombre_prestacion || 'Abono Plan'}${infoPieza}`,
+          prestacion: pItem.nombre_prestacion || 'Abono Plan',
           montoPago: montoPago,
           descuentoLab: labAplicado,
           esReembolso: pagadoPorDr,
           imponible: montoImponible,
           honorario: totalAlDoctor,
-          tipo: 'Abono Plan'
+          tipo: 'Abono Plan',
+          paciente_id: pago.paciente_id,
+          presupuesto_id: pItem.presupuesto_id,
+          tratamiento_id: pItem.id,
+          estaEvolucionado: estaTerminado,
+          paymentStatus: 'paid',
+          costoTotalPrestacion: precioPactado,
+          pagadoTotalPrestacion: totalAbonado,
+          diente: pItem.diente_id,
+          cara: pItem.cara,
+          observacion: pItem.observacion
         }
-      }).sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+      });
+
+      // 6. Unificar y Aplicar Cascada de Tiempo
+      const produccionCombinada = [...atencionesFormateadas, ...abonosFormateados]
+        .sort((a, b) => new Date(a.fecha?.replace(' ', 'T') || 0).getTime() - new Date(b.fecha?.replace(' ', 'T') || 0).getTime());
 
       let poolProduccion = produccionCombinada.map(p => ({
         ...p,
@@ -152,11 +206,8 @@ export default function DetalleLiquidacionPage() {
         let montoARepartir = Number(liq.monto_total);
         let itemsDeEstaLiq = [];
         
-        // Rango de fechas estricto de la liquidación guardada en BD
-        let fechaInicioLiq = liq.periodo_desde ? new Date(liq.periodo_desde.replace(' ', 'T')) : new Date(0);
-        let fechaFinLiq = liq.periodo_hasta ? new Date(liq.periodo_hasta.replace(' ', 'T')) : new Date((liq.fecha_pago || '').replace(' ', 'T'));
-        fechaInicioLiq.setHours(0, 0, 0, 0);
-        fechaFinLiq.setHours(23, 59, 59, 999);
+        let fechaLimite = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
+        fechaLimite.setHours(23, 59, 59, 999);
 
         for(let i = 0; i < poolProduccion.length; i++) {
             let item = poolProduccion[i];
@@ -165,10 +216,7 @@ export default function DetalleLiquidacionPage() {
             if (montoARepartir <= 0) break;
 
             let fechaItem = new Date(item.fecha ? item.fecha.replace(' ', 'T') : 0);
-
-            // 🛡️ REGLA ESTRICTA: El cierre histórico solo puede consumir ítems 
-            // cuya fecha esté dentro del rango de ese periodo de liquidación.
-            if (fechaItem < fechaInicioLiq || fechaItem > fechaFinLiq) continue;
+            if (fechaItem > fechaLimite) continue;
 
             let aDescontar = Math.min(item.honorario_restante, montoARepartir);
             
@@ -181,14 +229,18 @@ export default function DetalleLiquidacionPage() {
             montoARepartir -= aDescontar;
         }
 
-        cierresList.push({
-          id: liq.id,
-          titulo: `Cierre #${index + 1} • Pagado el ${new Date(liq.fecha_pago || liq.periodo_hasta).toLocaleDateString('es-CL')}`,
-          items: itemsDeEstaLiq,
-          montoTotal: liq.monto_total
-        });
+        let fLiq = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
+        if (fLiq.getFullYear() === Number(year) && fLiq.getMonth() === (Number(month) - 1)) {
+          cierresList.push({
+            id: liq.id,
+            titulo: `Cierre #${index + 1} • Pagado el ${fLiq.toLocaleDateString('es-CL')}`,
+            items: itemsDeEstaLiq,
+            montoTotal: liq.monto_total
+          });
+        }
       });
 
+      // 7. Separar lo que quedó pendiente a pagar de los 100% liquidados
       const pendientesFinal = poolProduccion
         .filter(p => p.honorario_restante > 0)
         .map(p => ({
@@ -196,9 +248,7 @@ export default function DetalleLiquidacionPage() {
             honorario: p.honorario_restante
         }));
 
-      setItemsPendientes(pendientesFinal);
-      setCierresCompletados(cierresList.reverse());
-
+      // 8. Resumen de contabilidad estrictamente del mes consultado
       const produccionDelMes = produccionCombinada.filter(p => {
         const fechaItem = new Date(p.fecha?.replace(' ', 'T') || 0);
         return fechaItem.getFullYear() === Number(year) && fechaItem.getMonth() === (Number(month) - 1);
@@ -206,14 +256,71 @@ export default function DetalleLiquidacionPage() {
       const totalMes = produccionDelMes.reduce((acc, curr) => acc + curr.honorario, 0);
 
       const liqsDelMes = liqsCerradas.filter(l => {
-        const fechaLiq = new Date(l.fecha_pago || l.periodo_hasta);
+        const fechaLiq = new Date((l.fecha_pago || l.periodo_hasta).replace(' ', 'T'));
         return fechaLiq.getFullYear() === Number(year) && fechaLiq.getMonth() === (Number(month) - 1);
       });
       const totalPagado = liqsDelMes.reduce((acc, curr) => acc + Number(curr.monto_total), 0);
-
       const saldoPendiente = pendientesFinal.reduce((acc, curr) => acc + curr.honorario, 0);
       
       setResumenMes({ totalMes, totalPagado, saldoPendiente });
+
+      // 9. Obtener TODOS los items pendientes (no pagados 100%, pero sí evolucionados/abonados)
+      const { data: itemsEnSeguimientoData } = await supabase
+        .from('presupuesto_items')
+        .select('*, presupuestos(paciente_id, pacientes(id, nombre, apellido))')
+        .eq('profesional_id', prof.user_id)
+        .or('progreso.gt.0,abonado.gt.0,estado.eq.realizado,estado.eq.atendido,estado.eq.terminado,estado.eq.finalizado,estado.eq.completado');
+
+      const itemsDeSeguimiento = (itemsEnSeguimientoData || [])
+        .map((item: any) => {
+            const precioPactado = Number(item.precio_pactado || 0);
+            const totalAbonado = Number(item.abonado || 0);
+
+            // Ignorar si ya está en los pendientes 100% liquidados
+            if (pendientesFinal.some(p => p.tratamiento_id === item.id)) return null;
+            // Ignorar si ya está liquidado en algún cierre del mes
+            if (cierresList.some(c => c.items.some((i: any) => i.tratamiento_id === item.id))) return null;
+
+            const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(item.estado?.toLowerCase() || '');
+            const progreso = Number(item.progreso || 0);
+            const estaEvolucionado = estaTerminado || progreso > 0 || totalAbonado > 0;
+
+            if (!estaEvolucionado && totalAbonado === 0) return null;
+
+            let paymentStatus = 'unpaid';
+            if (totalAbonado >= precioPactado && precioPactado > 0) {
+                paymentStatus = 'paid';
+            } else if (totalAbonado > 0) {
+                paymentStatus = 'partially-paid';
+            }
+
+            const pacienteData = item.presupuestos?.pacientes;
+            return {
+              id_origen: item.id,
+              fecha: item.updated_at,
+              paciente: pacienteData ? `${pacienteData.nombre} ${pacienteData.apellido}` : 'Paciente',
+              prestacion: item.nombre_prestacion || 'Prestación sin nombre',
+              montoPago: totalAbonado,
+              descuentoLab: 0,
+              imponible: 0,
+              honorario: 0, // No genera honorario a la bolsa liquida hasta el 100%
+              tipo: 'Seguimiento',
+              paciente_id: item.presupuestos?.paciente_id,
+              presupuesto_id: item.presupuesto_id,
+              tratamiento_id: item.id,
+              estaEvolucionado: estaEvolucionado,
+              paymentStatus: paymentStatus,
+              costoTotalPrestacion: precioPactado,
+              pagadoTotalPrestacion: totalAbonado,
+              diente: item.diente_id,
+              cara: item.cara,
+              observacion: item.observacion
+            };
+        })
+        .filter(Boolean);
+
+      setItemsPendientes([...pendientesFinal, ...itemsDeSeguimiento]);
+      setCierresCompletados(cierresList.reverse());
 
     } catch (error: any) {
       toast.error(`Error al cargar datos: ${error.message}`)
@@ -236,6 +343,7 @@ export default function DetalleLiquidacionPage() {
     }
 
     const encabezados = [
+      'Estado',
       'Fecha',
       'Paciente',
       'Prestacion',
@@ -247,7 +355,10 @@ export default function DetalleLiquidacionPage() {
 
     const filas = itemsPendientes.map(item => {
       const fecha = item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F';
+      const estado = item.paymentStatus === 'paid' ? 'Pagado 100%' : item.paymentStatus === 'partially-paid' ? 'Parcial' : 'Deuda';
+      
       return [
+        estado,
         fecha,
         `"${item.paciente}"`,
         `"${item.prestacion}"`,
@@ -258,7 +369,7 @@ export default function DetalleLiquidacionPage() {
       ].join(';'); 
     });
 
-    filas.push(['', '', 'TOTAL PENDIENTE A PAGAR', '', '', '', Math.round(resumenMes.saldoPendiente)].join(';'));
+    filas.push(['', '', '', 'TOTAL PENDIENTE A PAGAR', '', '', '', Math.round(resumenMes.saldoPendiente)].join(';'));
 
     const csvContent = "\uFEFF" + encabezados.join(';') + "\n" + filas.join("\n");
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -316,7 +427,7 @@ export default function DetalleLiquidacionPage() {
               <DollarSign size={120} />
             </div>
             <p className="text-[10px] font-black uppercase text-[#C9A24B] tracking-widest relative z-10">Saldo Pendiente a Pagar</p>
-            <p className="text-[9px] text-slate-400 uppercase mt-1 relative z-10">Producción nueva no liquidada</p>
+            <p className="text-[9px] text-slate-400 uppercase mt-1 relative z-10">Honorarios listos para pago</p>
             <p className={`text-4xl font-black mt-3 flex items-center gap-2 relative z-10 ${resumenMes.saldoPendiente > 0 ? "text-white" : "text-slate-500"}`}>
               ${Math.round(resumenMes.saldoPendiente).toLocaleString('es-CL')}
             </p>
@@ -366,8 +477,8 @@ export default function DetalleLiquidacionPage() {
               <div className="flex items-center gap-3 mb-6">
                 <div className="p-3 bg-amber-100 text-amber-600 rounded-xl"><AlertCircle size={22} /></div>
                 <div>
-                  <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Pendiente de Pago</h2>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tratamientos realizados y 100% pagados que aún no se liquidan al doctor</p>
+                  <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Estado de Tratamientos y Pagos</h2>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Tratamientos evolucionados pendientes de liquidación y sus deudas</p>
                 </div>
               </div>
 
@@ -380,26 +491,46 @@ export default function DetalleLiquidacionPage() {
               ) : (
                 <div className="overflow-hidden rounded-[2.5rem] border border-amber-200/60 shadow-sm bg-white">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[800px]">
+                    <table className="w-full text-left min-w-[900px]">
                       <thead className="bg-amber-50/60 border-b border-amber-100">
                         <tr>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Fecha</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Paciente</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Prestación</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Pago Recibido</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Costo Lab</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Base Imponible</th>
-                          <th className="px-6 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right bg-amber-100/50">A Pagar al Dr.</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest w-32 text-center">Estado</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Fecha</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Paciente</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest">Prestación</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Pago Recibido</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Costo Lab</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right">Base Imponible</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest text-right bg-amber-100/50">Honorario</th>
+                          <th className="px-5 py-4 text-[9px] font-black text-amber-800 uppercase tracking-widest w-20 text-center">Detalle</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 bg-white">
                         {itemsPendientes.map((item: any, idx: number) => (
                           <tr key={idx} className="text-xs font-bold text-slate-700 hover:bg-slate-50/50 transition-colors">
-                            <td className="px-6 py-4 text-slate-400">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
-                            <td className="px-6 py-4 uppercase font-black">{item.paciente}</td>
-                            <td className="px-6 py-4 uppercase text-slate-600 max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
-                            <td className="px-6 py-4 text-right text-slate-800">${(item.montoPago || 0).toLocaleString('es-CL')}</td>
-                            <td className="px-6 py-4 text-right">
+                            <td className="px-5 py-4">
+                              {item.estaEvolucionado && (
+                                <div className="flex items-center justify-center gap-2">
+                                  <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                    item.paymentStatus === 'paid' ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' :
+                                    item.paymentStatus === 'partially-paid' ? 'bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]' :
+                                    'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'
+                                  }`}></div>
+                                  <span className={`text-[9px] font-black uppercase tracking-widest ${
+                                    item.paymentStatus === 'paid' ? 'text-emerald-600' :
+                                    item.paymentStatus === 'partially-paid' ? 'text-amber-600' :
+                                    'text-red-600'
+                                  }`}>
+                                    { item.paymentStatus === 'paid' ? 'Pagado' : item.paymentStatus === 'partially-paid' ? 'Parcial' : 'Deuda' }
+                                  </span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-5 py-4 text-slate-400">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
+                            <td className="px-5 py-4 uppercase font-black">{item.paciente}</td>
+                            <td className="px-5 py-4 uppercase text-slate-600 max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
+                            <td className="px-5 py-4 text-right text-slate-800">${(item.montoPago || 0).toLocaleString('es-CL')}</td>
+                            <td className="px-5 py-4 text-right">
                               {item.descuentoLab > 0 ? (
                                 <div className="flex flex-col items-end">
                                    <span className={`font-black flex items-center gap-1 ${item.esReembolso ? 'text-amber-600' : 'text-red-500'}`}>
@@ -411,19 +542,25 @@ export default function DetalleLiquidacionPage() {
                                 </div>
                               ) : <span className="text-slate-300">-</span>}
                             </td>
-                            <td className="px-6 py-4 text-right text-slate-600">${Math.round(item.imponible).toLocaleString('es-CL')}</td>
-                            <td className="px-6 py-4 text-right font-black text-amber-700 bg-amber-50/40 text-sm">
+                            <td className="px-5 py-4 text-right text-slate-600">${Math.round(item.imponible).toLocaleString('es-CL')}</td>
+                            <td className="px-5 py-4 text-right font-black text-amber-700 bg-amber-50/40 text-sm">
                               ${Math.round(item.honorario).toLocaleString('es-CL')}
+                            </td>
+                            <td className="px-5 py-4 text-center">
+                              <button onClick={() => setDetalleItem(item)} className="p-2.5 bg-white border border-slate-200 rounded-xl text-slate-400 hover:bg-[#0A111F] hover:text-[#C9A24B] hover:border-[#0A111F] transition-all shadow-sm">
+                                <Eye size={14} />
+                              </button>
                             </td>
                           </tr>
                         ))}
                       </tbody>
                       <tfoot className="bg-amber-50/80 border-t border-amber-200">
                         <tr>
-                          <td colSpan={6} className="px-6 py-5 text-right font-black text-amber-900 uppercase text-xs">Total Pendiente:</td>
+                          <td colSpan={7} className="px-6 py-5 text-right font-black text-amber-900 uppercase text-xs">Total Honorario a Pagar:</td>
                           <td className="px-6 py-5 text-right font-black text-amber-700 text-base">
                             ${Math.round(resumenMes.saldoPendiente).toLocaleString('es-CL')}
                           </td>
+                          <td></td>
                         </tr>
                       </tfoot>
                     </table>
@@ -459,26 +596,45 @@ export default function DetalleLiquidacionPage() {
                       </div>
 
                       <div className="overflow-x-auto">
-                        <table className="w-full text-left min-w-[800px]">
+                        <table className="w-full text-left min-w-[900px]">
                           <thead className="bg-slate-50/50 border-y border-slate-100">
                             <tr>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Paciente</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Prestación</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Pago Recibido</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Costo Lab</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Base Imponible</th>
-                              <th className="px-6 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Pagado al Dr.</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest w-32 text-center">Estado</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Paciente</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest">Prestación</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Pago Recibido</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Costo Lab</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right">Base Imponible</th>
+                              <th className="px-5 py-4 text-[9px] font-black text-slate-400 uppercase tracking-widest text-right bg-emerald-50/50">Pagado al Dr.</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
                             {cierre.items.map((item: any, idx: number) => (
                               <tr key={idx} className="text-xs font-bold text-slate-600 hover:bg-slate-50/50 transition-colors opacity-90">
-                                <td className="px-6 py-4">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
-                                <td className="px-6 py-4 uppercase font-black">{item.paciente}</td>
-                                <td className="px-6 py-4 uppercase max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
-                                <td className="px-6 py-4 text-right">${(item.montoPago || 0).toLocaleString('es-CL')}</td>
-                                <td className="px-6 py-4 text-right">
+                                <td className="px-5 py-4">
+                                  {item.estaEvolucionado && (
+                                    <div className="flex items-center justify-center gap-2">
+                                      <div className={`w-2 h-2 rounded-full shrink-0 ${
+                                        item.paymentStatus === 'paid' ? 'bg-emerald-500' :
+                                        item.paymentStatus === 'partially-paid' ? 'bg-amber-500' :
+                                        'bg-red-500'
+                                      }`}></div>
+                                      <span className={`text-[9px] font-black uppercase tracking-widest ${
+                                        item.paymentStatus === 'paid' ? 'text-emerald-600' :
+                                        item.paymentStatus === 'partially-paid' ? 'text-amber-600' :
+                                        'text-red-600'
+                                      }`}>
+                                        { item.paymentStatus === 'paid' ? 'Pagado' : item.paymentStatus === 'partially-paid' ? 'Parcial' : 'Deuda' }
+                                      </span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-5 py-4">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
+                                <td className="px-5 py-4 uppercase font-black">{item.paciente}</td>
+                                <td className="px-5 py-4 uppercase max-w-[200px] truncate" title={item.prestacion}>{item.prestacion}</td>
+                                <td className="px-5 py-4 text-right">${(item.montoPago || 0).toLocaleString('es-CL')}</td>
+                                <td className="px-5 py-4 text-right">
                                   {item.descuentoLab > 0 ? (
                                     <div className="flex flex-col items-end">
                                       <span className="font-black flex items-center gap-1 text-slate-400">
@@ -487,8 +643,8 @@ export default function DetalleLiquidacionPage() {
                                     </div>
                                   ) : <span className="text-slate-300">-</span>}
                                 </td>
-                                <td className="px-6 py-4 text-right">${Math.round(item.imponible).toLocaleString('es-CL')}</td>
-                                <td className="px-6 py-4 text-right font-black text-slate-500">
+                                <td className="px-5 py-4 text-right">${Math.round(item.imponible).toLocaleString('es-CL')}</td>
+                                <td className="px-5 py-4 text-right font-black text-emerald-700 bg-emerald-50/50">
                                   ${Math.round(item.honorario).toLocaleString('es-CL')}
                                 </td>
                               </tr>
@@ -542,7 +698,12 @@ export default function DetalleLiquidacionPage() {
                   <tr key={`pend-${idx}`}>
                     <td className="py-1">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
                     <td className="py-1 uppercase">{item.paciente}</td>
-                    <td className="py-1 uppercase pr-2">{item.prestacion}</td>
+                    <td className="py-1 uppercase pr-2">
+                      {item.prestacion}
+                      <span className="text-[8px] text-gray-500 ml-1">
+                        ({item.paymentStatus === 'paid' ? 'Pagado' : item.paymentStatus === 'partially-paid' ? 'Parcial' : 'Deuda'})
+                      </span>
+                    </td>
                     <td className="py-1 text-right font-bold">${Math.round(item.honorario).toLocaleString('es-CL')}</td>
                   </tr>
                 ))}
@@ -586,6 +747,97 @@ export default function DetalleLiquidacionPage() {
           <p>Venancia Leiva 1871, Región Metropolitana, La Pintana | +56966467641 / +56994464662</p>
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL DETALLE ITEM MEDIANTE CREATEPORTAL */}
+      {/* ========================================================================= */}
+      {isMounted && typeof document !== 'undefined' ? createPortal(
+        <AnimatePresence>
+          {detalleItem && (
+            <div className="fixed inset-0 bg-[#0A111F]/70 backdrop-blur-sm z-[999999] flex items-center justify-center p-4 text-left" onClick={() => setDetalleItem(null)}>
+              <motion.div
+                initial={{ opacity: 0, y: 15, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 15, scale: 0.95 }}
+                className="bg-white rounded-[2rem] p-8 md:p-10 w-full max-w-md shadow-2xl text-left border border-slate-100 max-h-[90vh] overflow-y-auto"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex justify-between items-start mb-6 text-left">
+                  <div>
+                    <h3 className="text-xl font-black text-[#0A111F] uppercase italic tracking-tight">Detalle del Movimiento</h3>
+                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1.5">{detalleItem.paciente}</p>
+                  </div>
+                  <button onClick={() => setDetalleItem(null)} className="p-2 bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div className="flex gap-2 mb-6">
+                  <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+                    detalleItem.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm' :
+                    detalleItem.paymentStatus === 'partially-paid' ? 'bg-amber-100 text-amber-700 border border-amber-200 shadow-sm' :
+                    'bg-red-100 text-red-700 border border-red-200 shadow-sm'
+                  }`}>
+                    {detalleItem.paymentStatus === 'paid' ? 'Pagado 100%' : detalleItem.paymentStatus === 'partially-paid' ? 'Pago Parcial' : 'Deuda / Sin Pagar'}
+                  </span>
+                </div>
+
+                <div className="space-y-4 text-left">
+                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Prestación</p>
+                    <p className="text-[13px] font-bold text-[#0A111F]">{detalleItem.prestacion}</p>
+                  </div>
+                  
+                  {(detalleItem.diente || detalleItem.cara) && (
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Ubicación Clínica</p>
+                      <p className="text-[13px] font-bold text-[#0A111F]">
+                        {detalleItem.diente ? `Diente: ${detalleItem.diente} ` : ''} 
+                        {detalleItem.cara ? `- Cara: ${detalleItem.cara}` : ''}
+                      </p>
+                    </div>
+                  )}
+
+                  {detalleItem.observacion && (
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Observaciones</p>
+                      <p className="text-[12px] font-bold text-slate-600 italic">"{detalleItem.observacion}"</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Costo</p>
+                      <p className="text-[13px] font-bold text-[#0A111F]">${(detalleItem.costoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
+                    </div>
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pagado</p>
+                      <p className="text-[13px] font-bold text-[#0A111F]">${(detalleItem.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
+                    </div>
+                  </div>
+                  
+                  <div className={`${detalleItem.paymentStatus === 'paid' ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'} p-5 rounded-2xl border`}>
+                    <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${detalleItem.paymentStatus === 'paid' ? 'text-emerald-500' : 'text-red-500'}`}>
+                      Saldo por Pagar a la Clínica
+                    </p>
+                    <p className={`text-[13px] font-bold ${detalleItem.paymentStatus === 'paid' ? 'text-emerald-700' : 'text-red-700'}`}>
+                      ${((detalleItem.costoTotalPrestacion || 0) - (detalleItem.pagadoTotalPrestacion || 0)).toLocaleString('es-CL')}
+                    </p>
+                  </div>
+                  
+                  {detalleItem.presupuesto_id && detalleItem.paciente_id && (
+                    <Link href={`/pacientes/${detalleItem.paciente_id}/tratamientos/${detalleItem.presupuesto_id}`} className="flex w-full justify-center items-center gap-2 bg-[#0A111F] text-[#C9A24B] py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all mt-8 active:scale-95">
+                      Ir al Plan de Tratamiento
+                    </Link>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>,
+        document.body
+      ) : null}
+
     </main>
   )
 }
