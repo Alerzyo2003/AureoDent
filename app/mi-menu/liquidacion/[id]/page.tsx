@@ -64,7 +64,7 @@ export default function MiDetalleLiquidacionPage() {
       let fromAt = 0;
       while (fetchMoreAt) {
         const { data } = await supabase.from('atenciones_realizadas')
-          .select(`id, fecha, monto_cobrado, profesional_id, paciente_id, pacientes(id, nombre, apellido), prestaciones!atenciones_realizadas_prestacion_id_fkey(id, "Nombre Accion")`)
+          .select(`id, fecha, monto_cobrado, profesional_id, paciente_id, observacion, pacientes(id, nombre, apellido), prestaciones!atenciones_realizadas_prestacion_id_fkey(id, "Nombre Accion")`)
           .eq('profesional_id', prof.user_id)
           .lte('fecha', finMes)
           .range(fromAt, fromAt + 999);
@@ -79,7 +79,7 @@ export default function MiDetalleLiquidacionPage() {
           .select(`
             id, monto, fecha_pago, profesional_id, paciente_id,
             pacientes ( id, nombre, apellido ),
-            presupuesto_items ( id, presupuesto_id, profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado, progreso, abonado )
+            presupuesto_items ( id, presupuesto_id, profesional_id, nombre_prestacion, precio_pactado, costo_laboratorio, lab_pagado_por_dr, estado, tipo_reparto, porcentaje_forzado, progreso, abonado, diente_id, cara, observacion )
           `)
           .not('estado', 'eq', 'Anulado')
           .lte('fecha_pago', finMes)
@@ -119,7 +119,8 @@ export default function MiDetalleLiquidacionPage() {
         estaEvolucionado: true,
         paymentStatus: 'paid',
         costoTotalPrestacion: Number(a.monto_cobrado),
-        pagadoTotalPrestacion: Number(a.monto_cobrado)
+        pagadoTotalPrestacion: Number(a.monto_cobrado),
+        observacion: a.observacion
       }));
 
       const abonosFormateados = todosLosPagos.filter((pago: any) => {
@@ -130,7 +131,7 @@ export default function MiDetalleLiquidacionPage() {
         const precioPactado = Number(pItem.precio_pactado || 0);
         const abonadoTotal = Number(pItem.abonado || 0);
         
-        // REGLA INQUEBRANTABLE
+        // REGLA INQUEBRANTABLE (Liquidables solo si 100% pagado)
         return precioPactado > 0 && abonadoTotal >= precioPactado;
       }).map((pago: any) => {
         const pItem = Array.isArray(pago.presupuesto_items) ? pago.presupuesto_items[0] : (pago.presupuesto_items || {});
@@ -177,7 +178,10 @@ export default function MiDetalleLiquidacionPage() {
           estaEvolucionado: estaTerminado,
           paymentStatus: 'paid',
           costoTotalPrestacion: precioPactado,
-          pagadoTotalPrestacion: totalAbonado
+          pagadoTotalPrestacion: totalAbonado,
+          diente: pItem.diente_id,
+          cara: pItem.cara,
+          observacion: pItem.observacion
         }
       });
 
@@ -196,7 +200,6 @@ export default function MiDetalleLiquidacionPage() {
         let montoARepartir = Number(liq.monto_total);
         let itemsDeEstaLiq = [];
 
-        // Escudo de Tiempo
         let fechaLimite = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
         fechaLimite.setHours(23, 59, 59, 999);
 
@@ -206,7 +209,6 @@ export default function MiDetalleLiquidacionPage() {
           if (item.honorario_restante <= 0) continue;
           if (montoARepartir <= 0) break;
 
-          // Si el tratamiento se realizó DESPUÉS del cierre de caja, se ignora
           let fechaItem = new Date(item.fecha ? item.fecha.replace(' ', 'T') : 0);
           if (fechaItem > fechaLimite) continue;
 
@@ -221,7 +223,6 @@ export default function MiDetalleLiquidacionPage() {
           montoARepartir -= aDescontar;
         }
 
-        // Solo mostrar los cierres que corresponden a ESTE MES en la vista
         let fLiq = new Date((liq.fecha_pago || liq.periodo_hasta).replace(' ', 'T'));
         if (fLiq.getFullYear() === Number(year) && fLiq.getMonth() === (Number(month) - 1)) {
           cierresList.push({
@@ -233,7 +234,7 @@ export default function MiDetalleLiquidacionPage() {
         }
       });
 
-      // 5. Separar lo que quedó pendiente a pagar
+      // 5. Separar lo que quedó pendiente a pagar de los 100% liquidados
       const pendientesFinal = poolProduccion
         .filter(p => p.honorario_restante > 0)
         .map(p => ({
@@ -257,30 +258,33 @@ export default function MiDetalleLiquidacionPage() {
 
       setResumenMes({ totalMes, totalPagado, saldoPendiente });
 
-      // 7. Obtener items en seguimiento (evolucionados o con abonos parciales no liquidados)
+      // 7. Obtener TODOS los items pendientes (no pagados 100%, pero sí evolucionados/abonados)
       const { data: itemsEnSeguimientoData } = await supabase
         .from('presupuesto_items')
         .select('*, presupuestos(paciente_id, pacientes(id, nombre, apellido))')
         .eq('profesional_id', user.id)
-        .or('progreso.gt.0,abonado.gt.0');
+        .or('progreso.gt.0,abonado.gt.0,estado.eq.realizado,estado.eq.atendido,estado.eq.terminado,estado.eq.finalizado,estado.eq.completado');
 
       const itemsDeSeguimiento = (itemsEnSeguimientoData || [])
         .map((item: any) => {
             const precioPactado = Number(item.precio_pactado || 0);
             const totalAbonado = Number(item.abonado || 0);
 
-            // Ignorar si ya está pagado completo (porque ya está arriba en la cascada)
-            if (totalAbonado >= precioPactado) return null;
-            
-            // Ignorar si por alguna razón está duplicado
+            // Ignorar si ya está en los pendientes 100% liquidados para evitar duplicados
             if (pendientesFinal.some(p => p.tratamiento_id === item.id)) return null;
+            // Ignorar si ya está liquidado en algún cierre del mes
+            if (cierresList.some(c => c.items.some((i: any) => i.tratamiento_id === item.id))) return null;
 
             const estaTerminado = ['realizado', 'atendido', 'terminado', 'finalizado', 'completado'].includes(item.estado?.toLowerCase() || '');
             const progreso = Number(item.progreso || 0);
             const estaEvolucionado = estaTerminado || progreso > 0 || totalAbonado > 0;
 
+            if (!estaEvolucionado && totalAbonado === 0) return null;
+
             let paymentStatus = 'unpaid';
-            if (totalAbonado > 0) {
+            if (totalAbonado >= precioPactado && precioPactado > 0) {
+                paymentStatus = 'paid';
+            } else if (totalAbonado > 0) {
                 paymentStatus = 'partially-paid';
             }
 
@@ -291,7 +295,7 @@ export default function MiDetalleLiquidacionPage() {
               paciente: pacienteData ? `${pacienteData.nombre} ${pacienteData.apellido}` : 'Paciente',
               prestacion: item.nombre_prestacion || 'Prestación sin nombre',
               montoPago: totalAbonado,
-              honorario: 0, // No genera honorario líquido pendiente aún
+              honorario: 0, // No genera honorario a la bolsa liquida hasta el 100%
               tipo: 'Seguimiento',
               paciente_id: item.presupuestos?.paciente_id,
               presupuesto_id: item.presupuesto_id,
@@ -299,11 +303,15 @@ export default function MiDetalleLiquidacionPage() {
               estaEvolucionado: estaEvolucionado,
               paymentStatus: paymentStatus,
               costoTotalPrestacion: precioPactado,
-              pagadoTotalPrestacion: totalAbonado
+              pagadoTotalPrestacion: totalAbonado,
+              diente: item.diente_id,
+              cara: item.cara,
+              observacion: item.observacion
             };
         })
         .filter(Boolean);
 
+      // Consolidar todos los ítems para mostrar en la tabla (Liquidables + Pendientes de pago/Deuda)
       setItemsPendientes([...pendientesFinal, ...itemsDeSeguimiento]);
       setCierresCompletados(cierresList.reverse());
 
@@ -420,8 +428,8 @@ export default function MiDetalleLiquidacionPage() {
               <div className="flex items-center gap-4 mb-6">
                 <div className="w-12 h-12 flex items-center justify-center bg-[#C9A24B]/10 text-[#C9A24B] rounded-[1.2rem] shrink-0"><AlertCircle size={20} /></div>
                 <div>
-                  <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Pendiente de Pago</h2>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Tratamientos realizados y abonados aún no liquidados</p>
+                  <h2 className="text-xl font-black text-[#0A111F] uppercase tracking-tight">Estado de Tratamientos y Pagos</h2>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Tratamientos evolucionados pendientes de liquidación y sus deudas</p>
                 </div>
               </div>
 
@@ -443,7 +451,7 @@ export default function MiDetalleLiquidacionPage() {
                           <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase tracking-widest max-w-[200px]">Prestación</th>
                           <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase text-right tracking-widest">Total Prest.</th>
                           <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase text-right tracking-widest">Total Pagado</th>
-                          <th className="px-5 py-4 text-[10px] font-black text-[#0A111F] uppercase text-right tracking-widest bg-[#C9A24B]/10 w-32">A Pagar</th>
+                          <th className="px-5 py-4 text-[10px] font-black text-[#0A111F] uppercase text-right tracking-widest bg-[#C9A24B]/10 w-32">Honorario</th>
                           <th className="px-5 py-4 text-[9px] font-black text-slate-500 uppercase text-center tracking-widest w-20">Detalle</th>
                         </tr>
                       </thead>
@@ -486,7 +494,7 @@ export default function MiDetalleLiquidacionPage() {
                       </tbody>
                       <tfoot className="bg-[#0A111F] border-t-2 border-[#C9A24B]">
                         <tr>
-                          <td colSpan={6} className="px-5 py-4 text-right font-black text-slate-300 uppercase text-[10px] tracking-widest">Total Pendiente:</td>
+                          <td colSpan={6} className="px-5 py-4 text-right font-black text-slate-300 uppercase text-[10px] tracking-widest">Total Honorario A Pagar:</td>
                           <td className="px-5 py-4 text-right font-black text-[#C9A24B] text-base">
                             ${Math.round(resumenMes.saldoPendiente).toLocaleString('es-CL')}
                           </td>
@@ -613,7 +621,7 @@ export default function MiDetalleLiquidacionPage() {
 
         {itemsPendientes.length > 0 && (
           <div className="mb-6">
-            <p className="font-bold underline mb-2">Detalle de Producción Pendiente de Pago:</p>
+            <p className="font-bold underline mb-2">Detalle de Tratamientos y Pagos:</p>
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-black">
@@ -628,7 +636,12 @@ export default function MiDetalleLiquidacionPage() {
                   <tr key={`pend-${idx}`}>
                     <td className="py-1">{item.fecha ? new Date(item.fecha.replace(' ', 'T')).toLocaleDateString('es-CL') : 'S/F'}</td>
                     <td className="py-1 uppercase">{item.paciente}</td>
-                    <td className="py-1 uppercase pr-2">{item.prestacion}</td>
+                    <td className="py-1 uppercase pr-2">
+                      {item.prestacion}
+                      <span className="text-[8px] text-gray-500 ml-1">
+                        ({item.paymentStatus === 'paid' ? 'Pagado' : item.paymentStatus === 'partially-paid' ? 'Parcial' : 'Deuda'})
+                      </span>
+                    </td>
                     <td className="py-1 text-right font-bold">${Math.round(item.honorario).toLocaleString('es-CL')}</td>
                   </tr>
                 ))}
@@ -686,10 +699,10 @@ export default function MiDetalleLiquidacionPage() {
                 initial={{ opacity: 0, y: 15, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 15, scale: 0.95 }}
-                className="bg-white rounded-[2rem] p-8 md:p-10 w-full max-w-md shadow-2xl text-left border border-slate-100"
+                className="bg-white rounded-[2rem] p-8 md:p-10 w-full max-w-md shadow-2xl text-left border border-slate-100 max-h-[90vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
               >
-                <div className="flex justify-between items-start mb-8 text-left">
+                <div className="flex justify-between items-start mb-6 text-left">
                   <div>
                     <h3 className="text-xl font-black text-[#0A111F] uppercase italic tracking-tight">Detalle del Movimiento</h3>
                     <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mt-1.5">{detalleItem.paciente}</p>
@@ -699,27 +712,59 @@ export default function MiDetalleLiquidacionPage() {
                   </button>
                 </div>
 
+                <div className="flex gap-2 mb-6">
+                  <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${
+                    detalleItem.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-700 border border-emerald-200 shadow-sm' :
+                    detalleItem.paymentStatus === 'partially-paid' ? 'bg-amber-100 text-amber-700 border border-amber-200 shadow-sm' :
+                    'bg-red-100 text-red-700 border border-red-200 shadow-sm'
+                  }`}>
+                    {detalleItem.paymentStatus === 'paid' ? 'Pagado 100%' : detalleItem.paymentStatus === 'partially-paid' ? 'Pago Parcial' : 'Deuda / Sin Pagar'}
+                  </span>
+                </div>
+
                 <div className="space-y-4 text-left">
                   <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Prestación</p>
                     <p className="text-[13px] font-bold text-[#0A111F]">{detalleItem.prestacion}</p>
                   </div>
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Costo Prestación</p>
-                    <p className="text-[13px] font-bold text-[#0A111F]">${(detalleItem.costoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
+                  
+                  {(detalleItem.diente || detalleItem.cara) && (
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Ubicación Clínica</p>
+                      <p className="text-[13px] font-bold text-[#0A111F]">
+                        {detalleItem.diente ? `Diente: ${detalleItem.diente} ` : ''} 
+                        {detalleItem.cara ? `- Cara: ${detalleItem.cara}` : ''}
+                      </p>
+                    </div>
+                  )}
+
+                  {detalleItem.observacion && (
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Observaciones</p>
+                      <p className="text-[12px] font-bold text-slate-600 italic">"{detalleItem.observacion}"</p>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Costo</p>
+                      <p className="text-[13px] font-bold text-[#0A111F]">${(detalleItem.costoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
+                    </div>
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                      <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pagado</p>
+                      <p className="text-[13px] font-bold text-[#0A111F]">${(detalleItem.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
+                    </div>
                   </div>
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Pagado Prestación</p>
-                    <p className="text-[13px] font-bold text-[#0A111F]">${(detalleItem.pagadoTotalPrestacion || 0).toLocaleString('es-CL')}</p>
+                  
+                  <div className={`${detalleItem.paymentStatus === 'paid' ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'} p-5 rounded-2xl border`}>
+                    <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${detalleItem.paymentStatus === 'paid' ? 'text-emerald-500' : 'text-red-500'}`}>
+                      Saldo por Pagar a la Clínica
+                    </p>
+                    <p className={`text-[13px] font-bold ${detalleItem.paymentStatus === 'paid' ? 'text-emerald-700' : 'text-red-700'}`}>
+                      ${((detalleItem.costoTotalPrestacion || 0) - (detalleItem.pagadoTotalPrestacion || 0)).toLocaleString('es-CL')}
+                    </p>
                   </div>
-                  <div className="bg-red-50 p-5 rounded-2xl border border-red-100">
-                    <p className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-1">Saldo por Pagar a la Clínica</p>
-                    <p className="text-[13px] font-bold text-red-700">${((detalleItem.costoTotalPrestacion || 0) - (detalleItem.pagadoTotalPrestacion || 0)).toLocaleString('es-CL')}</p>
-                  </div>
-                  <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">ID de Tratamiento/Atención</p>
-                    <p className="text-[13px] font-bold text-slate-500">{detalleItem.tratamiento_id}</p>
-                  </div>
+                  
                   {detalleItem.presupuesto_id && detalleItem.paciente_id && (
                     <Link href={`/pacientes/${detalleItem.paciente_id}/tratamientos/${detalleItem.presupuesto_id}`} className="flex w-full justify-center items-center gap-2 bg-[#0A111F] text-[#C9A24B] py-4 rounded-2xl font-black text-[11px] uppercase tracking-widest shadow-lg hover:bg-[#1a2538] transition-all mt-8 active:scale-95">
                       Ir al Plan de Tratamiento
