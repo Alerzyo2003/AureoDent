@@ -6,7 +6,7 @@ import { createPortal } from 'react-dom'
 import { 
   User, ClipboardList, Activity, Camera, Wallet, 
   ArrowLeft, UserCircle, History, Pill, FileCheck, 
-  ClipboardCheck, Tag, Loader2, Plus, Trash2, Edit2, // <-- Agregados aquí
+  ClipboardCheck, Tag, Loader2, Plus, Trash2, Edit2,
   AlertCircle, ImageIcon, Fingerprint, Clock,
   VenusAndMars, Cake, Coins, AlertTriangle, Lock, ShieldAlert, Spline,
   CalendarClock, CalendarIcon, ChevronLeft, ChevronRight, CheckCircle2, Save, X, MessageCircle
@@ -41,8 +41,13 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
   const [paciente, setPaciente] = useState<any>(null)
   const [datosPresupuesto, setDatosPresupuesto] = useState<any>(null)
   const [antecedentes, setAntecedentes] = useState<any[]>([])
+  
   const [proximasCitas, setProximasCitas] = useState<any[]>([])
+  const [citasAnteriores, setCitasAnteriores] = useState<any[]>([]) // <-- NUEVO ESTADO: Citas anteriores
+  
   const [dropdownCitasAbierto, setDropdownCitasAbierto] = useState(false)
+  const [dropdownHistorialAbierto, setDropdownHistorialAbierto] = useState(false) // <-- NUEVO ESTADO: Dropdown historial
+  
   const [perfil, setPerfil] = useState<any>(null)
   const [usuarioLogueado, setUsuarioLogueado] = useState<string | null>(null)
 
@@ -157,7 +162,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
   async function fetchDatosMaestros() {
     try {
       const hoy = new Date().toISOString();
-      const [resPac, resAnt, resCitas, resProfs] = await Promise.all([
+      const [resPac, resAnt, resCitasProx, resCitasAnt, resProfs] = await Promise.all([
         supabase.from('pacientes').select('*').eq('id', id).maybeSingle(),
         supabase.from('antecedentes').select('*').eq('paciente_id', id),
         supabase.from('citas')
@@ -167,23 +172,43 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
           .neq('estado', 'cancelada')
           .order('inicio', { ascending: true })
           .limit(3), // Traerá las 3 más próximas
+        // --- NUEVA CONSULTA: CITAS ANTERIORES ---
+        supabase.from('citas')
+          .select('*')
+          .eq('paciente_id', id)
+          .lt('inicio', hoy)
+          .neq('estado', 'cancelada')
+          .order('inicio', { ascending: false })
+          .limit(5), // Traerá las 5 más recientes del pasado
         supabase.from('profesionales').select('user_id, nombre, apellido')
       ]);
       
       if (resPac.data) setPaciente(resPac.data);
       if (resAnt.data) setAntecedentes(resAnt.data);
       
-      if (resCitas.data) {
-        const citasMapeadas = resCitas.data.map((cita: any) => {
+      if (resCitasProx.data) {
+        const citasMapeadas = resCitasProx.data.map((cita: any) => {
           const prof = resProfs.data?.find((p: any) => p.user_id === cita.profesional_id);
           return {
             ...cita,
-            // Extraemos solo el primer nombre y apellido para que quepa bien visualmente
             profesional_nombre: prof ? `Dr. ${prof.nombre.split(' ')[0]} ${prof.apellido.split(' ')[0]}` : 'Especial.'
           };
         });
         setProximasCitas(citasMapeadas);
       }
+
+      // --- ASIGNAR CITAS ANTERIORES ---
+      if (resCitasAnt.data) {
+        const citasAntMapeadas = resCitasAnt.data.map((cita: any) => {
+          const prof = resProfs.data?.find((p: any) => p.user_id === cita.profesional_id);
+          return {
+            ...cita,
+            profesional_nombre: prof ? `Dr. ${prof.nombre.split(' ')[0]} ${prof.apellido.split(' ')[0]}` : 'Especial.'
+          };
+        });
+        setCitasAnteriores(citasAntMapeadas);
+      }
+
     } catch (err) { console.error(err) }
   }
 
@@ -328,7 +353,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
   };
 
 
-  const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA' || perfil?.rol === 'DENTISTA';
+  const puedeVerFinanzas = perfil?.rol === 'ADMIN' || perfil?.rol === 'RECEPCIONISTA';
 
   if (!paciente) return (
     <div className="h-screen w-full flex flex-col items-center justify-center relative overflow-hidden bg-slate-50" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center' }}>
@@ -463,12 +488,84 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
               <TabLink href={`/pacientes/${id}/archivos`} active={pathname.includes('/archivos')} icon={<Camera size={14}/>} label="Galería" />
             </nav>
 
-            {/* BOTÓN AGENDAR NATIVO */}
             <div className="flex items-center gap-2 shrink-0">
+
+              {/* DROPDOWN: HISTORIAL CITAS ANTERIORES */}
+              <div className="relative shrink-0">
+                <button 
+                  onClick={() => {
+                    setDropdownHistorialAbierto(!dropdownHistorialAbierto);
+                    setDropdownCitasAbierto(false); // Cierra el otro
+                  }}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-[1rem] font-black text-[10px] uppercase tracking-widest transition-all shadow-sm border ${dropdownHistorialAbierto ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+                >
+                  <History size={14} className={dropdownHistorialAbierto ? "text-slate-300" : "text-slate-400"} /> 
+                  <span className="hidden xl:inline">Historial</span>
+                  {citasAnteriores.length > 0 && (
+                    <span className="bg-slate-200 text-slate-700 px-1.5 py-0.5 rounded-full text-[9px] shadow-sm">
+                      {citasAnteriores.length}
+                    </span>
+                  )}
+                </button>
+
+                <AnimatePresence>
+                  {dropdownHistorialAbierto && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setDropdownHistorialAbierto(false)}></div>
+                      <motion.div 
+                        initial={{ opacity: 0, y: 10, scale: 0.95 }} 
+                        animate={{ opacity: 1, y: 0, scale: 1 }} 
+                        exit={{ opacity: 0, y: 10, scale: 0.95 }} 
+                        transition={{ duration: 0.2 }}
+                        className="absolute right-0 mt-3 w-[280px] bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden"
+                      >
+                        <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+                          <h3 className="text-[10px] font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
+                            <History size={14}/> Citas Anteriores
+                          </h3>
+                        </div>
+                        <div className="p-3 flex flex-col gap-2 max-h-[300px] overflow-y-auto custom-scrollbar">
+                          {citasAnteriores.length > 0 ? citasAnteriores.map((cita) => (
+                            <div key={cita.id} className="p-3 rounded-xl flex flex-col gap-2 bg-slate-50 border border-slate-100 text-slate-600">
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-700">
+                                    {new Date(cita.inicio).toLocaleDateString('es-CL', { weekday: 'short', day: '2-digit', month: 'short' })}
+                                  </span>
+                                </div>
+                                <span className="text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 shadow-sm">
+                                  {new Date(cita.inicio).toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})} hrs
+                                </span>
+                              </div>
+                              <div className="flex justify-between items-center mt-1">
+                                <span className="text-[9px] font-bold uppercase truncate max-w-[130px] text-slate-500">
+                                  {cita.motivo || 'CONSULTA'}
+                                </span>
+                                <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">
+                                  {cita.profesional_nombre}
+                                </span>
+                              </div>
+                            </div>
+                          )) : (
+                            <div className="py-6 flex flex-col items-center justify-center text-center gap-2">
+                              <History size={32} className="text-slate-200" />
+                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">El paciente no tiene<br/>citas previas</p>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
+              </div>
+
               {/* DROPDOWN: PRÓXIMAS CITAS */}
               <div className="relative shrink-0">
                 <button 
-                  onClick={() => setDropdownCitasAbierto(!dropdownCitasAbierto)}
+                  onClick={() => {
+                    setDropdownCitasAbierto(!dropdownCitasAbierto);
+                    setDropdownHistorialAbierto(false); // Cierra el otro
+                  }}
                   className={`flex items-center gap-2 px-4 py-2 rounded-[1rem] font-black text-[10px] uppercase tracking-widest transition-all shadow-sm border ${dropdownCitasAbierto ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
                 >
                   <CalendarClock size={14} className={dropdownCitasAbierto ? "text-[#C9A24B]" : "text-slate-400"} /> 
@@ -558,7 +655,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
             </nav>
           )}
           <div className="flex-1 print:block print:h-auto print:min-h-0 text-left relative z-10 w-full">
-               {children}
+                {children}
           </div>
         </div>
       </div>
