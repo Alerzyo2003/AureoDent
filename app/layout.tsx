@@ -90,6 +90,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setBuscando(true)
     setMostrarResultados(true)
     const palabras = term.trim().split(/\s+/).filter(p => p.length > 0)
+    // OPTIMIZACIÓN: Esta query ya estaba bastante bien, traía solo lo necesario y con límite.
     let query = supabase.from('pacientes').select('id, nombre, apellido, rut')
     palabras.forEach((palabra) => {
       query = query.or(`nombre.ilike.%${palabra}%,apellido.ilike.%${palabra}%,rut.ilike.%${palabra}%`)
@@ -110,7 +111,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       if (user) {
         const { data: { session: currentSession } } = await supabase.auth.getSession()
         setSession(currentSession)
-        const { data } = await supabase.from('perfiles').select('*').eq('id', user.id).maybeSingle()
+        
+        // 1. OPTIMIZACIÓN: De select('*') a seleccionar SOLO lo que usamos en el Layout
+        const { data } = await supabase.from('perfiles')
+          .select('id, nombre_completo, rol')
+          .eq('id', user.id)
+          .maybeSingle()
+          
         setPerfil(data)
       }
     }
@@ -278,11 +285,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                               <SidebarSubLink href="/administracion/configuracion/pagos-pendientes" label="Pagos Pendientes" onClick={() => setMobileMenuOpen(false)} />
 
                               <GroupTitle title="Configuración" />
-<SidebarSubLink href="/administracion/configuracion/aranceles" label="Aranceles Precios" onClick={() => setMobileMenuOpen(false)} />
-<SidebarSubLink href="/administracion/configuracion/aranceles/plantillas" label="Plantillas" onClick={() => setMobileMenuOpen(false)} />
-<SidebarSubLink href="/administracion/configuracion/bancos" label="Bancos" onClick={() => setMobileMenuOpen(false)} />
-<SidebarSubLink href="/administracion/configuracion/documentos" label="Docs Clínicos" onClick={() => setMobileMenuOpen(false)} />
-<SidebarSubLink href="/administracion/configuracion/consentimientos" label="Consentimientos" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/aranceles" label="Aranceles Precios" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/aranceles/plantillas" label="Plantillas" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/bancos" label="Bancos" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/documentos" label="Docs Clínicos" onClick={() => setMobileMenuOpen(false)} />
+                              <SidebarSubLink href="/administracion/configuracion/consentimientos" label="Consentimientos" onClick={() => setMobileMenuOpen(false)} />
                             </div>
                           </motion.div>
                         )}
@@ -361,7 +368,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 <div className="flex items-center gap-4 cursor-pointer group shrink-0" onClick={handleSignOut} title="Cerrar Sesión">
                   <div className="flex flex-col items-end text-right hidden sm:flex">
                     <span className="text-[13px] font-bold text-slate-800 tracking-wide group-hover:text-[#C9A24B] transition-colors">{perfil?.nombre_completo || 'Usuario'}</span>
-                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{perfil?.rol || 'ADMIN'}</span>
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-0.5">{perfil?.rol || ''}</span>
                   </div>
                   <div className="w-11 h-11 rounded-full bg-[#C9A24B] flex items-center justify-center font-black text-[#0A111F] shadow-md group-hover:scale-105 transition-transform text-lg border-[3px] border-white relative">
                     {perfil?.nombre_completo?.[0] || 'U'}
