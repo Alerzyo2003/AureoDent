@@ -671,7 +671,14 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
               <SubTabLink href={`/pacientes/${id}/evoluciones`} active={pathname.includes('/evoluciones')} label="Evoluciones" icon={<Activity size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/antecedentes`} active={pathname.includes('/antecedentes')} label="Ant. Médicos" icon={<AlertCircle size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/rx-documentos`} active={pathname.includes('/rx-documentos')} label="RX y Multimedia" icon={<ImageIcon size={14}/>} />
-              {perfil?.rol === 'DENTISTA' || perfil?.rol === 'ADMIN' ? <SubTabLink href={`/pacientes/${id}/recetas`} active={pathname.includes('/recetas')} label="Recetario" icon={<Pill size={14}/>} /> : null}
+              {['DENTISTA', 'ADMIN', 'RECEPCIONISTA', 'ASISTENTE'].includes(perfil?.rol) ? (
+  <SubTabLink 
+    href={`/pacientes/${id}/recetas`} 
+    active={pathname.includes('/recetas')} 
+    label="Recetario" 
+    icon={<Pill size={14}/>} 
+  />
+) : null}
               <SubTabLink href={`/pacientes/${id}/documentos`} active={pathname.includes('/documentos')} label="Documentos" icon={<FileCheck size={14}/>} />
               <SubTabLink href={`/pacientes/${id}/consentimientos`} active={pathname.includes('/consentimientos')} label="Consentimientos" icon={<ClipboardCheck size={14}/>} />
             </nav>
