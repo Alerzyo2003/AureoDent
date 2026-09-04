@@ -55,7 +55,7 @@ export default function EvolucionesPage() {
     setSessionUser(user)
 
     if (user) {
-      const { data: profile } = await supabase.from('perfiles').select('nombre_completo, rol').eq('id', user.id).single();
+      const { data: profile } = await supabase.from('perfiles').select('nombre_completo, rol, rut').eq('id', user.id).single();
       if (profile) setSessionUserProfile(profile);
     }
 
@@ -92,7 +92,28 @@ export default function EvolucionesPage() {
     }
   }
 
-  // Comando para inyectar estilo en el editor enriquecido
+  // NUEVA FUNCIÓN: Registrar evento en la tabla de auditoría
+  const registrarAuditoria = async (accion: string, registroId: string, datosAnteriores: any, datosNuevos: any, detalles: string) => {
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUser?.id,
+        accion,
+        tabla: 'evoluciones',
+        detalles,
+        paciente_id,
+        registro_afectado_id: registroId,
+        user_agent: window.navigator.userAgent,
+        rut_usuario: sessionUserProfile?.rut || null, // Asume que el rut puede venir del perfil
+        nombre_usuario: sessionUserProfile?.nombre_completo || sessionUser?.email || 'Sistema',
+        rol_al_momento: sessionUserProfile?.rol || null,
+        datos_anteriores: datosAnteriores,
+        datos_nuevos: datosNuevos
+      }]);
+    } catch (error) {
+      console.error("No se pudo registrar la auditoría:", error);
+    }
+  };
+
   const executeCommand = (command: string, arg?: string) => {
     document.execCommand(command, false, arg);
     if (editorRef.current) {
@@ -102,21 +123,38 @@ export default function EvolucionesPage() {
   };
 
   const guardarEvolucion = async () => {
-    // Validar si el texto limpio (sin etiquetas HTML) está vacío
     const textoLimpio = nuevaEv.descripcion_procedimiento.replace(/<[^>]*>?/gm, '').trim();
     if (!textoLimpio) return toast.error("La descripción del procedimiento es obligatoria");
     
     setGuardando(true)
     try {
       if (editandoId) {
-        const { error } = await supabase
+        // Rescatar evolución antigua para auditoría
+        const evAntigua = evoluciones.find(e => e.id === editandoId);
+        const datosActualizar = {
+          descripcion_procedimiento: nuevaEv.descripcion_procedimiento,
+          observaciones: nuevaEv.observaciones,
+        };
+
+        const { data, error } = await supabase
           .from('evoluciones')
-          .update({
-            descripcion_procedimiento: nuevaEv.descripcion_procedimiento,
-            observaciones: nuevaEv.observaciones,
-          })
+          .update(datosActualizar)
           .eq('id', editandoId)
+          .select() // <-- Agregado para confirmar ejecución
         if (error) throw error
+
+        // AUDITORÍA: Actualización
+        await registrarAuditoria(
+          'ACTUALIZAR_EVOLUCION',
+          editandoId,
+          { 
+            descripcion_procedimiento: evAntigua?.descripcion_procedimiento, 
+            observaciones: evAntigua?.observaciones 
+          },
+          datosActualizar,
+          'Se editó el texto y/o las observaciones de la evolución clínica'
+        );
+
       } else {
         const insertData: any = { 
           paciente_id,
@@ -132,8 +170,20 @@ export default function EvolucionesPage() {
           insertData.descripcion_procedimiento = `<p><strong>[REGISTRADO POR: ${creatorName}]</strong></p><br/>${nuevaEv.descripcion_procedimiento}`;
         }
 
-        const { error } = await supabase.from('evoluciones').insert([insertData])
+        // Se agrega .select() para obtener el ID generado y poder auditarlo
+        const { data, error } = await supabase.from('evoluciones').insert([insertData]).select();
         if (error) throw error
+        
+        // AUDITORÍA: Creación
+        if (data && data.length > 0) {
+          await registrarAuditoria(
+            'CREAR_EVOLUCION',
+            data[0].id,
+            null,
+            insertData,
+            'Se registró una nueva evolución clínica'
+          );
+        }
       }
       
       toast.success(editandoId ? "Registro actualizado" : "Atención registrada")
@@ -149,6 +199,7 @@ export default function EvolucionesPage() {
   const anularEvolucion = async (evId: string, estadoActual: string) => {
     const nuevoEstado = estadoActual === 'anulada' ? 'activa' : 'anulada';
     const confirmar = window.confirm(`¿Seguro que desea ${nuevoEstado === 'anulada' ? 'anular' : 'restaurar'} este registro?`);
+    
     if (confirmar) {
       const evolucionesOriginales = [...evoluciones];
       setEvoluciones(prev => prev.map(ev => ev.id === evId ? { ...ev, estado: nuevoEstado } : ev));
@@ -164,11 +215,23 @@ export default function EvolucionesPage() {
         setEvoluciones(evolucionesOriginales);
       } else { 
         toast.success(`Registro marcado como '${nuevoEstado}'.`); 
+        
+        // AUDITORÍA: Cambio de Estado
+        await registrarAuditoria(
+          nuevoEstado === 'anulada' ? 'ANULAR_EVOLUCION' : 'RESTAURAR_EVOLUCION',
+          evId,
+          { estado: estadoActual },
+          { estado: nuevoEstado },
+          `El registro cambió su estado a ${nuevoEstado}`
+        );
       }
     }
   }
 
+  // === El resto del código de renderizado (UI / Modal) se mantiene igual === 
+  
   const imprimirEvolucion = (ev: any) => {
+    // [código de imprimirEvolucion original...]
     const prof = ev.profesionales;
     const creador = ev.creador_nombre;
     const descripcion = ev.descripcion_limpia;
@@ -221,7 +284,6 @@ export default function EvolucionesPage() {
         const match = ev.descripcion_procedimiento?.match(/\[REGISTRADO POR: (.*?)\]/);
         if (match && match[1]) {
             creadorNombre = match[1];
-            // Removemos tanto el formato HTML nuevo como el formato plano antiguo
             descripcionLimpia = ev.descripcion_procedimiento
                .replace(/<p><strong>\[REGISTRADO POR: .*?\]<\/strong><\/p><br\/>/, '')
                .replace(/^\[REGISTRADO POR: .*?\]\n\n/, '');
@@ -248,8 +310,8 @@ export default function EvolucionesPage() {
   });
 
   return (
+    // [Se mantiene todo el código JSX original del componente sin alteraciones]
     <div className="max-w-4xl mx-auto space-y-8 p-4 text-left min-h-screen pb-20">
-      
       {/* HEADER PRINCIPAL */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-12 bg-white/90 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-xl border border-white/60 relative overflow-hidden text-left">
         <div className="flex items-center gap-4 relative z-10 text-left">
