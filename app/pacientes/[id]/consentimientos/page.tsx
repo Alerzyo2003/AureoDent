@@ -24,8 +24,11 @@ export default function ConsentimientosPacientePage() {
   const [modalAbierto, setModalAbierto] = useState(false)
   const [creando, setCreando] = useState(false)
   const [mounted, setMounted] = useState(false)
+  
+  // --- ESTADOS PARA AUDITORÍA SEREMI ---
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionUserRole, setSessionUserRole] = useState<string | null>(null)
+  const [perfil, setPerfil] = useState<any>(null)
 
   // Estados para Edición
   const [modalEditarAbierto, setModalEditarAbierto] = useState(false)
@@ -41,16 +44,47 @@ export default function ConsentimientosPacientePage() {
   useEffect(() => {
     setMounted(true);
     if (pacienteId) {
-      supabase.auth.getUser().then(async ({ data: { user } }) => {
-        if (user) {
-          setSessionUserId(user.id)
-          const { data: profile } = await supabase.from('perfiles').select('rol').eq('id', user.id).single()
-          if (profile) setSessionUserRole(profile.rol)
+      // Usamos getSession para ahorrar Egress y traemos los datos SEREMI
+      supabase.auth.getSession().then(async ({ data: { session } }) => {
+        if (session?.user) {
+          setSessionUserId(session.user.id)
+          const { data: profile } = await supabase
+            .from('perfiles')
+            .select('rut, nombre_completo, rol')
+            .eq('id', session.user.id)
+            .single()
+            
+          if (profile) {
+            setPerfil(profile)
+            setSessionUserRole(profile.rol)
+          }
         }
       })
       fetchData()
     }
   }, [pacienteId])
+
+  // --- FUNCIÓN DE AUDITORÍA ENRIQUECIDA (SEREMI) ---
+  const registrarAuditoria = async (accion: string, detalles: string, datos_anteriores: any = null, datos_nuevos: any = null) => {
+    if (!sessionUserId || !perfil) return;
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUserId,
+        rut_usuario: perfil.rut,
+        nombre_usuario: perfil.nombre_completo,
+        rol_al_momento: perfil.rol,
+        paciente_id: pacienteId,
+        accion,
+        tabla: 'paciente_consentimientos',
+        detalles,
+        datos_anteriores,
+        datos_nuevos,
+        user_agent: navigator.userAgent
+      }]);
+    } catch (e) {
+      console.error("Error al registrar auditoría", e);
+    }
+  }
 
   async function fetchData() {
     setCargando(true)
@@ -126,13 +160,13 @@ export default function ConsentimientosPacientePage() {
 
       if (error) throw error;
 
-      // AUDITORÍA
-      await supabase.from('auditoria_clinica').insert([{
-        usuario_id: sessionUserId,
-        accion: 'INSERT / CONSENTIMIENTO',
-        tabla: 'paciente_consentimientos',
-        detalles: `Generó consentimiento legal "${plantilla?.nombre}" asignado a Dr/a. ${pro?.nombre} ${pro?.apellido}.`
-      }]);
+      // REGISTRAR AUDITORÍA SEREMI
+      await registrarAuditoria(
+        'INSERT / CREAR CONSENTIMIENTO', 
+        `Generó consentimiento legal "${plantilla?.nombre}" asignado a Dr/a. ${pro?.nombre} ${pro?.apellido}.`, 
+        null, 
+        nuevoRegistro
+      );
 
       toast.success("¡Registro legal generado exitosamente!");
       setModalAbierto(false);
@@ -167,13 +201,13 @@ export default function ConsentimientosPacientePage() {
 
       if (error) throw error;
 
-      // AUDITORÍA
-      await supabase.from('auditoria_clinica').insert([{
-        usuario_id: sessionUserId,
-        accion: 'UPDATE / CONSENTIMIENTO',
-        tabla: 'paciente_consentimientos',
-        detalles: `Reasignó el consentimiento "${docAEditar.nombre_doc}" al especialista Dr/a. ${nombrePro}.`
-      }]);
+      // REGISTRAR AUDITORÍA SEREMI
+      await registrarAuditoria(
+        'UPDATE / REASIGNAR CONSENTIMIENTO', 
+        `Reasignó el consentimiento "${docAEditar.nombre_doc}" al especialista Dr/a. ${nombrePro}.`, 
+        { nombre_doc: docAEditar.nombre_doc }, 
+        { especialista_id_nuevo: docAEditar.especialista_id, asignado_a: nombrePro }
+      );
 
       toast.success("Especialista actualizado correctamente");
       setModalEditarAbierto(false);
@@ -193,13 +227,13 @@ export default function ConsentimientosPacientePage() {
       const { error } = await supabase.from('paciente_consentimientos').delete().eq('id', id);
       if (error) throw error;
 
-      // AUDITORÍA
-      await supabase.from('auditoria_clinica').insert([{
-        usuario_id: sessionUserId,
-        accion: 'DELETE / CONSENTIMIENTO',
-        tabla: 'paciente_consentimientos',
-        detalles: `Eliminó el consentimiento "${doc?.nombre_consentimiento || 'Desconocido'}".`
-      }]);
+      // REGISTRAR AUDITORÍA SEREMI
+      await registrarAuditoria(
+        'DELETE / ELIMINAR CONSENTIMIENTO', 
+        `Eliminó el consentimiento "${doc?.nombre_consentimiento || 'Desconocido'}".`, 
+        doc, 
+        null
+      );
 
       toast.success("Eliminado correctamente");
       fetchData();
@@ -305,100 +339,60 @@ export default function ConsentimientosPacientePage() {
       </div>
 
       {/* Modal Nuevo Registro */}
-{mounted && typeof document !== 'undefined' && createPortal(
-  <AnimatePresence>
-    {modalAbierto && (
-      <div className="fixed inset-0 flex items-center justify-center p-4 md:p-6" style={{ zIndex: 999999 }}>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalAbierto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
-        <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white w-full max-w-lg rounded-[2.5rem] md:rounded-[3.5rem] shadow-2xl relative overflow-hidden p-6 md:p-10 space-y-6 md:space-y-8 text-left">
-            <div className="flex justify-between items-start text-left">
-              <div className="text-left pr-4">
-                <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">Nuevo Registro</h3>
-                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">AureoDent Legal System</p>
-              </div>
-              <button onClick={() => setModalAbierto(false)} className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl md:rounded-2xl hover:text-red-500 hover:bg-red-50 transition-all shrink-0"><X size={20}/></button>
+      {mounted && typeof document !== 'undefined' && createPortal(
+        <AnimatePresence>
+          {modalAbierto && (
+            <div className="fixed inset-0 flex items-center justify-center p-4 md:p-6" style={{ zIndex: 999999 }}>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalAbierto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
+              <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white w-full max-w-lg rounded-[2.5rem] md:rounded-[3.5rem] shadow-2xl relative overflow-hidden p-6 md:p-10 space-y-6 md:space-y-8 text-left">
+                  <div className="flex justify-between items-start text-left">
+                    <div className="text-left pr-4">
+                      <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">Nuevo Registro</h3>
+                      <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">AureoDent Legal System</p>
+                    </div>
+                    <button onClick={() => setModalAbierto(false)} className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl md:rounded-2xl hover:text-red-500 hover:bg-red-50 transition-all shrink-0"><X size={20}/></button>
+                  </div>
+
+                  <div className="space-y-5 md:space-y-6 text-left">
+                    <div className="space-y-2 text-left">
+                      <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Plantilla de Consentimiento</label>
+                      <select value={form.tipo_id} onChange={(e) => setForm({...form, tipo_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
+                        <option value="">Selecciona plantilla...</option>
+                        {tiposConsentimientos.map(t => <option key={t.id} value={t.id}>{String(t.nombre || '').toUpperCase()}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2 text-left">
+                      <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Especialista</label>
+                      <select value={form.especialista_id} onChange={(e) => setForm({...form, especialista_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
+                        <option value="">Selecciona especialista...</option>
+                        {profesionales.map(p => <option key={p.id} value={p.id}>{String(p.nombre || '').toUpperCase()} {String(p.apellido || '').toUpperCase()}</option>)}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2 text-left">
+                      <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Presupuesto (Opcional)</label>
+                      <select value={form.presupuesto_id} onChange={(e) => setForm({...form, presupuesto_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
+                        <option value="">Sin presupuesto asociado</option>
+                        {presupuestos.map(pr => <option key={pr.id} value={pr.id}>{String(pr.nombre_tratamiento || 'Tratamiento').toUpperCase()}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={handleCrearConsentimiento} 
+                    disabled={creando} 
+                    className="w-full bg-slate-900 text-white py-5 md:py-6 rounded-[1.5rem] md:rounded-[2rem] font-black text-[10px] md:text-xs uppercase tracking-widest md:tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2 md:gap-3 disabled:opacity-50"
+                  >
+                    {creando ? <Loader2 className="animate-spin" size={18} /> : <FileCheck size={18} />}
+                    {creando ? 'Generando...' : 'Crear Documento Legal'}
+                  </button>
+              </motion.div>
             </div>
-
-            <div className="space-y-5 md:space-y-6 text-left">
-              <div className="space-y-2 text-left">
-                <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Plantilla de Consentimiento</label>
-                <select value={form.tipo_id} onChange={(e) => setForm({...form, tipo_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
-                  <option value="">Selecciona plantilla...</option>
-                  {tiposConsentimientos.map(t => <option key={t.id} value={t.id}>{String(t.nombre || '').toUpperCase()}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-2 text-left">
-                <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Especialista</label>
-                <select value={form.especialista_id} onChange={(e) => setForm({...form, especialista_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
-                  <option value="">Selecciona especialista...</option>
-                  {profesionales.map(p => <option key={p.id} value={p.id}>{String(p.nombre || '').toUpperCase()} {String(p.apellido || '').toUpperCase()}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-2 text-left">
-                <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Presupuesto (Opcional)</label>
-                <select value={form.presupuesto_id} onChange={(e) => setForm({...form, presupuesto_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
-                  <option value="">Sin presupuesto asociado</option>
-                  {presupuestos.map(pr => <option key={pr.id} value={pr.id}>{String(pr.nombre_tratamiento || 'Tratamiento').toUpperCase()}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <button 
-              onClick={handleCrearConsentimiento} 
-              disabled={creando} 
-              className="w-full bg-slate-900 text-white py-5 md:py-6 rounded-[1.5rem] md:rounded-[2rem] font-black text-[10px] md:text-xs uppercase tracking-widest md:tracking-[0.2em] shadow-xl hover:bg-blue-600 transition-all flex items-center justify-center gap-2 md:gap-3 disabled:opacity-50"
-            >
-              {creando ? <Loader2 className="animate-spin" size={18} /> : <FileCheck size={18} />}
-              {creando ? 'Generando...' : 'Crear Documento Legal'}
-            </button>
-        </motion.div>
-      </div>
-    )}
-  </AnimatePresence>,
-  document.body
-)}
-
-{/* Modal Editar Especialista - Portal */}
-{mounted && typeof document !== 'undefined' && createPortal(
-  <AnimatePresence>
-    {modalEditarAbierto && (
-      <div className="fixed inset-0 flex items-center justify-center p-4 md:p-6" style={{ zIndex: 999999 }}>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setModalEditarAbierto(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" />
-        <motion.div initial={{ scale: 0.95, opacity: 0, y: 10 }} animate={{ scale: 1, opacity: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0, y: 10 }} className="bg-white w-full max-w-sm rounded-[2.5rem] md:rounded-[3.5rem] shadow-2xl relative overflow-hidden p-6 md:p-10 space-y-6 md:space-y-8 text-left">
-            <div className="flex justify-between items-start text-left">
-              <div className="text-left pr-4">
-                <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase italic leading-tight">Reasignar</h3>
-                <p className="text-[9px] md:text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Cambiar Especialista</p>
-              </div>
-              <button onClick={() => setModalEditarAbierto(false)} className="p-2 md:p-3 bg-slate-50 text-slate-400 rounded-xl md:rounded-2xl hover:text-red-500 hover:bg-red-50 transition-all shrink-0"><X size={20}/></button>
-            </div>
-
-            <div className="space-y-5 md:space-y-6 text-left">
-              <div className="space-y-2 text-left">
-                <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Especialista a Cargo</label>
-                <select value={docAEditar.especialista_id} onChange={(e) => setDocAEditar({...docAEditar, especialista_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
-                  <option value="">Selecciona especialista...</option>
-                  {profesionales.map(p => <option key={p.id} value={p.id}>{String(p.nombre || '').toUpperCase()} {String(p.apellido || '').toUpperCase()}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <button 
-              onClick={handleGuardarEdicion} 
-              disabled={editando} 
-              className="w-full bg-blue-600 text-white py-5 md:py-6 rounded-[1.5rem] md:rounded-[2rem] font-black text-[10px] md:text-xs uppercase tracking-widest md:tracking-[0.2em] shadow-xl hover:bg-slate-900 transition-all flex items-center justify-center gap-2 md:gap-3 disabled:opacity-50"
-            >
-              {editando ? <Loader2 className="animate-spin" size={18} /> : <CheckCircle2 size={18} />}
-              {editando ? 'Guardando...' : 'Guardar Cambios'}
-            </button>
-        </motion.div>
-      </div>
-    )}
-  </AnimatePresence>,
-  document.body
-)}
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
 
       {/* Modal Editar Especialista - Portal */}
       {mounted && typeof document !== 'undefined' && createPortal(
@@ -420,7 +414,7 @@ export default function ConsentimientosPacientePage() {
                       <label className="text-[9px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2 md:ml-4">Especialista a Cargo</label>
                       <select value={docAEditar.especialista_id} onChange={(e) => setDocAEditar({...docAEditar, especialista_id: e.target.value})} className="w-full p-4 md:p-5 bg-slate-50 border border-slate-200 focus:border-blue-500 rounded-[1rem] md:rounded-[1.5rem] outline-none font-bold text-[10px] md:text-xs text-slate-700 truncate">
                         <option value="">Selecciona especialista...</option>
-                        {profesionales.map(p => <option key={p.id} value={p.id}>{p.nombre.toUpperCase()} {p.apellido.toUpperCase()}</option>)}
+                        {profesionales.map(p => <option key={p.id} value={p.id}>{String(p.nombre || '').toUpperCase()} {String(p.apellido || '').toUpperCase()}</option>)}
                       </select>
                     </div>
                   </div>
