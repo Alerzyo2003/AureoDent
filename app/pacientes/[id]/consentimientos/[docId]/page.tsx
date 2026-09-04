@@ -12,13 +12,62 @@ export default function DetalleConsentimientoPage() {
   const docId = params.docId
   const pacienteId = params.id
 
+  // --- ESTADOS PARA AUDITORÍA SEREMI ---
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const [perfil, setPerfil] = useState<any>(null)
+  const [vistoRegistrado, setVistoRegistrado] = useState(false)
+
   const [documento, setDocumento] = useState<any>(null)
   const [paciente, setPaciente] = useState<any>(null)
   const [especialista, setEspecialista] = useState<any>(null)
   const [cargando, setCargando] = useState(true)
   const [generandoPdf, setGenerandoPdf] = useState(false)
 
+  // Obtener sesión y perfil para auditoría
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setSessionUserId(session.user.id);
+        const { data: pData } = await supabase
+          .from('perfiles')
+          .select('rut, nombre_completo, rol')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        setPerfil(pData);
+      }
+    });
+  }, [])
+
   useEffect(() => { if (docId) fetchTodo() }, [docId])
+
+  // --- FUNCIÓN DE AUDITORÍA ENRIQUECIDA (SEREMI) ---
+  const registrarAuditoria = async (accion: string, detalles: string) => {
+    if (!sessionUserId || !perfil) return;
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUserId,
+        rut_usuario: perfil.rut,
+        nombre_usuario: perfil.nombre_completo,
+        rol_al_momento: perfil.rol,
+        paciente_id: pacienteId,
+        registro_afectado_id: docId as string,
+        accion,
+        tabla: 'paciente_consentimientos',
+        detalles,
+        user_agent: navigator.userAgent
+      }]);
+    } catch (e) {
+      console.error("Error al registrar auditoría", e);
+    }
+  }
+
+  // Registrar cuando el usuario visualiza el documento (Exigencia SEREMI)
+  useEffect(() => {
+    if (documento && perfil && !vistoRegistrado) {
+      registrarAuditoria('SELECT / VER CONSENTIMIENTO', `Visualizó el documento legal "${documento.nombre_consentimiento}"`);
+      setVistoRegistrado(true);
+    }
+  }, [documento, perfil, vistoRegistrado]);
 
   async function fetchTodo() {
     setCargando(true)
@@ -53,6 +102,9 @@ export default function DetalleConsentimientoPage() {
     const toastId = toast.loading("Preparando documento numerado para imprimir...");
 
     try {
+      // REGISTRAR AUDITORÍA DE EXPORTACIÓN (SEREMI)
+      await registrarAuditoria('EXPORT / IMPRIMIR CONSENTIMIENTO', `Generó una vista de impresión del consentimiento "${documento?.nombre_consentimiento}"`);
+
       const html2pdf = (await import('html2pdf.js')).default;
       const element = document.getElementById('documento-pdf');
       
@@ -96,6 +148,9 @@ export default function DetalleConsentimientoPage() {
     const toastId = toast.loading("Procesando y numerando PDF...");
 
     try {
+      // REGISTRAR AUDITORÍA DE EXPORTACIÓN (SEREMI)
+      await registrarAuditoria('EXPORT / DESCARGAR CONSENTIMIENTO', `Descargó el PDF del consentimiento "${documento?.nombre_consentimiento}"`);
+
       const html2pdf = (await import('html2pdf.js')).default;
       const element = document.getElementById('documento-pdf');
 
