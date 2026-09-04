@@ -106,27 +106,37 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }
 
   useEffect(() => {
-    const getUserData = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) {
-        const { data: { session: currentSession } } = await supabase.auth.getSession()
-        setSession(currentSession)
+    // Función auxiliar para traer el perfil con el ID que ya tenemos localmente
+    const fetchPerfil = async (userId: string) => {
+      const { data } = await supabase.from('perfiles')
+        .select('id, nombre_completo, rol')
+        .eq('id', userId)
+        .maybeSingle()
         
-        // 1. OPTIMIZACIÓN: De select('*') a seleccionar SOLO lo que usamos en el Layout
-        const { data } = await supabase.from('perfiles')
-          .select('id, nombre_completo, rol')
-          .eq('id', user.id)
-          .maybeSingle()
-          
-        setPerfil(data)
-      }
+      setPerfil(data)
     }
-    getUserData()
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      setSession(newSession)
-      if (!newSession) setPerfil(null)
-      else getUserData()
+
+    // 1. Carga inicial usando getSession() (Sin peticiones de red innecesarias)
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession)
+      if (currentSession?.user) {
+        fetchPerfil(currentSession.user.id)
+      }
     })
+
+    // 2. Listener para detectar cuando el usuario se loguea o cierra sesión
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      // Ignoramos INITIAL_SESSION para no duplicar la llamada que ya hicimos arriba
+      if (event !== 'INITIAL_SESSION') {
+        setSession(newSession)
+        if (newSession?.user) {
+          fetchPerfil(newSession.user.id)
+        } else {
+          setPerfil(null)
+        }
+      }
+    })
+
     return () => subscription.unsubscribe()
   }, [])
 
