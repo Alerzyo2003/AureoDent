@@ -14,8 +14,12 @@ import DOMPurify from 'isomorphic-dompurify'
 
 export default function DocumentosClinicosPage() {
   const { id: paciente_id } = useParams()
+  
+  // --- ESTADOS PARA AUDITORÍA SEREMI ---
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
   const [sessionUserRole, setSessionUserRole] = useState<string | null>(null)
+  const [perfil, setPerfil] = useState<any>(null)
+
   const [documentos, setDocumentos] = useState<any[]>([])
   const [categorias, setCategorias] = useState<any[]>([])
   const [pacienteData, setPacienteData] = useState<any>(null)
@@ -37,29 +41,41 @@ export default function DocumentosClinicosPage() {
 
   useEffect(() => {
     setMounted(true);
-    supabase.auth.getUser().then(async ({ data: { user } }) => {
-      if (user) {
-        setSessionUserId(user.id);
-        const { data: profile } = await supabase.from('perfiles').select('rol').eq('id', user.id).single();
+    
+    // Obtener sesión y perfil para la auditoría SEREMI
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setSessionUserId(session.user.id);
+        const { data: profile } = await supabase.from('perfiles').select('rut, nombre_completo, rol').eq('id', session.user.id).single();
         if (profile) {
+          setPerfil(profile);
           setSessionUserRole(profile.rol);
         }
       }
     });
+
     if (paciente_id) {
       fetchDocumentos(); fetchCategorias(); fetchDatosEspecialistas(); fetchPaciente();
     }
   }, [paciente_id])
 
-  // --- FUNCIÓN DE AUDITORÍA ---
-  const registrarAuditoria = async (accion: string, detalles: string) => {
-    if (!sessionUserId) return;
+  // --- FUNCIÓN DE AUDITORÍA ENRIQUECIDA (SEREMI) ---
+  const registrarAuditoria = async (accion: string, detalles: string, datos_anteriores: any = null, datos_nuevos: any = null) => {
+    if (!sessionUserId || !perfil) return;
     try {
       await supabase.from('auditoria_clinica').insert([{
         usuario_id: sessionUserId,
+        rut_usuario: perfil.rut,
+        nombre_usuario: perfil.nombre_completo,
+        rol_al_momento: perfil.rol,
+        paciente_id: paciente_id as string,
+        registro_afectado_id: docSeleccionado && docSeleccionado !== 'NUEVO' ? docSeleccionado.id : null,
         accion,
         tabla: 'documentos_clinicos',
-        detalles
+        detalles,
+        datos_anteriores,
+        datos_nuevos,
+        user_agent: navigator.userAgent
       }]);
     } catch (e) {
       console.error("Error al registrar auditoría", e);
@@ -120,7 +136,7 @@ export default function DocumentosClinicosPage() {
   }
 
   const handleNuevoDocumento = () => {
-    setDocSeleccionado(null); // Aseguramos resetear la selección para el flujo nuevo
+    setDocSeleccionado(null); 
     if (sessionUserRole === 'DENTISTA' && sessionUserId) {
       setEspecialistaSeleccionadoId(sessionUserId);
       setMostrandoCategorias(true);
@@ -138,6 +154,9 @@ export default function DocumentosClinicosPage() {
     toast.loading("Generando documento...", { id: 'pdf-toast' });
     
     try {
+      // REGISTRAR AUDITORÍA DE EXPORTACIÓN (SEREMI)
+      await registrarAuditoria('EXPORT / PDF DOCUMENTO CLÍNICO', `Generó vista de impresión/PDF del documento clínico "${tituloEdicion}"`);
+
       const html2pdf = (await import('html2pdf.js')).default;
       const autor = profesionalesFull.find(p => p.user_id === especialistaSeleccionadoId);
       
@@ -236,26 +255,46 @@ export default function DocumentosClinicosPage() {
       const nombreLlenado = especialistaFull?.nombre_completo;
 
       if (docSeleccionado === 'NUEVO') {
-        const { error } = await supabase.from('documentos_clinicos').insert([{
-          paciente_id, especialista_id: especialistaSeleccionadoId, titulo_documento: tituloEdicion, contenido: bloquesEdicion,
+        const nuevoDoc = {
+          paciente_id, 
+          especialista_id: especialistaSeleccionadoId, 
+          titulo_documento: tituloEdicion, 
+          contenido: bloquesEdicion,
           llenado_por: nombreLlenado
-        }]);
+        };
+
+        const { data, error } = await supabase.from('documentos_clinicos').insert([nuevoDoc]).select().single();
         if (error) throw error;
         
-        await registrarAuditoria('CREAR', `Creó nuevo documento clínico: ${tituloEdicion}`);
+        // AUDITORÍA SEREMI
+        await registrarAuditoria(
+          'INSERT / CREAR DOCUMENTO CLÍNICO', 
+          `Creó nuevo documento clínico "${tituloEdicion}"`, 
+          null, 
+          nuevoDoc
+        );
 
         toast.success("Documento Guardado", { id: 'guardado-exito' }); 
-        setDocSeleccionado(null); 
+        setDocSeleccionado(data); // Cambiamos de 'NUEVO' al documento creado para reflejar que ya existe ID
         setMostrandoCategorias(false); 
       } else {
-        // ACTUALIZACIÓN DE ENCARGADO EXISTENTE
+        // ACTUALIZACIÓN DE ENCARGADO O CONTENIDO EXISTENTE
+        const datosAnteriores = { especialista_id: docSeleccionado.especialista_id, llenado_por: docSeleccionado.llenado_por };
+        const datosNuevos = { especialista_id: especialistaSeleccionadoId, llenado_por: nombreLlenado };
+
         const { error } = await supabase.from('documentos_clinicos')
           .update({ especialista_id: especialistaSeleccionadoId, llenado_por: nombreLlenado })
           .eq('id', docSeleccionado.id);
         
         if (error) throw error;
 
-        await registrarAuditoria('EDITAR_ENCARGADO', `Actualizó el encargado del doc. "${tituloEdicion}" a ${nombreLlenado}`);
+        // AUDITORÍA SEREMI
+        await registrarAuditoria(
+          'UPDATE / ACTUALIZAR ENCARGADO DOCUMENTO CLÍNICO', 
+          `Actualizó el especialista a cargo del documento "${tituloEdicion}" a ${nombreLlenado}`, 
+          datosAnteriores, 
+          datosNuevos
+        );
 
         toast.success("Encargado actualizado exitosamente");
         setDocSeleccionado({ ...docSeleccionado, especialista_id: especialistaSeleccionadoId, llenado_por: nombreLlenado });
@@ -276,10 +315,17 @@ export default function DocumentosClinicosPage() {
     if (!confirmacion) return;
 
     try {
+      const docAEliminar = docSeleccionado;
       const { error } = await supabase.from('documentos_clinicos').delete().eq('id', docSeleccionado.id);
       if (error) throw error;
 
-      await registrarAuditoria('ELIMINAR', `Eliminó el documento clínico: ${docSeleccionado.titulo_documento}`);
+      // AUDITORÍA SEREMI
+      await registrarAuditoria(
+        'DELETE / ELIMINAR DOCUMENTO CLÍNICO', 
+        `Eliminó el documento clínico "${docAEliminar.titulo_documento}"`, 
+        docAEliminar, 
+        null
+      );
 
       toast.success("Documento eliminado correctamente");
       setDocSeleccionado(null);
@@ -300,11 +346,31 @@ export default function DocumentosClinicosPage() {
     setDocSeleccionado('NUEVO'); setMostrandoCategorias(false);
   }
 
-  const seleccionarDocumentoGuardado = (doc: any) => {
+  const seleccionarDocumentoGuardado = async (doc: any) => {
     if (docSeleccionado?.id === doc.id) { setDocSeleccionado(null); return; }
     setDocSeleccionado(doc); setTituloEdicion(doc.titulo_documento);
     setBloquesEdicion(typeof doc.contenido === 'string' ? JSON.parse(doc.contenido) : doc.contenido);
     setEspecialistaSeleccionadoId(doc.especialista_id); setMostrandoCategorias(false);
+
+    // AUDITORÍA SEREMI: Registrar visualización de documento existente
+    if (sessionUserId && perfil) {
+      try {
+        await supabase.from('auditoria_clinica').insert([{
+          usuario_id: sessionUserId,
+          rut_usuario: perfil.rut,
+          nombre_usuario: perfil.nombre_completo,
+          rol_al_momento: perfil.rol,
+          paciente_id: paciente_id as string,
+          registro_afectado_id: doc.id,
+          accion: 'SELECT / VER DOCUMENTO CLÍNICO',
+          tabla: 'documentos_clinicos',
+          detalles: `Visualizó el documento clínico "${doc.titulo_documento}"`,
+          user_agent: navigator.userAgent
+        }]);
+      } catch (err) {
+        console.error("Error al registrar auditoría de lectura", err);
+      }
+    }
   }
 
   if (cargando) return <div className="h-screen flex items-center justify-center bg-slate-50"><Loader2 className="animate-spin text-blue-600" size={40} /></div>
@@ -338,14 +404,14 @@ export default function DocumentosClinicosPage() {
               {/* Botón de Guardar Inicial */}
               {docSeleccionado === 'NUEVO' && (
                 <button onClick={guardarDocumentoFinal} disabled={guardando} className="px-5 py-3 bg-emerald-500 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-emerald-600 flex items-center gap-2 transition-all">
-                  {guardando ? <Loader2 className="animate-spin" size={14}/> : <Save size={14} />} Guardar
+                  {guardando ? <Loader2 size={14} className="animate-spin"/> : <Save size={14} />} Guardar
                 </button>
               )}
 
               {/* Botón de Actualizar Encargado */}
               {docSeleccionado !== 'NUEVO' && docSeleccionado?.especialista_id !== especialistaSeleccionadoId && (
                 <button onClick={guardarDocumentoFinal} disabled={guardando} className="px-5 py-3 bg-amber-500 text-white rounded-2xl font-black text-[10px] uppercase shadow-lg hover:bg-amber-600 flex items-center gap-2 transition-all">
-                  {guardando ? <Loader2 className="animate-spin" size={14}/> : <Save size={14} />} Actualizar Encargado
+                  {guardando ? <Loader2 size={14} className="animate-spin"/> : <Save size={14} />} Actualizar Encargado
                 </button>
               )}
 
@@ -411,7 +477,6 @@ export default function DocumentosClinicosPage() {
                         disabled={!especialistaSeleccionadoId || isOpenLista} 
                         onClick={() => { 
                           setShowModalEspecialista(false); 
-                          // Validamos para no romper el estado si estábamos editando el responsable de un doc guardado
                           if (!docSeleccionado) {
                             setMostrandoCategorias(true); 
                           }
@@ -531,10 +596,10 @@ export default function DocumentosClinicosPage() {
                                     <p className="text-[10px] font-black uppercase leading-tight">
                                         {profesionalesFull.find(p => p.user_id === especialistaSeleccionadoId)?.nombre_completo}
                                     </p>
-                                    <p className="text-[8px] font-bold uppercase opacity-70">
+                                    <p className="text-[8px] font-black uppercase opacity-70">
                                         {profesionalesFull.find(p => p.user_id === especialistaSeleccionadoId)?.especialidad}
                                     </p>
-                                    <p className="text-[8px] font-bold uppercase opacity-70">
+                                    <p className="text-[8px] font-black uppercase opacity-70">
                                         RUT: {profesionalesFull.find(p => p.user_id === especialistaSeleccionadoId)?.rut}
                                     </p>
                                 </div>
