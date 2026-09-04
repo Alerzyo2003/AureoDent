@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 export default function AntecedentesPage() {
   const { id } = useParams()
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const [perfil, setPerfil] = useState<any>(null) // <-- Agregado para auditoría
   const [cargando, setCargando] = useState(true)
   const [items, setItems] = useState<any[]>([])
   
@@ -22,23 +23,38 @@ export default function AntecedentesPage() {
   }
 
   useEffect(() => { 
-    // Obtener usuario actual para la auditoría
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setSessionUserId(user.id);
+    // Obtener sesión y perfil para la auditoría SEREMI
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setSessionUserId(session.user.id);
+        const { data: pData } = await supabase
+          .from('perfiles')
+          .select('rut, nombre_completo, rol')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        setPerfil(pData);
+      }
     });
 
     if (id) fetchAntecedentes() 
   }, [id])
 
-  // --- FUNCIÓN DE AUDITORÍA ---
-  const registrarAuditoria = async (accion: string, detalles: string) => {
-    if (!sessionUserId) return;
+  // --- FUNCIÓN DE AUDITORÍA ENRIQUECIDA (SEREMI) ---
+  const registrarAuditoria = async (accion: string, detalles: string, datos_anteriores: any = null, datos_nuevos: any = null) => {
+    if (!sessionUserId || !perfil) return;
     try {
       await supabase.from('auditoria_clinica').insert([{
         usuario_id: sessionUserId,
+        rut_usuario: perfil.rut,
+        nombre_usuario: perfil.nombre_completo,
+        rol_al_momento: perfil.rol,
+        paciente_id: id,
         accion,
         tabla: 'antecedentes',
-        detalles
+        detalles,
+        datos_anteriores,
+        datos_nuevos,
+        user_agent: navigator.userAgent
       }]);
     } catch (e) {
       console.error("Error al registrar auditoría", e);
@@ -55,10 +71,10 @@ export default function AntecedentesPage() {
     const existe = items.find(i => i.categoria === categoria && i.contenido === contenido)
     if (existe) {
       await supabase.from('antecedentes').delete().eq('id', existe.id)
-      await registrarAuditoria('ELIMINAR', `Eliminó el antecedente "${contenido}" de la categoría ${categoria}`);
+      await registrarAuditoria('DELETE / ELIMINAR ANTECEDENTE', `Eliminó el antecedente "${contenido}" de la categoría ${categoria}`, { contenido_eliminado: contenido }, null);
     } else {
       await supabase.from('antecedentes').insert([{ paciente_id: id, categoria, contenido }])
-      await registrarAuditoria('CREAR', `Añadió el antecedente "${contenido}" a la categoría ${categoria}`);
+      await registrarAuditoria('INSERT / CREAR ANTECEDENTE', `Añadió el antecedente "${contenido}" a la categoría ${categoria}`, null, { contenido_agregado: contenido });
     }
     fetchAntecedentes()
     window.dispatchEvent(new Event('pacienteActualizado'))
@@ -67,7 +83,7 @@ export default function AntecedentesPage() {
   const agregarPersonalizado = async (categoria: string, contenido: string) => {
     if (!contenido) return
     await supabase.from('antecedentes').insert([{ paciente_id: id, categoria, contenido }])
-    await registrarAuditoria('CREAR', `Añadió antecedente personalizado "${contenido}" a la categoría ${categoria}`);
+    await registrarAuditoria('INSERT / CREAR ANTECEDENTE PERSONALIZADO', `Añadió antecedente personalizado "${contenido}" a la categoría ${categoria}`, null, { contenido_agregado: contenido });
     fetchAntecedentes()
     window.dispatchEvent(new Event('pacienteActualizado'))
   }
