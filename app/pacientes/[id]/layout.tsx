@@ -140,6 +140,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
   )
 
   const esFicha = pathname.startsWith(`/pacientes/${id}`) && !pathname.includes('/datos') && !pathname.includes('/tratamientos') && !pathname.includes('/periodontograma') && !pathname.includes('/odontograma') && !pathname.includes('/archivos') && !pathname.includes('/pagos');
+  const esTratamientos = pathname.includes('/tratamientos');
   const alertas = antecedentes.filter(a => a.categoria === 'alerta');
   const enfermedades = antecedentes.filter(a => a.categoria === 'enfermedad');
   const medicamentos = antecedentes.filter(a => a.categoria === 'medicamento');
@@ -233,7 +234,7 @@ export default function PacienteLayout({ children }: { children: React.ReactNode
         </div>
       </header>
 
-      <main className="p-4 lg:p-6 w-full max-w-6xl mx-auto flex-1 overflow-hidden">
+      <main className={`w-full mx-auto flex-1 overflow-hidden ${esTratamientos ? '' : 'p-4 lg:p-6 max-w-6xl'}`}>
         {esFicha && (
           <nav className="bg-white p-2 rounded-2xl mb-4 border flex gap-1 overflow-x-auto max-w-full scroll-smooth">
             <SubTabLink href={`/pacientes/${id}`} active={pathname === `/pacientes/${id}`} label="Resumen" />
