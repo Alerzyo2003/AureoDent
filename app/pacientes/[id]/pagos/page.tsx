@@ -20,7 +20,8 @@ type MedioPago = {
 }
 
 export default function PagosPacientePage() {
-  const { id: paciente_id } = useParams()
+  const params = useParams();
+  const paciente_id = params?.id as string; // CORRECCIÓN AQUÍ: Casting explícito a string
  
   const [cargando, setCargando] = useState(true)
   const [cargandoAccion, setCargandoAccion] = useState(false)
@@ -91,7 +92,7 @@ export default function PagosPacientePage() {
 
   const getDetalles = (comentario: string) => { try { return JSON.parse(comentario || '[]'); } catch(e) { return []; } }
 
-  // NUEVA FUNCIÓN: Registrar evento en la tabla de auditoría
+  // FUNCIÓN: Registrar evento en la tabla de auditoría
   const registrarAuditoria = async (accion: string, tabla: string, registroId: string | null, datosAnteriores: any, datosNuevos: any, detalles: string) => {
     try {
       await supabase.from('auditoria_clinica').insert([{
@@ -119,7 +120,6 @@ export default function PagosPacientePage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
           setUsuarioLogueado(session.user);
-          // Modificado para rescatar el rut y nombre completo
           const { data: perfilData } = await supabase.from('perfiles').select('rol, nombre_completo, rut').eq('id', session.user.id).single();
           setPerfil(perfilData);
       }
@@ -1157,3 +1157,16 @@ export default function PagosPacientePage() {
     </>
   )
 }
+Failed to compile.
+./app/pacientes/[id]/pagos/page.tsx:582:11
+Type error: Argument of type 'ParamValue' is not assignable to parameter of type 'string | null'.
+  Type 'undefined' is not assignable to type 'string | null'.
+  580 |           'UPDATE_EDICION_SALDO',
+  581 |           'pacientes',
+> 582 |           paciente_id,
+      |           ^
+  583 |           { saldo_a_favor: saldoAnterior },
+  584 |           { saldo_a_favor: nuevoSaldo, motivo: motivo.trim() },
+  585 |           `Admin cambió saldo de $${saldoAnterior.toLocaleString('es-CL')} a $${nuevoSaldo.toLocaleString('es-CL')}. Motivo: ${motivo.trim()}`
+Next.js build worker exited with code: 1 and signal: null
+Error: Command "npm run build" exited with 1
