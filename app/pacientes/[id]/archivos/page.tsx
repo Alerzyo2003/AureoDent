@@ -7,7 +7,7 @@ import {
   UploadCloud, ImageIcon, FileText, Trash2, 
   ExternalLink, Loader2, Plus, X, Search,
   Filter, Eye, Download, ZoomIn, ZoomOut, RotateCcw,
-  Pencil, Save // <-- NUEVOS ÍCONOS AÑADIDOS
+  Pencil, Save 
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -15,6 +15,11 @@ import { TransformWrapper, TransformComponent } from "react-zoom-pan-pinch"
 
 export default function PacienteArchivosPage() {
   const { id } = useParams()
+  
+  // --- ESTADOS PARA AUDITORÍA SEREMI ---
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const [perfil, setPerfil] = useState<any>(null)
+  
   const [archivos, setArchivos] = useState<any[]>([])
   const [cargando, setCargando] = useState(true)
   const [subiendo, setSubiendo] = useState(false)
@@ -22,7 +27,7 @@ export default function PacienteArchivosPage() {
   const [modalImagen, setModalImagen] = useState<string | null>(null)
   const [mounted, setMounted] = useState(false)
 
-  // --- NUEVOS ESTADOS PARA EDICIÓN ---
+  // --- ESTADOS PARA EDICIÓN ---
   const [modalEditar, setModalEditar] = useState<any>(null)
   const [editTitulo, setEditTitulo] = useState('')
   const [editDescripcion, setEditDescripcion] = useState('')
@@ -30,8 +35,44 @@ export default function PacienteArchivosPage() {
 
   useEffect(() => {
     setMounted(true)
+    
+    // Obtener sesión y perfil para la auditoría SEREMI
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setSessionUserId(session.user.id);
+        const { data: pData } = await supabase
+          .from('perfiles')
+          .select('rut, nombre_completo, rol')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        setPerfil(pData);
+      }
+    });
+
     if (id) fetchArchivos()
   }, [id])
+
+  // --- FUNCIÓN DE AUDITORÍA ENRIQUECIDA (SEREMI) ---
+  const registrarAuditoria = async (accion: string, detalles: string, datos_anteriores: any = null, datos_nuevos: any = null) => {
+    if (!sessionUserId || !perfil) return;
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUserId,
+        rut_usuario: perfil.rut,
+        nombre_usuario: perfil.nombre_completo,
+        rol_al_momento: perfil.rol,
+        paciente_id: id,
+        accion,
+        tabla: 'documentos_pacientes',
+        detalles,
+        datos_anteriores,
+        datos_nuevos,
+        user_agent: navigator.userAgent
+      }]);
+    } catch (e) {
+      console.error("Error al registrar auditoría", e);
+    }
+  }
 
   async function fetchArchivos() {
     setCargando(true)
@@ -79,18 +120,28 @@ export default function PacienteArchivosPage() {
         .from('documentos_pacientes')
         .getPublicUrl(fileName)
 
+      const nuevoArchivoData = {
+        paciente_id: id,
+        nombre_archivo: file.name,
+        url_archivo: publicUrl,
+        tipo_archivo: file.type,
+        titulo: file.name.split('.')[0].toUpperCase(),
+        descripcion: ''
+      };
+
       const { error: dbError } = await supabase
         .from('documentos_pacientes')
-        .insert([{
-          paciente_id: id,
-          nombre_archivo: file.name,
-          url_archivo: publicUrl,
-          tipo_archivo: file.type,
-          titulo: file.name.split('.')[0].toUpperCase(),
-          descripcion: '' // Inicializamos vacío
-        }])
+        .insert([nuevoArchivoData])
 
       if (dbError) throw dbError
+
+      // REGISTRAR AUDITORÍA AL SUBIR
+      await registrarAuditoria(
+        'INSERT / SUBIR ARCHIVO', 
+        `Subió el archivo multimedia "${nuevoArchivoData.titulo}"`, 
+        null, 
+        nuevoArchivoData
+      );
 
       toast.success("Archivo subido correctamente")
       fetchArchivos()
@@ -113,6 +164,14 @@ export default function PacienteArchivosPage() {
       }
       await supabase.from('documentos_pacientes').delete().eq('id', archivo.id)
       
+      // REGISTRAR AUDITORÍA AL ELIMINAR
+      await registrarAuditoria(
+        'DELETE / ELIMINAR ARCHIVO', 
+        `Eliminó el archivo multimedia "${archivo.titulo || archivo.nombre_archivo}"`, 
+        archivo, 
+        null
+      );
+      
       setArchivos(archivos.filter(a => a.id !== archivo.id))
       toast.success("Archivo eliminado")
     } catch (error) {
@@ -120,14 +179,12 @@ export default function PacienteArchivosPage() {
     }
   }
 
-  // --- NUEVA FUNCIÓN: ABRIR MODAL EDICIÓN ---
   const abrirModalEdicion = (archivo: any) => {
     setModalEditar(archivo)
     setEditTitulo(archivo.titulo || '')
     setEditDescripcion(archivo.descripcion || '')
   }
 
-  // --- NUEVA FUNCIÓN: GUARDAR EDICIÓN ---
   const guardarEdicion = async () => {
     if (!editTitulo.trim()) {
       toast.error("El título no puede estar vacío")
@@ -146,7 +203,14 @@ export default function PacienteArchivosPage() {
 
       if (error) throw error
 
-      // Actualizamos el estado local para no tener que recargar toda la base de datos
+      // REGISTRAR AUDITORÍA AL EDITAR
+      await registrarAuditoria(
+        'UPDATE / EDITAR ARCHIVO', 
+        `Editó los detalles del archivo multimedia "${editTitulo.toUpperCase()}"`, 
+        { titulo: modalEditar.titulo, descripcion: modalEditar.descripcion }, 
+        { titulo: editTitulo.toUpperCase(), descripcion: editDescripcion }
+      );
+
       setArchivos(archivos.map(a => a.id === modalEditar.id ? { 
         ...a, 
         titulo: editTitulo.toUpperCase(), 
@@ -165,7 +229,7 @@ export default function PacienteArchivosPage() {
   const archivosFiltrados = archivos.filter(a => 
     (a.titulo || '').toLowerCase().includes(filtro.toLowerCase()) ||
     (a.nombre_archivo || '').toLowerCase().includes(filtro.toLowerCase()) ||
-    (a.descripcion || '').toLowerCase().includes(filtro.toLowerCase()) // Agregado al filtro
+    (a.descripcion || '').toLowerCase().includes(filtro.toLowerCase())
   )
 
   if (cargando) return (
