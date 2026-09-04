@@ -118,13 +118,13 @@ export default function ListaTratamientosPage() {
 
     const { data: oficiales } = await supabase
       .from('presupuestos')
-      .select(`*, profesionales(nombre, apellido, especialidades(nombre)), presupuesto_items(id, estado, precio_pactado, abonado, progreso), citas(inicio)`)
+      .select(`id, id_dentalink, nombre_tratamiento, estado, aprobado, especialista_id, total, total_abonado, created_at, profesionales(nombre, apellido, especialidades(nombre)), presupuesto_items(id, estado, precio_pactado, abonado, progreso), citas(inicio)`)
       .eq('paciente_id', paciente_id)
       .order('created_at', { ascending: false });
 
     const { data: temporales } = await supabase
       .from('temp_presupuestos')
-      .select('*')
+      .select('id, id_dentalink, nombre, total, total_abonado, rut')
       .or(`rut.eq.${rutLimpio},rut.ilike.${rutFuzzy}`);
     
     const idsDentalinkOficiales = oficiales?.map(p => String(p.id_dentalink)).filter(id => id !== "null") || [];
@@ -133,7 +133,10 @@ export default function ListaTratamientosPage() {
 
     let itemsTempGlobal: any[] = [];
     if (todosIdsDentalink.length > 0) {
-        const { data: it } = await supabase.from('temp_items').select('*').in('id_dentalink', todosIdsDentalink);
+        const { data: it } = await supabase
+          .from('temp_items')
+          .select('id_dentalink, estado, precio_pactado, abonado, progreso')
+          .in('id_dentalink', todosIdsDentalink);
         itemsTempGlobal = it || [];
     }
 
@@ -420,8 +423,13 @@ export default function ListaTratamientosPage() {
   )
 
   return (
-    <div className="min-h-screen p-6 md:p-10 font-sans text-left pb-24" style={{ backgroundImage: "url('/fondo-pacientes.png')", backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }}>
-      <div className="max-w-7xl mx-auto space-y-8">
+    // 1. Usamos -m-4 lg:-m-6 para anular el padding del Layout padre
+    // 2. Volvemos a aplicar padding interno (p-6 md:p-10) para que el contenido no pegue a los bordes
+    <div 
+      className="-m-5 lg:-m-6 p-6 md:p-10 min-h-[calc(100vh-200px)] font-sans text-left pb-24 bg-cover bg-center bg-no-repeat" 
+      style={{ backgroundImage: "url('/fondo-pacientes.png')" }}
+    >
+    <div className="max-w-7xl mx-auto space-y-8">
         
         {/* HEADER PRINCIPAL */}
         <div className="bg-white/90 backdrop-blur-xl p-6 md:p-8 rounded-[2.5rem] shadow-xl border border-white/60 flex justify-between items-center">
