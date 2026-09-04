@@ -189,12 +189,10 @@ const PeriodontogramaChart = ({ arcada, dientes, data }: { arcada: string, dient
 
   return (
     <div className={`w-[${TOTAL_WIDTH}px] min-w-[${TOTAL_WIDTH}px] flex relative bg-white border border-slate-200 rounded-2xl shadow-sm my-6 print-no-break print:shadow-none print:border-slate-300`}>
-      {/* Etiqueta Pegajosa (Sticky) */}
       <div className={`sticky left-0 z-20 w-[${STICKY_WIDTH}px] min-w-[${STICKY_WIDTH}px] flex justify-center items-center bg-slate-50 border-r border-slate-200 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.08)] print:static print:shadow-none`}>
         <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Tendencia</span>
       </div>
       
-      {/* Área del Gráfico */}
       <div className="relative flex-1 bg-slate-50/30">
         <svg width={CONTENT_WIDTH} height={CHART_HEIGHT} className="block">
           {Array.from({ length: 15 }).map((_, i) => {
@@ -366,19 +364,15 @@ const FilaDientesAnatomicos = ({
   return (
     <div className={`w-[${TOTAL_WIDTH}px] min-w-[${TOTAL_WIDTH}px] flex flex-col relative bg-white border ${estilo.cardBorder} rounded-2xl shadow-sm print-no-break print:border-slate-300 print:shadow-none`}>
       
-      {/* Barra de Título (Atraviesa todo) */}
       <div className={`w-full h-[${HEADER_HEIGHT}px] ${estilo.header} rounded-t-2xl relative print:bg-slate-200 print:rounded-none`}>
-         {/* Etiqueta Pegajosa (Sticky) para el Título */}
          <div className={`sticky left-0 z-30 h-full w-[${STICKY_WIDTH}px] flex items-center justify-between px-3 ${estilo.headerText} print:text-black print:static`}>
             <span className="text-[10px] font-black uppercase tracking-[0.15em]">{estilo.etiqueta}</span>
             <span className="text-[8px] font-bold uppercase tracking-widest opacity-90">mm</span>
          </div>
       </div>
 
-      {/* Cuerpo del Diagrama */}
       <div className={`flex w-full relative h-[${PANEL_HEIGHT}px] ${estilo.rowTint} rounded-b-2xl print:bg-white`}>
         
-        {/* Regla Pegajosa (Sticky Ruler) */}
         <div className={`sticky left-0 z-20 w-[${STICKY_WIDTH}px] min-w-[${STICKY_WIDTH}px] h-full bg-white border-r border-slate-200 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.08)] print:static print:shadow-none`}>
           <div className="relative w-full h-full">
             {[0, 3, 6, 9].map((mm) => {
@@ -389,12 +383,10 @@ const FilaDientesAnatomicos = ({
                 </div>
               );
             })}
-            {/* Indicador de Línea 0 Pegajoso */}
             <div className="absolute w-full h-[1.5px] bg-red-500" style={{ top: baselineY }}></div>
           </div>
         </div>
 
-        {/* Zona SVG de los Dientes (Se desplaza libremente) */}
         <div className="relative flex-1">
           <svg width={CONTENT_WIDTH} height={PANEL_HEIGHT} className="block">
             {Array.from({ length: 16 }).map((_, i) => {
@@ -550,7 +542,6 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
 
   const inputClass = "w-full h-8 text-center bg-transparent outline-none text-xs font-bold transition-colors";
   
-  // Clase base para mantener la columna izquierda pegajosa y sincronizada
   const stickyTdClasses = `sticky left-0 z-20 w-[${STICKY_WIDTH}px] min-w-[${STICKY_WIDTH}px] max-w-[${STICKY_WIDTH}px] border-r border-slate-200/80 shadow-[4px_0_15px_-3px_rgba(0,0,0,0.08)] print:static print:shadow-none`;
 
   return (
@@ -558,11 +549,8 @@ const PeriodontogramaTable = ({ arcada, cara, dientes, data, onDataChange }: any
       <table className="border-collapse text-[10px]" style={{ tableLayout: 'fixed', width: `${TOTAL_WIDTH}px` }}>
         <colgroup>
           <col style={{ width: `${STICKY_WIDTH}px` }} />
-          {/* Columnas para los primeros 8 dientes (24 inputs) */}
           {Array.from({length: 24}).map((_, i) => <col key={`c1-${i}`} style={{ width: `${TOOTH_WIDTH / 3}px` }} />)}
-          {/* Columna separadora central */}
           <col style={{ width: `${CENTER_GAP}px` }} />
-          {/* Columnas para los últimos 8 dientes (24 inputs) */}
           {Array.from({length: 24}).map((_, i) => <col key={`c2-${i}`} style={{ width: `${TOOTH_WIDTH / 3}px` }} />)}
         </colgroup>
         <tbody>
@@ -767,6 +755,10 @@ export default function PeriodontogramaPage() {
   const [guardando, setGuardando] = useState(false)
   const [mostrarGrafico, setMostrarGrafico] = useState(false)
 
+  // ESTADOS PARA AUDITORÍA
+  const [sessionUser, setSessionUser] = useState<any>(null)
+  const [sessionUserProfile, setSessionUserProfile] = useState<any>(null)
+
   useEffect(() => {
     if (paciente_id) {
       cargarContexto();
@@ -780,8 +772,34 @@ export default function PeriodontogramaPage() {
     
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
-      const { data: prof } = await supabase.from('perfiles').select('nombre, apellido').eq('id', session.user.id).single();
-      if (prof) setProfesional(prof);
+      setSessionUser(session.user);
+      const { data: prof } = await supabase.from('perfiles').select('nombre_completo, nombre, apellido, rol, rut').eq('id', session.user.id).single();
+      if (prof) {
+          setProfesional(prof); 
+          setSessionUserProfile(prof);
+      }
+    }
+  };
+
+  // FUNCIÓN CENTRAL DE AUDITORÍA
+  const registrarAuditoria = async (accion: string, registroId: string | null, datosAnteriores: any, datosNuevos: any, detalles: string) => {
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUser?.id,
+        accion,
+        tabla: 'periodontogramas',
+        detalles,
+        paciente_id: paciente_id,
+        registro_afectado_id: registroId,
+        user_agent: window.navigator.userAgent,
+        rut_usuario: sessionUserProfile?.rut || null,
+        nombre_usuario: sessionUserProfile?.nombre_completo || sessionUser?.email || 'Sistema',
+        rol_al_momento: sessionUserProfile?.rol || null,
+        datos_anteriores: datosAnteriores,
+        datos_nuevos: datosNuevos
+      }]);
+    } catch (error) {
+      console.error("No se pudo registrar la auditoría:", error);
     }
   };
 
@@ -864,8 +882,29 @@ export default function PeriodontogramaPage() {
 
     if (selectedId === 'nuevo-examen') {
       response = await supabase.from('periodontogramas').insert(payload).select().single();
+      if (!response.error && response.data) {
+         // AUDITORÍA: CREACIÓN
+         await registrarAuditoria(
+           'CREAR_PERIODONTOGRAMA',
+           response.data.id,
+           null,
+           payload,
+           `Se registró un nuevo periodontograma para el paciente ${paciente?.nombre} ${paciente?.apellido}`
+         );
+      }
     } else {
+      const datosAntiguos = examenActual.datos;
       response = await supabase.from('periodontogramas').update(payload).eq('id', selectedId).select().single();
+      if (!response.error && response.data) {
+         // AUDITORÍA: ACTUALIZACIÓN
+         await registrarAuditoria(
+           'ACTUALIZAR_PERIODONTOGRAMA',
+           response.data.id,
+           { datos: datosAntiguos },
+           payload,
+           `Se actualizó el periodontograma del ${examenActual.fecha_examen}`
+         );
+      }
     }
 
     if (response.error) {
@@ -882,11 +921,25 @@ export default function PeriodontogramaPage() {
     if (!selectedId || selectedId === 'nuevo-examen') return toast.info("No guardado aún.");
     if (!confirm("¿Eliminar este periodontograma? No se puede deshacer.")) return;
 
+    const examenActual = historial.find(h => h.id === selectedId);
+    const datosAntiguos = examenActual?.datos;
+    const fechaEx = examenActual?.fecha_examen;
+
     const { error } = await supabase.from('periodontogramas').delete().eq('id', selectedId);
     if (error) {
       toast.error("Error al eliminar.");
     } else {
       toast.success("Eliminado.");
+      
+      // AUDITORÍA: ELIMINACIÓN
+      await registrarAuditoria(
+        'ELIMINAR_PERIODONTOGRAMA',
+        selectedId,
+        { datos: datosAntiguos },
+        null,
+        `Se eliminó el periodontograma del ${fechaEx}`
+      );
+
       await fetchHistorial(); 
     }
   };
