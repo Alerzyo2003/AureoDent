@@ -11,6 +11,8 @@ import { toast } from 'sonner'
 export default function RecetasPage() {
   const { id: paciente_id } = useParams()
   const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const [sessionUserProfile, setSessionUserProfile] = useState<any>(null)
+  
   const [recetas, setRecetas] = useState<any[]>([])
   const [planes, setPlanes] = useState<any[]>([])
   const [profesionales, setProfesionales] = useState<any[]>([])
@@ -23,9 +25,15 @@ export default function RecetasPage() {
   const [formData, setFormData] = useState({ id: '', presupuesto_id: '', indicaciones: '', profesional_id: '' })
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setSessionUserId(user.id);
-    });
+    const initSession = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+            setSessionUserId(user.id);
+            const { data: profile } = await supabase.from('perfiles').select('nombre_completo, rol, rut').eq('id', user.id).single();
+            if (profile) setSessionUserProfile(profile);
+        }
+    };
+    initSession();
 
     if (paciente_id) {
       fetchData()
@@ -33,19 +41,28 @@ export default function RecetasPage() {
     }
   }, [paciente_id])
 
-  const registrarAuditoria = async (accion: string, detalles: string) => {
+  // FUNCIÓN CENTRAL DE AUDITORÍA
+  const registrarAuditoria = async (accion: string, registroId: string | null, datosAnteriores: any, datosNuevos: any, detalles: string) => {
     if (!sessionUserId) return;
     try {
       await supabase.from('auditoria_clinica').insert([{
         usuario_id: sessionUserId,
         accion,
         tabla: 'recetas',
-        detalles
+        detalles,
+        paciente_id: paciente_id,
+        registro_afectado_id: registroId,
+        user_agent: window.navigator.userAgent,
+        rut_usuario: sessionUserProfile?.rut || null,
+        nombre_usuario: sessionUserProfile?.nombre_completo || 'Sistema',
+        rol_al_momento: sessionUserProfile?.rol || null,
+        datos_anteriores: datosAnteriores,
+        datos_nuevos: datosNuevos
       }]);
-    } catch (e) {
-      console.error("Error al registrar auditoría", e);
+    } catch (error) {
+      console.error("No se pudo registrar la auditoría:", error);
     }
-  }
+  };
 
   async function fetchPaciente() {
     const { data } = await supabase.from('pacientes').select('*').eq('id', paciente_id).maybeSingle()
@@ -73,7 +90,7 @@ export default function RecetasPage() {
 
       const { data: perfiles } = await supabase.from('perfiles').select('id, rut');
 
-      // ✅ CORRECCIÓN 1: Manejo de arreglo en la lista de profesionales para el selector
+      // CORRECCIÓN 1: Manejo de arreglo en la lista de profesionales para el selector
       const listaProfesionales = (profs || []).map((p: any) => {
         const esp = Array.isArray(p.especialidades) ? p.especialidades[0] : p.especialidades;
         
@@ -85,7 +102,7 @@ export default function RecetasPage() {
       });
       setProfesionales(listaProfesionales);
 
-      // ✅ CORRECCIÓN 2: Manejo de arreglo al armar la tarjeta de las recetas
+      // CORRECCIÓN 2: Manejo de arreglo al armar la tarjeta de las recetas
       const recetasCompletas = (recsRes.data || []).map((receta: any) => {
         const prof = profs?.find((p: any) => p.user_id === receta.profesional_id) as any;
         const perf = perfiles?.find((p: any) => p.id === receta.profesional_id) as any;
@@ -155,27 +172,43 @@ export default function RecetasPage() {
     
     setGuardando(true);
     try {
-      if (formData.id) {
-        const { error } = await supabase.from('recetas').update({
+      const payload = {
           presupuesto_id: formData.presupuesto_id || null,
           indicaciones: formData.indicaciones.trim(),
           profesional_id: formData.profesional_id
-        }).eq('id', formData.id);
+      };
 
+      if (formData.id) {
+        const { error, data } = await supabase.from('recetas').update(payload).eq('id', formData.id).select().single();
         if (error) throw error;
-        await registrarAuditoria('EDITAR', `Editó la receta (ID: ${formData.id}) del paciente ${paciente?.nombre} ${paciente?.apellido}`);
+        
+        // AUDITORÍA: ACTUALIZACIÓN
+        await registrarAuditoria(
+            'ACTUALIZAR_RECETA', 
+            formData.id,
+            { indicaciones: recetaSeleccionada?.indicaciones, profesional_id: recetaSeleccionada?.profesional_id },
+            payload,
+            `Editó la receta (ID: ${formData.id}) del paciente ${paciente?.nombre} ${paciente?.apellido}`
+        );
         toast.success("Receta actualizada");
       } else {
-        const { data, error } = await supabase.from('recetas').insert([{
+        const fullPayload = {
+          ...payload,
           paciente_id: paciente_id,
-          presupuesto_id: formData.presupuesto_id || null,
-          indicaciones: formData.indicaciones.trim(),
-          profesional_id: formData.profesional_id,
           medicamentos: "Rp."
-        }]).select('id').single();
+        };
 
+        const { data, error } = await supabase.from('recetas').insert([fullPayload]).select('id').single();
         if (error) throw error;
-        await registrarAuditoria('CREAR', `Creó una nueva receta médica (ID: ${data?.id}) para el paciente ${paciente?.nombre} ${paciente?.apellido}`);
+
+        // AUDITORÍA: CREACIÓN
+        await registrarAuditoria(
+            'CREAR_RECETA', 
+            data?.id,
+            null,
+            fullPayload,
+            `Creó una nueva receta médica para el paciente ${paciente?.nombre} ${paciente?.apellido}`
+        );
         toast.success("Receta creada exitosamente");
       }
       
@@ -198,7 +231,15 @@ export default function RecetasPage() {
       const { error } = await supabase.from('recetas').delete().eq('id', recetaSeleccionada.id);
       if (error) throw error;
 
-      await registrarAuditoria('ELIMINAR', `Eliminó la receta médica (ID: ${recetaSeleccionada.id}) del paciente ${paciente?.nombre} ${paciente?.apellido}`);
+      // AUDITORÍA: ELIMINACIÓN
+      await registrarAuditoria(
+          'ELIMINAR_RECETA', 
+          recetaSeleccionada.id,
+          { indicaciones: recetaSeleccionada.indicaciones },
+          null,
+          `Eliminó la receta médica del ${new Date(recetaSeleccionada.fecha_emision).toLocaleDateString('es-CL')} del paciente ${paciente?.nombre} ${paciente?.apellido}`
+      );
+
       toast.success("Receta eliminada correctamente");
       setRecetaSeleccionada(null);
       setShowForm(false);
@@ -321,7 +362,7 @@ export default function RecetasPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 md:gap-8 items-start text-left print:block print:w-full print:m-0">
         
-        {/* HISTORIAL LATERAL (Se oculta en móvil si hay una receta o formulario abierto) */}
+        {/* HISTORIAL LATERAL */}
         <aside className={`lg:col-span-1 space-y-4 text-left print:hidden ${ (showForm || recetaSeleccionada) ? 'hidden lg:block' : 'block' }`}>
           <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-4 italic text-left">Historial de Recetas</h4>
           <div className="space-y-3 max-h-[60vh] lg:max-h-[70vh] overflow-y-auto pr-2 custom-scrollbar text-left">
