@@ -65,12 +65,50 @@ export default function OdontogramaHistorialPage() {
   const [vistaTemporal, setVistaTemporal] = useState(false) 
   const [verInfoElemento, setVerInfoElemento] = useState<number | string | null>(null)
   
+  // ESTADOS PARA AUDITORÍA
+  const [sessionUser, setSessionUser] = useState<any>(null)
+  const [sessionUserProfile, setSessionUserProfile] = useState<any>(null)
+
   const [menuContextual, setMenuContextual] = useState<{ x: number, y: number, diente: number | null, cara?: string, zona?: string, lado: 'derecha' | 'izquierda' } | null>(null)
   const [vistaMenu, setVistaMenu] = useState<'principal' | 'preexistencias' | 'lesiones'>('principal')
 
   useEffect(() => {
-    if (pacienteId) fetchDatosOdontograma()
+    if (pacienteId) {
+      obtenerUsuario()
+      fetchDatosOdontograma()
+    }
   }, [pacienteId])
+
+  async function obtenerUsuario() {
+    const { data: { user } } = await supabase.auth.getUser()
+    setSessionUser(user)
+    if (user) {
+      const { data: profile } = await supabase.from('perfiles').select('nombre_completo, rol, rut').eq('id', user.id).single();
+      if (profile) setSessionUserProfile(profile);
+    }
+  }
+
+  // FUNCIÓN CENTRAL DE AUDITORÍA
+  const registrarAuditoria = async (accion: string, registroId: string, datosAnteriores: any, datosNuevos: any, detalles: string) => {
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUser?.id,
+        accion,
+        tabla: 'odontogramas',
+        detalles,
+        paciente_id: pacienteId,
+        registro_afectado_id: registroId,
+        user_agent: window.navigator.userAgent,
+        rut_usuario: sessionUserProfile?.rut || null,
+        nombre_usuario: sessionUserProfile?.nombre_completo || sessionUser?.email || 'Sistema',
+        rol_al_momento: sessionUserProfile?.rol || null,
+        datos_anteriores: datosAnteriores,
+        datos_nuevos: datosNuevos
+      }]);
+    } catch (error) {
+      console.error("No se pudo registrar la auditoría:", error);
+    }
+  };
 
   async function fetchDatosOdontograma() {
     setCargando(true)
@@ -139,9 +177,30 @@ export default function OdontogramaHistorialPage() {
     setVistaMenu('principal');
   };
 
-  const guardarEnBD = async (nuevoEstado: any) => {
-      const { error } = await supabase.from('odontogramas').upsert({ paciente_id: pacienteId, dentadura: nuevoEstado }, { onConflict: 'paciente_id' });
-      if (!error) { setDentadura(nuevoEstado); generarHistorialDesdeDentadura(nuevoEstado); }
+  // ACTUALIZACIÓN DE GUARDADO CON AUDITORÍA
+  const guardarEnBD = async (nuevoEstado: any, accionLog: string, detallesLog: string) => {
+      const { data, error } = await supabase
+        .from('odontogramas')
+        .upsert({ paciente_id: pacienteId, dentadura: nuevoEstado }, { onConflict: 'paciente_id' })
+        .select();
+        
+      if (!error) { 
+        setDentadura(nuevoEstado); 
+        generarHistorialDesdeDentadura(nuevoEstado); 
+        
+        // Registrar en Auditoría si se guardó correctamente
+        if (data && data.length > 0) {
+            await registrarAuditoria(
+                accionLog,
+                data[0].id,
+                { dentadura: dentadura }, // El estado actual antes del cambio
+                { dentadura: nuevoEstado }, // El nuevo estado
+                detallesLog
+            );
+        }
+      } else {
+        toast.error("Error al actualizar el odontograma");
+      }
   }
 
   const aplicarHallazgo = async (tipo: string) => {
@@ -163,16 +222,29 @@ export default function OdontogramaHistorialPage() {
             }
         }
     });
-    guardarEnBD(nuevoEstado);
+
+    const objetivoStr = menuContextual.zona || `Pieza ${menuContextual.diente}${menuContextual.cara ? ` (Cara ${menuContextual.cara})` : ''}`;
+    const accionStr = (tipo === 'Sano' || tipo === 'Ausente') ? `MARCAR_DIENTE_${tipo.toUpperCase()}` : 'MODIFICAR_HALLAZGO_ODONTOGRAMA';
+    const detallesStr = `Se aplicó '${tipo}' en ${objetivoStr}`;
+
+    guardarEnBD(nuevoEstado, accionStr, detallesStr);
     setMenuContextual(null);
   }
 
   const eliminarRegistroManual = async (reg: any) => {
       let nuevoEstado = { ...dentadura };
       const dId = reg.pieza.toString();
-      if (reg.caras.includes('Cara')) delete nuevoEstado[dId].caras[reg.caras.replace('Cara ', '')];
-      else nuevoEstado[dId].hallazgos = nuevoEstado[dId].hallazgos.filter((h:string) => h !== reg.tipo);
-      guardarEnBD(nuevoEstado);
+      if (reg.caras.includes('Cara')) {
+        delete nuevoEstado[dId].caras[reg.caras.replace('Cara ', '')];
+      } else {
+        nuevoEstado[dId].hallazgos = nuevoEstado[dId].hallazgos.filter((h:string) => h !== reg.tipo);
+      }
+      
+      guardarEnBD(
+        nuevoEstado, 
+        'ELIMINAR_HALLAZGO_ODONTOGRAMA', 
+        `Se eliminó el hallazgo '${reg.tipo}' en Pieza ${reg.pieza} (${reg.caras})`
+      );
   }
 
   if (cargando) return (
