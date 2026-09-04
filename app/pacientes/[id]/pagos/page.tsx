@@ -91,13 +91,36 @@ export default function PagosPacientePage() {
 
   const getDetalles = (comentario: string) => { try { return JSON.parse(comentario || '[]'); } catch(e) { return []; } }
 
+  // NUEVA FUNCIÓN: Registrar evento en la tabla de auditoría
+  const registrarAuditoria = async (accion: string, tabla: string, registroId: string | null, datosAnteriores: any, datosNuevos: any, detalles: string) => {
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: usuarioLogueado?.id,
+        accion,
+        tabla,
+        detalles,
+        paciente_id: paciente_id,
+        registro_afectado_id: registroId,
+        user_agent: window.navigator.userAgent,
+        rut_usuario: perfil?.rut || null,
+        nombre_usuario: perfil?.nombre_completo || usuarioLogueado?.email || 'Sistema',
+        rol_al_momento: perfil?.rol || null,
+        datos_anteriores: datosAnteriores,
+        datos_nuevos: datosNuevos
+      }]);
+    } catch (error) {
+      console.error("No se pudo registrar la auditoría:", error);
+    }
+  };
+
   async function cargarDatosFinancieros() {
     setCargando(true)
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
           setUsuarioLogueado(session.user);
-          const { data: perfilData } = await supabase.from('perfiles').select('rol').eq('id', session.user.id).single();
+          // Modificado para rescatar el rut y nombre completo
+          const { data: perfilData } = await supabase.from('perfiles').select('rol, nombre_completo, rut').eq('id', session.user.id).single();
           setPerfil(perfilData);
       }
 
@@ -307,10 +330,16 @@ export default function PagosPacientePage() {
 
         if (errPago) throw errPago;
         await supabase.from('pacientes').update({ saldo_a_favor: saldoActual + montoNuevo }).eq('id', paciente_id);
-        await supabase.from('auditoria_clinica').insert([{
-            usuario_id: usuarioLogueado?.id, accion: 'INSERT / ABONO MANUAL', tabla: 'pagos, pacientes',
-            detalles: `Ingresó $${montoNuevo.toLocaleString('es-CL')} al saldo a favor de ${pacienteInfo?.nombre} ${pacienteInfo?.apellido} (RUT: ${pacienteInfo?.rut}). Método: ${metodoAbonoLibre}.`
-        }]);
+        
+        // AUDITORÍA: Abono Libre
+        await registrarAuditoria(
+            'INSERT_ABONO_MANUAL',
+            'pagos',
+            nuevoPago?.id,
+            { saldo_a_favor_anterior: saldoActual },
+            { saldo_a_favor_nuevo: saldoActual + montoNuevo, pago: nuevoPago },
+            `Ingresó $${montoNuevo.toLocaleString('es-CL')} al saldo a favor de ${pacienteInfo?.nombre} ${pacienteInfo?.apellido} (RUT: ${pacienteInfo?.rut}). Método: ${metodoAbonoLibre}.`
+        );
 
         toast.success(`Se agregaron $${montoNuevo.toLocaleString('es-CL')} al Saldo a Favor.`);
         setModalAbonoLibreAbierto(false);
@@ -352,6 +381,7 @@ export default function PagosPacientePage() {
 
     setCargandoAccion(true);
     let detallesDelPago: any[] = [];
+    let idsGenerados: string[] = [];
     const fechaPagoTransaccion = new Date().toISOString(); 
     
     try {
@@ -380,7 +410,7 @@ export default function PagosPacientePage() {
                     };
                     detallesDelPago.push(detalleItem);
 
-                    await supabase.from('pagos').insert([{
+                    const { data: pagoInsertado } = await supabase.from('pagos').insert([{
                         paciente_id: paciente_id,
                         monto: montoTomado,
                         metodo_pago: metodoActual.metodo,
@@ -391,7 +421,9 @@ export default function PagosPacientePage() {
                         fecha_pago: fechaPagoTransaccion,
                         comentario: JSON.stringify([detalleItem]),
                         caja_id: cajaActivaId
-                    }]);
+                    }]).select('id').single();
+
+                    if (pagoInsertado) idsGenerados.push(pagoInsertado.id);
 
                     aAbonarItem -= montoTomado;
                     metodoActual.monto -= montoTomado;
@@ -410,10 +442,20 @@ export default function PagosPacientePage() {
         }
 
         toast.success(`Pago procesado con éxito.`);
-        await supabase.from('auditoria_clinica').insert([{
-            usuario_id: usuarioLogueado?.id, accion: 'INSERT / PAGO TRATAMIENTO', tabla: 'pagos, presupuesto_items, pacientes',
-            detalles: `Registró un pago selectivo de $${montoTotalAPagar.toLocaleString('es-CL')} para ${pacienteInfo?.nombre} ${pacienteInfo?.apellido}.`
-        }]);
+        
+        // AUDITORÍA: Pagos a Tratamientos
+        await registrarAuditoria(
+            'INSERT_PAGO_TRATAMIENTO',
+            'pagos, presupuesto_items',
+            idsGenerados.join(', '),
+            { saldo_a_favor_anterior: saldoActual },
+            { 
+                saldo_a_favor_nuevo: saldoActual - totalSaldoUsado,
+                pagos_realizados: detallesDelPago,
+                total_pagado: montoTotalAPagar 
+            },
+            `Registró un pago selectivo de $${montoTotalAPagar.toLocaleString('es-CL')} para ${pacienteInfo?.nombre} ${pacienteInfo?.apellido}.`
+        );
 
         const detallesAgrupadosParaImprimir = Object.values(detallesDelPago.reduce((acc, curr) => {
             if (!acc[curr.id]) acc[curr.id] = { ...curr };
@@ -455,7 +497,7 @@ export default function PagosPacientePage() {
     if (!window.confirm(mensajeConfirmacion)) return;
     if (pago.estado === 'Anulado') return toast.info("Esta transacción ya fue anulada.");
 
-    // 🔥 NUEVO: Pedir motivo de anulación obligatorio
+    // Pedir motivo de anulación obligatorio
     const motivo = window.prompt("Por favor, ingresa el motivo de la anulación (Obligatorio):");
     if (!motivo || motivo.trim() === '') {
         return toast.info("Anulación cancelada. Es obligatorio ingresar un motivo.");
@@ -499,7 +541,16 @@ export default function PagosPacientePage() {
           ? `Anuló un ingreso manual agrupado de $${pago.monto.toLocaleString('es-CL')}. Se descuenta de SALDO A FAVOR. Motivo: ${motivo.trim()}`
           : `Anuló un pago agrupado a tratamiento de $${pago.monto.toLocaleString('es-CL')}. Destino: SALDO A FAVOR. Motivo: ${motivo.trim()}`;
 
-      await supabase.from('auditoria_clinica').insert([{ usuario_id: session?.user?.id, accion: 'UPDATE / ANULACIÓN PAGO GRUPAL', detalles: detallesAuditoria }]);
+      // AUDITORÍA: Anulación
+      const idsPagos = pago.rawPagos.map((p:any) => p.id).join(', ');
+      await registrarAuditoria(
+          'UPDATE_ANULACION_PAGO',
+          'pagos',
+          idsPagos,
+          { estado_anterior: 'Completado', saldo_anterior: saldoActual },
+          { estado_nuevo: 'Anulado', saldo_nuevo: nuevoSaldo, motivo: motivo.trim() },
+          detallesAuditoria
+      );
       
       toast.success("Transacción anulada por completo. El saldo ha sido ajustado.");
       await cargarDatosFinancieros();
@@ -523,13 +574,23 @@ export default function PagosPacientePage() {
     try {
       const saldoAnterior = Number(pacienteInfo?.saldo_a_favor || 0);
       await supabase.from('pacientes').update({ saldo_a_favor: nuevoSaldo }).eq('id', paciente_id);
-      await supabase.from('auditoria_clinica').insert([{ usuario_id: usuarioLogueado?.id, accion: 'UPDATE / EDICIÓN MANUAL SALDO A FAVOR', detalles: `Admin cambió saldo de $${saldoAnterior.toLocaleString('es-CL')} a $${nuevoSaldo.toLocaleString('es-CL')}. Motivo: ${motivo.trim()}` }]);
+      
+      // AUDITORÍA: Edición manual de saldo
+      await registrarAuditoria(
+          'UPDATE_EDICION_SALDO',
+          'pacientes',
+          paciente_id,
+          { saldo_a_favor: saldoAnterior },
+          { saldo_a_favor: nuevoSaldo, motivo: motivo.trim() },
+          `Admin cambió saldo de $${saldoAnterior.toLocaleString('es-CL')} a $${nuevoSaldo.toLocaleString('es-CL')}. Motivo: ${motivo.trim()}`
+      );
+
       toast.success("Saldo a favor actualizado manualmente.");
       await cargarDatosFinancieros();
     } catch (e) { toast.error("Error al actualizar el saldo."); } finally { setCargandoAccion(false); }
   }
 
-  // 🔥 NUEVA FUNCIÓN DE IMPRESIÓN CON HTML2PDF 🔥
+  // IMPRESIÓN CON HTML2PDF
   const imprimirComprobante = async (pago: any) => {
     setPagoAImprimir(pago);
     const toastId = toast.loading("Preparando comprobante profesional...");
@@ -544,7 +605,6 @@ export default function PagosPacientePage() {
                 return;
             }
 
-            // Opciones corregidas para Typescript
             const opt = {
                 margin: [15, 15, 20, 15] as [number, number, number, number],
                 filename: `Comprobante_${pacienteInfo?.rut || 'Pago'}.pdf`,
