@@ -59,12 +59,13 @@ export default function HistorialPage() {
         { data: citas },
         { data: profesionales }
       ] = await Promise.all([
-        supabase.from('evoluciones').select('*').eq('paciente_id', paciente_id),
-        supabase.from('presupuestos').select('*').eq('paciente_id', paciente_id),
-        supabase.from('documentos_pacientes').select('*').eq('paciente_id', paciente_id),
-        supabase.from('documentos_clinicos').select('*').eq('paciente_id', paciente_id),
-        supabase.from('pagos').select('*').eq('paciente_id', paciente_id),
-        supabase.from('citas').select('*').eq('paciente_id', paciente_id),
+        // Solo traemos las columnas estrictamente necesarias
+        supabase.from('evoluciones').select('id, fecha_registro, descripcion_procedimiento, profesional_id').eq('paciente_id', paciente_id),
+        supabase.from('presupuestos').select('id, created_at, nombre_tratamiento, total, estado, especialista_id').eq('paciente_id', paciente_id),
+        supabase.from('documentos_pacientes').select('id, fecha_subida, titulo, nombre_archivo, descripcion, url_archivo, creado_por').eq('paciente_id', paciente_id),
+        supabase.from('documentos_clinicos').select('id, fecha_creacion, titulo_documento, usuario_id').eq('paciente_id', paciente_id),
+        supabase.from('pagos').select('id, presupuesto_id, tratamiento_id, plan_id, fecha_pago, created_at, concepto, descripcion, detalle, motivo, nombre_tratamiento, observaciones, notas, monto, metodo_pago').eq('paciente_id', paciente_id),
+        supabase.from('citas').select('id, created_at, inicio, estado, motivo, profesional_id').eq('paciente_id', paciente_id),
         supabase.from('profesionales').select('user_id, nombre, apellido')
       ])
 
