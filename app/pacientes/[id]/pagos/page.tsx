@@ -1157,16 +1157,3 @@ export default function PagosPacientePage() {
     </>
   )
 }
-Failed to compile.
-./app/pacientes/[id]/pagos/page.tsx:582:11
-Type error: Argument of type 'ParamValue' is not assignable to parameter of type 'string | null'.
-  Type 'undefined' is not assignable to type 'string | null'.
-  580 |           'UPDATE_EDICION_SALDO',
-  581 |           'pacientes',
-> 582 |           paciente_id,
-      |           ^
-  583 |           { saldo_a_favor: saldoAnterior },
-  584 |           { saldo_a_favor: nuevoSaldo, motivo: motivo.trim() },
-  585 |           `Admin cambió saldo de $${saldoAnterior.toLocaleString('es-CL')} a $${nuevoSaldo.toLocaleString('es-CL')}. Motivo: ${motivo.trim()}`
-Next.js build worker exited with code: 1 and signal: null
-Error: Command "npm run build" exited with 1
