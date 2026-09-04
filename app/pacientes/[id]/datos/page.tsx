@@ -12,6 +12,12 @@ import { toast } from 'sonner'
 
 export default function DatosPersonalesPage() {
   const { id } = useParams()
+  
+  // --- ESTADOS PARA AUDITORÍA SEREMI ---
+  const [sessionUserId, setSessionUserId] = useState<string | null>(null)
+  const [perfil, setPerfil] = useState<any>(null)
+  const [datosOriginales, setDatosOriginales] = useState<any>(null) // Para registrar los datos antes del cambio
+
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
   const [listaConvenios, setListaConvenios] = useState<string[]>([])
@@ -42,10 +48,45 @@ export default function DatosPersonalesPage() {
   })
 
   useEffect(() => {
+    // Obtener sesión y perfil para la auditoría SEREMI
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        setSessionUserId(session.user.id);
+        const { data: pData } = await supabase
+          .from('perfiles')
+          .select('rut, nombre_completo, rol')
+          .eq('id', session.user.id)
+          .maybeSingle();
+        setPerfil(pData);
+      }
+    });
+
     if (id) {
       cargarTodo()
     }
   }, [id])
+
+  // --- FUNCIÓN DE AUDITORÍA ENRIQUECIDA (SEREMI) ---
+  const registrarAuditoria = async (accion: string, detalles: string, datos_anteriores: any = null, datos_nuevos: any = null) => {
+    if (!sessionUserId || !perfil) return;
+    try {
+      await supabase.from('auditoria_clinica').insert([{
+        usuario_id: sessionUserId,
+        rut_usuario: perfil.rut,
+        nombre_usuario: perfil.nombre_completo,
+        rol_al_momento: perfil.rol,
+        paciente_id: id,
+        accion,
+        tabla: 'pacientes',
+        detalles,
+        datos_anteriores,
+        datos_nuevos,
+        user_agent: navigator.userAgent
+      }]);
+    } catch (e) {
+      console.error("Error al registrar auditoría", e);
+    }
+  }
 
   async function cargarTodo() {
     setCargando(true)
@@ -74,6 +115,7 @@ export default function DatosPersonalesPage() {
           Object.entries(paciente).map(([key, val]) => [key, val === null ? '' : val])
         )
         setDatos(saneados)
+        setDatosOriginales(saneados) // Guardamos snapshot original para auditoría
       }
     } catch (error: any) {
       console.error("Error en carga:", error.message)
@@ -119,6 +161,16 @@ export default function DatosPersonalesPage() {
         .eq('id', id)
 
       if (updateError) throw updateError
+
+      // REGISTRAR AUDITORÍA AL GUARDAR CAMBIOS
+      await registrarAuditoria(
+        'UPDATE / EDITAR DATOS PERSONALES',
+        `Actualizó la ficha maestra del paciente "${payload.nombre || ''} ${payload.apellido || ''}".`,
+        datosOriginales,
+        payload
+      );
+
+      setDatosOriginales(payload); // Actualizamos el snapshot tras guardar con éxito
       toast.success("Datos actualizados correctamente")
 
     } catch (error: any) {
